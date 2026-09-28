@@ -80,6 +80,8 @@ final class CanvasViewController: UIViewController {
         scrollView.maximumZoomScale = 24
         scrollView.bouncesZoom = true
         scrollView.alwaysBounceVertical = true
+        scrollView.alwaysBounceHorizontal = false
+        scrollView.isDirectionalLockEnabled = true
         scrollView.panGestureRecognizer.allowedTouchTypes = [
             NSNumber(value: UITouch.TouchType.direct.rawValue),
             NSNumber(value: UITouch.TouchType.indirectPointer.rawValue),
@@ -857,11 +859,13 @@ extension CanvasViewController: UIScrollViewDelegate {
 
     func scrollViewDidZoom(_ scrollView: UIScrollView) {
         centerContent()
+        lockHorizontalScrollIfPageFits()
         editor.zoomPercent = Int((scrollView.zoomScale * 100).rounded())
         overlayNeedsReposition()
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        lockHorizontalScrollIfPageFits()
         updateCurrentPage()
         overlayNeedsReposition()
     }
@@ -877,6 +881,23 @@ extension CanvasViewController: UIScrollViewDelegate {
     }
 
     func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) { saveViewState() }
+
+    /// When the widest page fits across the screen (e.g. after a double-tap
+    /// fit), there is nothing to see sideways: keep the pages centered and
+    /// don't let the canvas drift or bounce horizontally.
+    private func lockHorizontalScrollIfPageFits() {
+        let z = scrollView.zoomScale
+        let pageWidth = document.pages.map(\.size.width).max() ?? 0
+        let fits = pageWidth * z <= scrollView.bounds.width + 0.5
+        scrollView.showsHorizontalScrollIndicator = !fits
+        guard fits else { return }
+        let target = scrollView.contentSize.width <= scrollView.bounds.width
+            ? -scrollView.contentInset.left
+            : (scrollView.contentSize.width - scrollView.bounds.width) / 2
+        if abs(scrollView.contentOffset.x - target) > 0.01 {
+            scrollView.contentOffset.x = target
+        }
+    }
 
     private func overlayNeedsReposition() {
         if !pending.isEmpty || !selection.isEmpty || activePageID != nil {
