@@ -1,0 +1,93 @@
+name: InkPad
+
+on:
+  push:
+    paths:
+      - "InkPad/**"
+      - ".github/workflows/inkpad.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: inkpad-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: InkPad
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode version
+        run: xcodebuild -version
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build unsigned .ipa
+        run: |
+          mkdir -p build
+          status=0
+          xcodebuild build \
+            -project InkPad.xcodeproj -scheme InkPad -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            > build/xcodebuild.log 2>&1 || status=$?
+          grep -E "error:|BUILD (SUCCEEDED|FAILED)" build/xcodebuild.log | sort -u || true
+          test $status -eq 0
+          test -d build/dd/Build/Products/Release-iphoneos/InkPad.app
+          mkdir -p build/ipa/Payload
+          cp -R build/dd/Build/Products/Release-iphoneos/InkPad.app build/ipa/Payload/
+          (cd build/ipa && zip -qry ../InkPad.ipa Payload)
+
+      - name: Package Swift Playgrounds app
+        run: |
+          scripts/make-swiftpm.sh build
+          (cd build && zip -qry InkPad.swiftpm.zip InkPad.swiftpm)
+
+      - name: Check Swift Playgrounds package builds
+        run: |
+          cd build/InkPad.swiftpm
+          status=0
+          xcodebuild build -scheme InkPad -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            > ../swiftpm.log 2>&1 || status=$?
+          grep -E "error:|BUILD (SUCCEEDED|FAILED)" ../swiftpm.log | sort -u || true
+          test $status -eq 0
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: InkPad
+          path: |
+            InkPad/build/InkPad.ipa
+            InkPad/build/InkPad.swiftpm.zip
+
+      - name: Publish "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest build/InkPad.ipa build/InkPad.swiftpm.zip \
+            --prerelease --target "$GITHUB_SHA" --title "InkPad (latest build)" \
+            --notes "Built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}.
+
+          - InkPad.ipa: unsigned; install with Sideloadly/AltStore using your Apple ID.
+          - InkPad.swiftpm.zip: unzip in Files on your iPad and open with Swift Playgrounds."
+
+      - name: Unit tests
+        if: always()
+        run: |
+          SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPad')))")
+          status=0
+          xcodebuild test -project InkPad.xcodeproj -scheme InkPad -destination "id=$SIM" \
+            CODE_SIGNING_ALLOWED=NO > build/test.log 2>&1 || status=$?
+          grep -E "error:|XCTAssert|Test Case.*failed|Executed|TEST (SUCCEEDED|FAILED)" build/test.log || true
+          test $status -eq 0
