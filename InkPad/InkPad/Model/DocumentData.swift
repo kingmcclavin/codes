@@ -32,6 +32,8 @@ struct DocumentManifest: Codable {
     var firstPageSize: CGSize
     var toolSettings: ToolSettings
     var viewState: ViewState
+    /// Library folder containing the document (nil = top level).
+    var folderID: UUID?
 }
 
 enum ToolKind: String, Codable, CaseIterable, Identifiable {

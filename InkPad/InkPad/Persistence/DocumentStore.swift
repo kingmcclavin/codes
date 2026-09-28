@@ -8,12 +8,23 @@ struct DocumentSummary: Identifiable, Hashable {
     var modifiedAt: Date
     var pageCount: Int
     var pageSize: CGSize
+    var folderID: UUID?
 
     static func == (a: DocumentSummary, b: DocumentSummary) -> Bool {
         a.id == b.id && a.title == b.title && a.modifiedAt == b.modifiedAt && a.pageCount == b.pageCount
+            && a.folderID == b.folderID
     }
 
     func hash(into h: inout Hasher) { h.combine(id) }
+}
+
+/// A library folder. Folders can contain documents and other folders.
+struct Folder: Codable, Identifiable, Hashable {
+    var id: UUID = UUID()
+    var name: String
+    /// Containing folder (nil = top level).
+    var parentID: UUID?
+    var createdAt = Date()
 }
 
 enum DocumentStoreError: LocalizedError {
@@ -31,6 +42,8 @@ enum DocumentStoreError: LocalizedError {
 /// On-disk layout (inside the app's Documents folder, visible in Files):
 /// ```
 /// InkPad Documents/
+///   folders.json         library folder tree (documents reference their folder
+///                        by id in their manifest)
 ///   <uuid>.inkpad/
 ///     manifest.json        title, page order, tool settings, view state
 ///     pages/<uuid>.json    one file per page (only dirty pages are rewritten)
@@ -41,6 +54,7 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
 
     let rootURL: URL
     @Published private(set) var summaries: [DocumentSummary] = []
+    @Published private(set) var folders: [Folder] = []
 
     init(rootURL: URL? = nil) {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -71,9 +85,14 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
         return d
     }
 
+    private var foldersURL: URL { rootURL.appendingPathComponent("folders.json") }
+
     // MARK: Library
 
     func reload() {
+        if let data = try? Data(contentsOf: foldersURL), let list = try? Self.decoder().decode([Folder].self, from: data) {
+            folders = list
+        }
         let fm = FileManager.default
         let urls = (try? fm.contentsOfDirectory(at: rootURL, includingPropertiesForKeys: nil)) ?? []
         var result: [DocumentSummary] = []
@@ -81,7 +100,8 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
             guard let data = try? Data(contentsOf: Self.manifestURL(url)),
                   let m = try? Self.decoder().decode(DocumentManifest.self, from: data) else { continue }
             result.append(DocumentSummary(id: m.id, title: m.title, createdAt: m.createdAt, modifiedAt: m.modifiedAt,
-                                          pageCount: m.pageIDs.count, pageSize: m.firstPageSize))
+                                          pageCount: m.pageIDs.count, pageSize: m.firstPageSize,
+                                          folderID: m.folderID.flatMap { id in folders.contains { $0.id == id } ? id : nil }))
         }
         summaries = result.sorted { $0.modifiedAt > $1.modifiedAt }
     }
@@ -91,12 +111,14 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
     }
 
     @discardableResult
-    func create(title: String, pageSize: CGSize, background: PageBackground, settings: ToolSettings = ToolSettings()) throws -> UUID {
+    func create(title: String, pageSize: CGSize, background: PageBackground, settings: ToolSettings = ToolSettings(),
+                folderID: UUID? = nil) throws -> UUID {
         let id = UUID()
         let page = PageData(size: pageSize, background: background)
         let now = Date()
         let manifest = DocumentManifest(id: id, title: title, createdAt: now, modifiedAt: now, pageIDs: [page.id],
-                                        firstPageSize: pageSize, toolSettings: settings, viewState: ViewState())
+                                        firstPageSize: pageSize, toolSettings: settings, viewState: ViewState(),
+                                        folderID: folderID)
         try Self.write(DocumentModel.Snapshot(manifest: manifest, dirtyPages: [page], livePageIDs: [page.id]),
                        to: packageURL(id))
         reload()
@@ -123,7 +145,8 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
         if pages.isEmpty { pages = [PageData(size: PaperSize.letter.size(for: .portrait), background: PageBackground())] }
         Self.removeUnreferencedAssets(pkg: pkg, pages: pages)
         return DocumentModel(id: m.id, title: m.title, createdAt: m.createdAt, modifiedAt: m.modifiedAt, pages: pages,
-                             toolSettings: m.toolSettings, viewState: m.viewState, assetsURL: Self.assetsURL(pkg))
+                             toolSettings: m.toolSettings, viewState: m.viewState, assetsURL: Self.assetsURL(pkg),
+                             folderID: m.folderID)
     }
 
     func delete(_ id: UUID) {
@@ -132,12 +155,112 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
     }
 
     func rename(_ id: UUID, to title: String) {
+        updateManifest(id) {
+            $0.title = title
+            $0.modifiedAt = Date()
+        }
+        reload()
+    }
+
+    private func updateManifest(_ id: UUID, _ change: (inout DocumentManifest) -> Void) {
         let url = Self.manifestURL(packageURL(id))
         guard let data = try? Data(contentsOf: url), var m = try? Self.decoder().decode(DocumentManifest.self, from: data) else { return }
-        m.title = title
-        m.modifiedAt = Date()
+        change(&m)
         if let out = try? Self.encoder().encode(m) { try? out.write(to: url, options: .atomic) }
+    }
+
+    // MARK: Folders
+
+    func folder(_ id: UUID?) -> Folder? {
+        guard let id else { return nil }
+        return folders.first { $0.id == id }
+    }
+
+    func subfolders(of parent: UUID?) -> [Folder] {
+        folders.filter { $0.parentID == parent }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    func documents(in folder: UUID?) -> [DocumentSummary] {
+        summaries.filter { $0.folderID == folder }
+    }
+
+    /// Folder chain from the top level down to `id` (inclusive).
+    func path(to id: UUID?) -> [Folder] {
+        var chain: [Folder] = []
+        var current = folder(id)
+        while let f = current, !chain.contains(where: { $0.id == f.id }) {
+            chain.insert(f, at: 0)
+            current = folder(f.parentID)
+        }
+        return chain
+    }
+
+    /// `id` plus every folder nested inside it.
+    func descendants(of id: UUID) -> Set<UUID> {
+        var result: Set<UUID> = [id]
+        var queue = [id]
+        while let next = queue.popLast() {
+            for f in folders where f.parentID == next && !result.contains(f.id) {
+                result.insert(f.id)
+                queue.append(f.id)
+            }
+        }
+        return result
+    }
+
+    /// Number of documents and folders directly inside a folder.
+    func itemCount(in id: UUID) -> Int {
+        folders.filter { $0.parentID == id }.count + summaries.filter { $0.folderID == id }.count
+    }
+
+    @discardableResult
+    func createFolder(name: String, in parent: UUID?) -> Folder {
+        let f = Folder(name: name.isEmpty ? "New Folder" : name, parentID: parent)
+        folders.append(f)
+        saveFolders()
+        return f
+    }
+
+    func renameFolder(_ id: UUID, to name: String) {
+        guard let i = folders.firstIndex(where: { $0.id == id }), !name.isEmpty else { return }
+        folders[i].name = name
+        saveFolders()
+    }
+
+    /// Moves a folder into another folder (nil = top level). Moving a folder
+    /// into itself or one of its own subfolders is ignored.
+    func moveFolder(_ id: UUID, to parent: UUID?) {
+        if let parent, descendants(of: id).contains(parent) { return }
+        guard let i = folders.firstIndex(where: { $0.id == id }) else { return }
+        folders[i].parentID = parent
+        saveFolders()
+    }
+
+    func moveDocument(_ id: UUID, to folder: UUID?) {
+        updateManifest(id) { $0.folderID = folder }
         reload()
+    }
+
+    /// Deletes a folder together with all documents and folders inside it.
+    func deleteFolder(_ id: UUID) {
+        let doomed = descendants(of: id)
+        for doc in summaries where doc.folderID.map(doomed.contains) ?? false {
+            try? FileManager.default.removeItem(at: packageURL(doc.id))
+        }
+        folders.removeAll { doomed.contains($0.id) }
+        saveFolders()
+        reload()
+    }
+
+    /// Number of documents inside a folder, including nested folders.
+    func totalDocumentCount(in id: UUID) -> Int {
+        let all = descendants(of: id)
+        return summaries.filter { $0.folderID.map(all.contains) ?? false }.count
+    }
+
+    private func saveFolders() {
+        if let data = try? Self.encoder().encode(folders) { try? data.write(to: foldersURL, options: .atomic) }
     }
 
     func duplicate(_ id: UUID) {

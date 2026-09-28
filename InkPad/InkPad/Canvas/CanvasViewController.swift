@@ -428,15 +428,52 @@ final class CanvasViewController: UIViewController {
     @objc private func handleUndoTap() { editor.undo() }
     @objc private func handleRedoTap() { editor.redo() }
 
+    /// Finger double-tap: fit the tapped page to the screen. Double-tapping
+    /// again (while still fitted) returns to the previous zoom and position.
     @objc private func handleDoubleTap(_ g: UITapGestureRecognizer) {
-        let fit = fitWidthScale(for: scrollView.bounds.size)
-        if scrollView.zoomScale > fit * 1.05 {
-            scrollView.setZoomScale(fit, animated: true)
+        guard let v = pageView(near: g.location(in: container)) else { return }
+        if let previous = zoomBeforeFit, previous.pageID == v.pageID,
+           abs(scrollView.zoomScale - fitScale(for: v.frame)) < 0.01 * scrollView.zoomScale {
+            zoomBeforeFit = nil
+            UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
+                self.scrollView.setZoomScale(previous.zoom, animated: false)
+                self.scrollView.contentOffset = self.clampOffset(previous.offset)
+            } completion: { _ in self.saveViewState() }
+            return
+        }
+        zoomBeforeFit = (v.pageID, scrollView.zoomScale, scrollView.contentOffset)
+        fit(pageView: v)
+    }
+
+    private var zoomBeforeFit: (pageID: UUID, zoom: CGFloat, offset: CGPoint)?
+
+    /// Largest zoom at which the whole page is visible.
+    private func fitScale(for pageFrame: CGRect) -> CGFloat {
+        let margin: CGFloat = 12
+        let avail = CGSize(width: scrollView.bounds.width - 2 * margin,
+                           height: scrollView.bounds.height - keyboardInset - 2 * margin)
+        let s = min(avail.width / pageFrame.width, avail.height / pageFrame.height)
+        return s.clamped(scrollView.minimumZoomScale, scrollView.maximumZoomScale)
+    }
+
+    /// Zooms so the page fills the screen and centers it.
+    private func fit(pageView v: PageView, animated: Bool = true) {
+        let z = fitScale(for: v.frame)
+        let apply = {
+            self.scrollView.setZoomScale(z, animated: false)
+            let offset = CGPoint(x: v.frame.midX * z - self.scrollView.bounds.width / 2,
+                                 y: v.frame.midY * z - (self.scrollView.bounds.height - self.keyboardInset) / 2)
+            self.scrollView.contentOffset = self.clampOffset(offset)
+        }
+        if animated {
+            UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: apply) { _ in
+                self.updateCurrentPage()
+                self.saveViewState()
+            }
         } else {
-            let p = g.location(in: container)
-            let z = min(fit * 2.5, scrollView.maximumZoomScale)
-            let size = CGSize(width: scrollView.bounds.width / z, height: scrollView.bounds.height / z)
-            scrollView.zoom(to: CGRect(x: p.x - size.width / 2, y: p.y - size.height / 2, width: size.width, height: size.height), animated: true)
+            apply()
+            updateCurrentPage()
+            saveViewState()
         }
     }
 
@@ -633,7 +670,7 @@ final class CanvasViewController: UIViewController {
 
     func fitPage() {
         guard let v = pageViews[currentPageID] else { return }
-        scrollView.zoom(to: v.frame.insetBy(dx: -pageGap / 2, dy: -pageGap / 2), animated: true)
+        fit(pageView: v)
     }
 
     func fitWidth() {

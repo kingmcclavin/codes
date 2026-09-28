@@ -17,27 +17,39 @@ struct InkPadApp: App {
 struct RootView: View {
     @EnvironmentObject private var store: DocumentStore
     @EnvironmentObject private var preferences: AppPreferences
-    @State private var path: [UUID] = []
+    @State private var path: [LibraryRoute] = []
     @State private var didRestore = false
 
     var body: some View {
         NavigationStack(path: $path) {
-            LibraryView(open: { path = [$0] })
-                .navigationDestination(for: UUID.self) { id in
-                    DocumentLoaderView(documentID: id)
-                        .toolbar(.hidden, for: .navigationBar)
+            LibraryView(folderID: nil, navigate: { path.append($0) })
+                .navigationDestination(for: LibraryRoute.self) { route in
+                    switch route {
+                    case let .folder(id):
+                        LibraryView(folderID: id, navigate: { path.append($0) })
+                    case let .document(id):
+                        DocumentLoaderView(documentID: id)
+                            .toolbar(.hidden, for: .navigationBar)
+                    }
                 }
         }
         .onAppear {
             store.reload()
-            // Reopen the document the user was working in.
+            // Reopen the document the user was working in, inside its folder.
             guard !didRestore else { return }
             didRestore = true
-            if let id = preferences.lastOpenedDocumentID, store.exists(id) { path = [id] }
+            if let id = preferences.lastOpenedDocumentID, store.exists(id) {
+                let folder = store.summaries.first { $0.id == id }?.folderID
+                path = store.path(to: folder).map { LibraryRoute.folder($0.id) } + [LibraryRoute.document(id)]
+            }
         }
         .onChange(of: path) { _, newValue in
-            preferences.lastOpenedDocumentID = newValue.last
-            if newValue.isEmpty { store.reload() }
+            if case let .document(id)? = newValue.last {
+                preferences.lastOpenedDocumentID = id
+            } else {
+                preferences.lastOpenedDocumentID = nil
+                store.reload()
+            }
         }
     }
 }

@@ -187,6 +187,8 @@ struct PageFormatEditor: View {
 }
 
 struct NewDocumentView: View {
+    /// Folder the new document goes into (nil = top level).
+    var folderID: UUID? = nil
     let onCreate: (UUID) -> Void
     @EnvironmentObject private var store: DocumentStore
     @Environment(\.dismiss) private var dismiss
@@ -229,7 +231,8 @@ struct NewDocumentView: View {
             settings.text.color = RGBAColor(hex: 0xF2F2F2)
         }
         do {
-            let id = try store.create(title: name, pageSize: format.size, background: format.background, settings: settings)
+            let id = try store.create(title: name, pageSize: format.size, background: format.background, settings: settings,
+                                      folderID: folderID)
             onCreate(id)
         } catch {
             self.error = error.localizedDescription

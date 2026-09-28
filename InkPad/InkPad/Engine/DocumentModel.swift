@@ -26,6 +26,8 @@ final class DocumentModel {
     let createdAt: Date
     /// Folder holding image assets for this document.
     let assetsURL: URL
+    /// Library folder (documents are only moved while closed).
+    let folderID: UUID?
 
     private(set) var pages: [PageStore]
     var title: String { didSet { manifestDirty = true; notify(.metadata) } }
@@ -43,7 +45,7 @@ final class DocumentModel {
     private var observers: [WeakObserver] = []
 
     nonisolated init(id: UUID, title: String, createdAt: Date, modifiedAt: Date, pages: [PageData],
-         toolSettings: ToolSettings, viewState: ViewState, assetsURL: URL) {
+         toolSettings: ToolSettings, viewState: ViewState, assetsURL: URL, folderID: UUID? = nil) {
         self.id = id
         self.title = title
         self.createdAt = createdAt
@@ -52,6 +54,7 @@ final class DocumentModel {
         self.toolSettings = toolSettings
         self.viewState = viewState
         self.assetsURL = assetsURL
+        self.folderID = folderID
     }
 
     // MARK: Observation
@@ -173,7 +176,7 @@ final class DocumentModel {
         let manifest = DocumentManifest(
             id: id, title: title, createdAt: createdAt, modifiedAt: modifiedAt,
             pageIDs: pages.map(\.id), firstPageSize: pages.first?.size ?? .zero,
-            toolSettings: toolSettings, viewState: viewState)
+            toolSettings: toolSettings, viewState: viewState, folderID: folderID)
         let dirty = pages.filter { forceAllPages || dirtyPageIDs.contains($0.id) }.map { $0.pageData() }
         dirtyPageIDs.removeAll()
         manifestDirty = false
