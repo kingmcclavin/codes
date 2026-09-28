@@ -24,6 +24,7 @@ final class CanvasViewController: UIViewController {
     private let scrollView = UIScrollView()
     private let container = UIView()
     private let overlay = OverlayView()
+    private let pullToAdd = PullToAddPageView()
     private var pageViews: [UUID: PageView] = [:]
     private let pencilRecognizer = PencilInputRecognizer(target: nil, action: nil)
     private let selectionDrag = UIPanGestureRecognizer()
@@ -89,6 +90,10 @@ final class CanvasViewController: UIViewController {
         scrollView.pinchGestureRecognizer?.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
         view.addSubview(scrollView)
         scrollView.addSubview(container)
+
+        pullToAdd.frame = view.bounds
+        pullToAdd.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(pullToAdd)
 
         overlay.frame = view.bounds
         overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -866,6 +871,7 @@ extension CanvasViewController: UIScrollViewDelegate {
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         lockHorizontalScrollIfPageFits()
+        updatePullToAddPage()
         updateCurrentPage()
         overlayNeedsReposition()
     }
@@ -875,6 +881,32 @@ extension CanvasViewController: UIScrollViewDelegate {
     }
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) { saveViewState() }
+
+    func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint,
+                                   targetContentOffset: UnsafeMutablePointer<CGPoint>) {
+        guard pullToAdd.isArmed else { return }
+        // Released past the threshold: append a page and glide to it.
+        let lastIndex = document.pages.count - 1
+        editor.addPage(after: lastIndex, scroll: false)
+        let newIndex = lastIndex + 1
+        guard document.pages.indices.contains(newIndex), let v = pageViews[document.pages[newIndex].id] else { return }
+        let z = scrollView.zoomScale
+        targetContentOffset.pointee = clampOffset(CGPoint(x: targetContentOffset.pointee.x, y: (v.frame.minY - pageGap / 2) * z))
+        editor.currentPageIndex = newIndex
+        updatePullToAddPage()
+    }
+
+    /// Drives the "Pull to Add Page" indicator from the overscroll past the last page.
+    private func updatePullToAddPage() {
+        guard let last = document.pages.last, let v = pageViews[last.id] else { return }
+        let maxOffsetY = max(scrollView.contentSize.height + scrollView.contentInset.bottom - scrollView.bounds.height,
+                             -scrollView.contentInset.top)
+        let pull = scrollView.contentOffset.y - maxOffsetY
+        let pageFrame = v.convert(v.bounds, to: view)
+        // Only while the user is interacting (or the bounce-back after it).
+        let active = scrollView.isTracking || scrollView.isDecelerating || pull > 0
+        pullToAdd.update(pull: active && !scrollView.isZooming ? pull : 0, pageBottom: pageFrame.maxY, pageFrame: pageFrame)
+    }
 
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         if !decelerate { saveViewState() }

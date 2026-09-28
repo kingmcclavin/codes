@@ -207,11 +207,11 @@ final class EditorModel: ObservableObject {
         return PageData(size: ref.size, background: ref.background)
     }
 
-    func addPage(after index: Int? = nil) {
+    func addPage(after index: Int? = nil, scroll: Bool = true) {
         let i = (index ?? currentPageIndex).clamped(0, document.pages.count - 1)
         history.perform(InsertPageCommand(page: blankPage(like: i), index: i + 1))
         pageCount = document.pages.count
-        canvas?.scrollToPage(i + 1)
+        if scroll { canvas?.scrollToPage(i + 1) }
     }
 
     func duplicatePage(at index: Int) {
