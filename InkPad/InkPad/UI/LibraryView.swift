@@ -45,6 +45,7 @@ struct LibraryView: View {
     @State private var moving: LibraryItem?
     @State private var deletingFolder: Folder?
     @State private var search = ""
+    @State private var showExport = false
 
     private var folders: [Folder] {
         if search.isEmpty { return store.subfolders(of: folderID) }
@@ -104,7 +105,17 @@ struct LibraryView: View {
                     Label("New", systemImage: "plus")
                 }
             }
+            if folderID == nil {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Button("Export App (.ipa)…", systemImage: "app.badge") { showExport = true }
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                    }
+                }
+            }
         }
+        .sheet(isPresented: $showExport) { ExportView() }
         .sheet(isPresented: $showNewDocument) {
             NewDocumentView(folderID: folderID) { id in
                 showNewDocument = false

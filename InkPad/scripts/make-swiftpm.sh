@@ -9,7 +9,7 @@ OUT="${1:-build}/InkPad.swiftpm"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 cp Playgrounds/Package.swift "$OUT/"
-for dir in App Canvas Engine Model Persistence Recognition Tools UI; do
+for dir in App Canvas Engine Export Model Persistence Recognition Tools UI; do
     cp -R "InkPad/$dir" "$OUT/$dir"
 done
 echo "Created $OUT"
