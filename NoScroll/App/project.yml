@@ -1,0 +1,108 @@
+# XcodeGen spec for the iPhone host app.
+#
+#   brew install xcodegen
+#   cd App && xcodegen
+#   open NoScroll.xcodeproj
+#
+# All code lives in the Swift package one directory up; the targets here only
+# carry the @main entry points, Info.plists, entitlements and the app icon.
+name: NoScroll
+options:
+  bundleIdPrefix: app.noscroll
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    # Set this to your Apple team ID (or pick your team under Signing in Xcode).
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+packages:
+  NoScroll:
+    path: ..
+targets:
+  NoScroll:
+    type: application
+    platform: iOS
+    sources: [NoScroll]
+    settings:
+      base:
+        # Change to an identifier you own if signing complains it is taken.
+        PRODUCT_BUNDLE_IDENTIFIER: app.noscroll
+        INFOPLIST_FILE: NoScroll/Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # The Family Controls entitlement is gated by Apple and breaks signing
+        # for accounts without it, so it is opt-in (docs/ENTITLEMENT.md in the
+        # original repo). Once approved, set this to NoScroll/NoScroll.entitlements.
+        NOSCROLL_ENTITLEMENTS: ""
+        CODE_SIGN_ENTITLEMENTS: $(NOSCROLL_ENTITLEMENTS)
+    dependencies:
+      - package: NoScroll
+        product: NoScrollKit
+      - target: NoScrollWidget
+      # Uncomment together with the targets below once Apple has granted
+      # com.apple.developer.family-controls for the app and each extension.
+      # - target: ShieldConfiguration
+      # - target: ShieldAction
+      # - target: DeviceActivityMonitor
+
+  NoScrollWidget:
+    type: app-extension
+    platform: iOS
+    sources: [NoScrollWidget]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.noscroll.widget
+        INFOPLIST_FILE: NoScrollWidget/Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - package: NoScroll
+        product: NoScrollWidgets
+
+  # --- Screen Time extensions (need the Family Controls entitlement) --------
+  #
+  # ShieldConfiguration:
+  #   type: app-extension
+  #   platform: iOS
+  #   sources: [ShieldConfiguration]
+  #   settings:
+  #     base:
+  #       PRODUCT_BUNDLE_IDENTIFIER: app.noscroll.shield-configuration
+  #       INFOPLIST_FILE: ShieldConfiguration/Info.plist
+  #       GENERATE_INFOPLIST_FILE: YES
+  #       CODE_SIGN_ENTITLEMENTS: ShieldConfiguration/ShieldConfiguration.entitlements
+  #   dependencies:
+  #     - package: NoScroll
+  #       product: NoScrollShield
+  #
+  # ShieldAction:
+  #   type: app-extension
+  #   platform: iOS
+  #   sources: [ShieldAction]
+  #   settings:
+  #     base:
+  #       PRODUCT_BUNDLE_IDENTIFIER: app.noscroll.shield-action
+  #       INFOPLIST_FILE: ShieldAction/Info.plist
+  #       GENERATE_INFOPLIST_FILE: YES
+  #       CODE_SIGN_ENTITLEMENTS: ShieldAction/ShieldAction.entitlements
+  #   dependencies:
+  #     - package: NoScroll
+  #       product: NoScrollShield
+  #
+  # DeviceActivityMonitor:
+  #   type: app-extension
+  #   platform: iOS
+  #   sources: [DeviceActivityMonitor]
+  #   settings:
+  #     base:
+  #       PRODUCT_BUNDLE_IDENTIFIER: app.noscroll.device-activity-monitor
+  #       INFOPLIST_FILE: DeviceActivityMonitor/Info.plist
+  #       GENERATE_INFOPLIST_FILE: YES
+  #       CODE_SIGN_ENTITLEMENTS: DeviceActivityMonitor/DeviceActivityMonitor.entitlements
+  #   dependencies:
+  #     - package: NoScroll
+  #       product: NoScrollShield
