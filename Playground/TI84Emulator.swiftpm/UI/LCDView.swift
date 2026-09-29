@@ -1,7 +1,6 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import CoreGraphics
 import SwiftUI
-import TI84EmulatorCore
 
 /// Draws the emulated 96×64 LCD from its pixel buffer.
 ///

@@ -1,7 +1,6 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import Combine
 import SwiftUI
-import TI84EmulatorCore
 
 /// Developer view of the emulated machine: registers, disassembly,
 /// breakpoints, memory, I/O ports, interrupts, LCD and keypad state.

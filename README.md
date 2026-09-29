@@ -46,7 +46,25 @@ Other ways to supply a ROM:
 - **Environment variable:** `TI84_ROM_PATH=/path/to/rom` overrides the bundled resource (useful for tests and the CLI).
 - **In code:** `ROMLoader.load(.file(url))` or `ROMLoader.load(.data(data))`.
 
-## Building and running the app
+## Running on an iPad without a Mac (Swift Playgrounds)
+
+`Playground/TI84Emulator.swiftpm` is a ready-made **Swift Playgrounds** app
+project containing the same emulator and UI.
+
+1. Install **Swift Playgrounds** from the App Store on your iPad.
+2. Download this branch as a ZIP (GitHub ▸ Code ▸ Download ZIP), open it in
+   the Files app to unzip, and tap `Playground/TI84Emulator.swiftpm`. It opens
+   in Swift Playgrounds.
+3. Tap ▶︎ Run. The first time, tap **Import ROM…** and pick your ROM file
+   from Files. It is saved inside the app, so you only do this once.
+4. Press **ON**. After a reset TI-OS stays off until ON is pressed, just like
+   the real calculator after new batteries.
+
+The playground is generated from `Sources/` by `Scripts/make-playground.sh`
+(Swift Playgrounds needs a single module). Re-run the script after changing
+the package sources.
+
+## Building and running the app with Xcode
 
 The emulator is a Swift package with three products:
 
