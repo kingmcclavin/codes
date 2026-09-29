@@ -23,6 +23,12 @@ settings:
 packages:
   NoScroll:
     path: ..
+schemes:
+  NoScroll:
+    build:
+      targets:
+        NoScroll: all
+        NoScrollWidget: all
 targets:
   NoScroll:
     type: application

@@ -1,0 +1,53 @@
+# Builds the NoScroll iPhone app on a GitHub-hosted Mac, so no Mac is needed.
+# Download the "NoScroll-ipa" artifact from the run and sideload it
+# (see NoScroll/README.md → "No Mac? Install from GitHub Actions").
+name: NoScroll iOS
+
+on:
+  push:
+    paths:
+      - "NoScroll/**"
+      - ".github/workflows/noscroll-ios.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: NoScroll
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unit tests (iOS Simulator)
+        run: |
+          SIM=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [0-9A-Za-z ]+ \(' | sed 's/ ($//')
+          echo "Using simulator: $SIM"
+          xcodebuild test -scheme NoScroll-Package \
+            -destination "platform=iOS Simulator,name=$SIM" | tail -40
+          exit ${PIPESTATUS[0]}
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          cd App && xcodegen
+
+      - name: Build unsigned app
+        run: |
+          xcodebuild build \
+            -project App/NoScroll.xcodeproj -scheme NoScroll \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | tail -60
+          exit ${PIPESTATUS[0]}
+
+      - name: Package .ipa
+        run: |
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/NoScroll.app Payload/
+          zip -qry NoScroll.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NoScroll-ipa
+          path: NoScroll/NoScroll.ipa

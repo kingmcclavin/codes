@@ -26,7 +26,23 @@ A Swift package can't produce an installable `.app` with app extensions by itsel
 `App/` folder holds the few files that must live in an Xcode target. Everything else is in the
 package.
 
-## Run it on your iPhone
+## No Mac? Install from GitHub Actions
+
+The workflow `.github/workflows/noscroll-ios.yml` builds the app on a GitHub-hosted Mac on every
+push that touches `NoScroll/` (or on demand from the Actions tab → *NoScroll iOS* → *Run workflow*).
+
+1. Open the latest successful *NoScroll iOS* run and download the **NoScroll-ipa** artifact.
+   Unzip it to get `NoScroll.ipa`. (It's unsigned; the next step signs it.)
+2. On a Windows PC, install [Sideloadly](https://sideloadly.io) (it needs iTunes and iCloud from
+   Apple's website, not the Microsoft Store versions). AltStore (altstore.io) works too.
+3. Plug in your iPhone, drag `NoScroll.ipa` into Sideloadly, enter your Apple ID and press Start.
+4. On the iPhone: *Settings → General → VPN & Device Management* → trust your Apple ID, and turn
+   on *Settings → Privacy & Security → Developer Mode* when asked (iPhone restarts).
+
+With a free Apple ID the app expires after 7 days; re-sideload it (Sideloadly can auto-refresh
+over Wi-Fi). A paid Apple Developer account ($99/yr) extends that to a year.
+
+## Run it on your iPhone from a Mac
 
 Requires Xcode 15+ and iOS 17+.
 
