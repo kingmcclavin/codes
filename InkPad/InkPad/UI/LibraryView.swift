@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Navigation destinations in the library.
 enum LibraryRoute: Hashable {
@@ -48,6 +49,8 @@ struct LibraryView: View {
     @State private var deletingFolder: Folder?
     @State private var search = ""
     @State private var showExport = false
+    @State private var showPDFImporter = false
+    @State private var importError: String?
 
     private var folders: [Folder] {
         if search.isEmpty { return store.subfolders(of: folderID) }
@@ -103,6 +106,7 @@ struct LibraryView: View {
                         .keyboardShortcut("n", modifiers: .command)
                     Button("New Folder", systemImage: "folder.badge.plus") { startNewFolder() }
                         .keyboardShortcut("n", modifiers: [.command, .shift])
+                    Button("Import PDF…", systemImage: "doc.richtext") { showPDFImporter = true }
                 } label: {
                     Label("New", systemImage: "plus")
                 }
@@ -129,6 +133,19 @@ struct LibraryView: View {
             }
         }
         .sheet(isPresented: $showExport) { ExportView() }
+        .fileImporter(isPresented: $showPDFImporter, allowedContentTypes: [.pdf], allowsMultipleSelection: true) { result in
+            guard case let .success(urls) = result else { return }
+            var opened: UUID?
+            for url in urls {
+                do { opened = try store.createFromPDF(url, folderID: folderID) } catch { importError = error.localizedDescription }
+            }
+            if let opened { navigate(.document(opened)) }
+        }
+        .alert("Couldn't Import PDF", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(importError ?? "")
+        }
         .sheet(isPresented: $showNewDocument) {
             NewDocumentView(folderID: folderID) { id in
                 showNewDocument = false

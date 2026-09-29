@@ -125,6 +125,27 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
         return id
     }
 
+    /// Creates a notebook whose pages are the pages of a PDF.
+    @discardableResult
+    func createFromPDF(_ url: URL, folderID: UUID? = nil) throws -> UUID {
+        let id = UUID()
+        let pkg = packageURL(id)
+        do {
+            let pages = try PDFImporter.pages(from: url, into: Self.assetsURL(pkg))
+            let now = Date()
+            let manifest = DocumentManifest(id: id, title: PDFImporter.title(for: url), createdAt: now, modifiedAt: now,
+                                            pageIDs: pages.map(\.id), firstPageSize: pages[0].size,
+                                            toolSettings: ToolSettings(), viewState: ViewState(), folderID: folderID)
+            try Self.write(DocumentModel.Snapshot(manifest: manifest, dirtyPages: pages, livePageIDs: Set(pages.map(\.id))),
+                           to: pkg)
+        } catch {
+            try? FileManager.default.removeItem(at: pkg)
+            throw error
+        }
+        reload()
+        return id
+    }
+
     /// Loads a document. Safe to call off the main thread.
     func load(_ id: UUID) throws -> DocumentModel {
         let pkg = packageURL(id)
@@ -309,6 +330,7 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
         var used = Set<String>()
         for p in pages {
             for case let .image(img) in p.elements { used.insert(img.assetName) }
+            if let pdf = p.background.pdf { used.insert(pdf.assetName) }
         }
         for f in files where !used.contains(f.lastPathComponent) { try? fm.removeItem(at: f) }
     }

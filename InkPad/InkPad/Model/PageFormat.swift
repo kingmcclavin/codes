@@ -154,15 +154,26 @@ enum PageTemplate: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// A page of an imported PDF, drawn (as vectors) underneath the ink.
+struct PDFPageSource: Codable, Hashable {
+    /// PDF file in the document's assets folder.
+    var assetName: String
+    /// Zero-based page index in that PDF.
+    var pageIndex: Int
+}
+
 struct PageBackground: Codable, Hashable {
     var color: RGBAColor
     var template: PageTemplate
     var spacing: CGFloat
+    /// Imported PDF page shown as the page background, if any.
+    var pdf: PDFPageSource?
 
-    init(color: RGBAColor = .white, template: PageTemplate = .blank, spacing: CGFloat? = nil) {
+    init(color: RGBAColor = .white, template: PageTemplate = .blank, spacing: CGFloat? = nil, pdf: PDFPageSource? = nil) {
         self.color = color
         self.template = template
         self.spacing = spacing ?? template.defaultSpacing
+        self.pdf = pdf
     }
 
     var isDark: Bool { !color.isLight }

@@ -50,6 +50,8 @@ final class EditorModel: ObservableObject {
     @Published var showSelectionInspector = false
     @Published var showToolOptions = false
     @Published var shareURL: URL?
+    @Published var showPDFImporter = false
+    @Published var importError: String?
 
     private var previousTool: ToolKind = .pen
     private var observers: [NSObjectProtocol] = []
@@ -204,7 +206,9 @@ final class EditorModel: ObservableObject {
 
     private func blankPage(like index: Int) -> PageData {
         let ref = document.pages[index.clamped(0, document.pages.count - 1)]
-        return PageData(size: ref.size, background: ref.background)
+        var background = ref.background
+        background.pdf = nil   // a new page after a PDF page is blank paper
+        return PageData(size: ref.size, background: background)
     }
 
     func addPage(after index: Int? = nil, scroll: Bool = true) {
@@ -212,6 +216,22 @@ final class EditorModel: ObservableObject {
         history.perform(InsertPageCommand(page: blankPage(like: i), index: i + 1))
         pageCount = document.pages.count
         if scroll { canvas?.scrollToPage(i + 1) }
+    }
+
+    /// Inserts every page of a PDF after the current page (one undo step).
+    func importPDF(_ url: URL) {
+        do {
+            let pages = try PDFImporter.pages(from: url, into: document.assetsURL)
+            let start = currentPageIndex.clamped(0, document.pages.count - 1) + 1
+            let commands: [EditCommand] = pages.enumerated().map { offset, page in
+                InsertPageCommand(name: "Import PDF", page: page, index: start + offset)
+            }
+            history.perform(CompositeCommand(name: "Import PDF", commands: commands))
+            pageCount = document.pages.count
+            canvas?.scrollToPage(start)
+        } catch {
+            importError = error.localizedDescription
+        }
     }
 
     func duplicatePage(at index: Int) {
@@ -242,10 +262,14 @@ final class EditorModel: ObservableObject {
 
     func applyPageSettings(size: CGSize, background: PageBackground, toAllPages: Bool) {
         let targets = toAllPages ? document.pages : [document.pages[currentPageIndex.clamped(0, document.pages.count - 1)]]
-        let changes = targets.map { p in
-            (pageID: p.id,
-             before: PageSettingsCommand.Settings(size: p.size, background: p.background),
-             after: PageSettingsCommand.Settings(size: size, background: background))
+        let changes = targets.map { p -> (pageID: UUID, before: PageSettingsCommand.Settings, after: PageSettingsCommand.Settings) in
+            var after = PageSettingsCommand.Settings(size: size, background: background)
+            if let pdf = p.background.pdf {
+                // Imported PDF pages keep their content and size.
+                after.size = p.size
+                after.background.pdf = pdf
+            }
+            return (p.id, PageSettingsCommand.Settings(size: p.size, background: p.background), after)
         }
         history.perform(PageSettingsCommand(changes: changes))
     }

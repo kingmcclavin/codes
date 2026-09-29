@@ -50,6 +50,30 @@ final class ImageCache: @unchecked Sendable {
     }
 }
 
+/// Opened PDF files for PDF page backgrounds, keyed by file URL. Thread safe.
+final class PDFCache: @unchecked Sendable {
+    static let shared = PDFCache()
+
+    private let documents = NSCache<NSURL, CGPDFDocument>()
+
+    private init() {
+        documents.countLimit = 12
+    }
+
+    func document(_ url: URL) -> CGPDFDocument? {
+        if let doc = documents.object(forKey: url as NSURL) { return doc }
+        guard let doc = CGPDFDocument(url as CFURL) else { return nil }
+        if doc.isEncrypted && !doc.isUnlocked { _ = doc.unlockWithPassword("") }
+        documents.setObject(doc, forKey: url as NSURL)
+        return doc
+    }
+
+    /// Zero-based page lookup.
+    func page(_ url: URL, index: Int) -> CGPDFPage? {
+        document(url)?.page(at: index + 1)
+    }
+}
+
 /// Draws page content into any y-down CGContext in page coordinates.
 /// Used by the tiled page layers, the live overlay, and export.
 struct PageRenderer {
@@ -63,6 +87,11 @@ struct PageRenderer {
         guard !rect.isNull else { return }
         ctx.setFillColor(bg.color.cgColor)
         ctx.fill(rect)
+
+        if let source = bg.pdf,
+           let page = PDFCache.shared.page(assetsURL.appendingPathComponent(source.assetName), index: source.pageIndex) {
+            drawPDFPage(page, pageSize: pageSize, in: ctx, clip: rect)
+        }
 
         let spacing = max(bg.spacing, 4)
         let lineWidth: CGFloat = 0.5
@@ -131,6 +160,22 @@ struct PageRenderer {
             vLines(step: spacing)
             ctx.strokePath()
         }
+    }
+
+    /// Draws an imported PDF page (vector) filling the page.
+    private func drawPDFPage(_ page: CGPDFPage, pageSize: CGSize, in ctx: CGContext, clip: CGRect) {
+        ctx.saveGState()
+        ctx.clip(to: clip)
+        // Our contexts are y-down; PDF drawing is y-up.
+        ctx.translateBy(x: 0, y: pageSize.height)
+        ctx.scaleBy(x: 1, y: -1)
+        let target = CGRect(origin: .zero, size: pageSize)
+        ctx.concatenate(page.getDrawingTransform(.cropBox, rect: target, rotate: 0, preserveAspectRatio: true))
+        ctx.clip(to: page.getBoxRect(.cropBox))
+        ctx.interpolationQuality = .high
+        ctx.setRenderingIntent(.defaultIntent)
+        ctx.drawPDFPage(page)
+        ctx.restoreGState()
     }
 
     // MARK: Elements

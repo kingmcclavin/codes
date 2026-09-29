@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct EditorView: View {
     @ObservedObject var editor: EditorModel
@@ -46,6 +47,15 @@ struct EditorView: View {
             TextField("Title", text: $renameText)
             Button("Cancel", role: .cancel) {}
             Button("Rename") { if !renameText.isEmpty { editor.title = renameText } }
+        }
+        .fileImporter(isPresented: $editor.showPDFImporter, allowedContentTypes: [.pdf]) { result in
+            if case let .success(url) = result { editor.importPDF(url) }
+        }
+        .alert("Couldn't Import PDF", isPresented: Binding(get: { editor.importError != nil },
+                                                          set: { if !$0 { editor.importError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(editor.importError ?? "")
         }
         .onDisappear { editor.flush() }
         .persistentSystemOverlays(.hidden)
@@ -169,6 +179,7 @@ struct EditorMoreMenu: View {
     var body: some View {
         Menu {
             Button("Add Page", systemImage: "plus.rectangle.portrait") { editor.addPage() }
+            Button("Import PDF…", systemImage: "doc.richtext") { editor.showPDFImporter = true }
             Button("Export PDF", systemImage: "square.and.arrow.up") { editor.exportPDF() }
             Divider()
             Toggle(isOn: $editor.settings.scribbleToErase) { Label("Scribble to Erase", systemImage: "scribble") }
