@@ -401,3 +401,33 @@ final class HardwareTests: XCTestCase {
         XCTAssertEqual(runner.status, .stopped)
     }
 }
+
+final class LCDRendererTests: XCTestCase {
+    func testContrastAndDisplayOff() {
+        var frame = LCDFrame()
+        frame.pixels[0] = 255
+        frame.isDisplayOn = true
+        frame.contrast = 40
+        let renderer = LCDRenderer()
+        let on = renderer.rgba(frame)
+        XCTAssertLessThan(on[0], on[4], "set pixel is darker than a clear one")
+        frame.contrast = 10
+        let faint = renderer.rgba(frame)
+        XCTAssertGreaterThan(faint[0], on[0], "lower contrast washes pixels out")
+        frame.isDisplayOn = false
+        let off = renderer.rgba(frame)
+        XCTAssertEqual(off[0], off[4], "nothing visible with the display off")
+        XCTAssertEqual(renderer.ppm(frame, scale: 2).count, "P6\n192 128\n255\n".utf8.count + 192 * 128 * 3)
+    }
+
+    func testPersistenceBlendsFrames() throws {
+        var config = EmulatorConfiguration()
+        config.lcdPersistence = 0.5
+        let emu = Emulator(rom: try SyntheticOS.rom().image(), configuration: config)
+        emu.run(seconds: 0.02)
+        // Partially faded in right after the OS draws, then converges.
+        emu.run(seconds: 0.5)
+        XCTAssertGreaterThan(emu.frame[0, 0], 250)
+        XCTAssertEqual(emu.frame[10, 30], 0)
+    }
+}

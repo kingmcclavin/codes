@@ -12,3 +12,4 @@ App/*.xcodeproj
 Sources/TI84EmulatorCore/Resources/*.rom
 *.rom
 *.8xu
+App/Info.plist

@@ -1,0 +1,55 @@
+# Generates App/TI84Emulator.xcodeproj with XcodeGen:
+#   brew install xcodegen && cd App && xcodegen
+name: TI84Emulator
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "16.0"
+packages:
+  TI84Emulator:
+    path: ..
+targets:
+  TI84Emulator:
+    type: application
+    platform: iOS
+    sources:
+      - TI84EmulatorApp.swift
+    dependencies:
+      - package: TI84Emulator
+        product: TI84EmulatorUI
+      - package: TI84Emulator
+        product: TI84EmulatorCore
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: TI-84 Emulator
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UIRequiresFullScreen: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.ti84emulator
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.9"
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+schemes:
+  TI84Emulator:
+    build:
+      targets:
+        TI84Emulator: all
+    # The CPU core needs compiler optimisation to run comfortably faster than
+    # real time, so Run uses the Release configuration by default.
+    run:
+      config: Release
+    archive:
+      config: Release
