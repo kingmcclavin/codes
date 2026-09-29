@@ -1,0 +1,14 @@
+# SwiftPM / Xcode
+.build/
+.swiftpm/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+App/*.xcodeproj
+
+# TI ROM images are copyrighted: keep your legally obtained dump local.
+# Remove this rule only if your repository is private and you are allowed
+# to store the ROM there.
+Sources/TI84EmulatorCore/Resources/*.rom
+*.rom
+*.8xu
