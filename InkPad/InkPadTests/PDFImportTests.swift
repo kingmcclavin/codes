@@ -57,6 +57,7 @@ final class PDFImportTests: XCTestCase {
         XCTAssertLessThan(pixel[offset], 60, "blue channel")
     }
 
+    @MainActor
     func testCreateNotebookFromPDF() throws {
         let store = DocumentStore(rootURL: dir.appendingPathComponent("library"))
         let id = try store.createFromPDF(try makePDF())
