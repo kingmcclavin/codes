@@ -6,6 +6,12 @@ matrix, timers, interrupts, link port) and boots the **ROM you supply**. All
 calculator behaviour (math, graphing, programs, menus) comes from TI-OS running
 inside the emulator. The app itself implements none of it.
 
+**Verified with a real TI-84 Plus ROM running TI-OS 2.55MP.** The boot code
+unlocks Flash through the privileged sequence, validates the OS and hands over.
+TI-OS then clears RAM and waits for ON. After that it evaluates expressions
+(`2+3*4` → 14, `√(2)` → 1.414213562), opens the STAT/APPS/Y= menus and graphs
+functions. All of this is the ROM's own code running on the emulated hardware.
+
 > The repository does not include a ROM. TI's ROM images are copyrighted; use a
 > dump of a calculator you own.
 
@@ -179,9 +185,10 @@ TI84_ROM_PATH=/path/ti84.rom swift test           # also boots your ROM
   lines, deterministic execution, exact save-state resume, persistence,
   breakpoints, the threaded runner, and the LCD renderer.
 - `ROMBootTests`: boots a synthetic ROM (hand-assembled Z80 in the test target)
-  through the real reset path. When a real ROM is available, it also checks that
-  TI-OS turns on the LCD, runs in IM 1, draws, and reacts to typed keys. The
-  screen is printed as ASCII art.
+  through the real reset path. With the real ROM (bundled or `TI84_ROM_PATH`)
+  it boots TI-OS, checks the privileged Flash unlock, IM 1 and interrupts,
+  presses ON, types `2+3*4 ENTER`, and checks the pixels of the "14" that
+  TI-OS draws. The screen is printed as ASCII art.
 
 The CPU can also be checked against the classic exercisers (not included):
 
@@ -194,12 +201,17 @@ swift build -c release
 
 ```sh
 swift run -c release ti84-cli info  --rom ti84.rom
-swift run -c release ti84-cli boot  --rom ti84.rom --seconds 5 --keys two,add,three,enter --ppm screen.ppm
+swift run -c release ti84-cli boot  --rom ti84.rom --seconds 3 --keys on,clear,two,add,three,enter --ppm screen.ppm
+swift run -c release ti84-cli boot  --keys on,clear,yEquals,wait1,xtThetaN,square,subtract,four,graph,wait3
 swift run -c release ti84-cli bench --rom ti84.rom
 ```
 
 `boot` prints the LCD as text plus a register dump. Key names are the `Key`
-enum cases (`two`, `add`, `enter`, `second`, `alpha`, `yEquals`, …).
+enum cases (`two`, `add`, `enter`, `second`, `alpha`, `yEquals`, …), and
+`wait<seconds>` pauses between keys. After a reset the calculator is off,
+so start with `on`. TI-OS drops keys tapped while it is still drawing a
+screen (the Y= editor takes about half a second), just as the real calculator
+does.
 
 ## Debugger
 

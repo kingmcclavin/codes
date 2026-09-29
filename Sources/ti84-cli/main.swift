@@ -11,7 +11,8 @@ func usage() -> Never {
       ti84-cli info [--rom <file>]
           Validate a ROM and print its model and checksums.
       ti84-cli boot [--rom <file>] [--seconds <n>] [--keys <k1,k2,...>] [--ppm <out.ppm>] [--events]
-          Boot the ROM headless, optionally type keys (Key names such as two,add,three,enter),
+          Boot the ROM headless, optionally type keys (Key names such as two,add,three,enter;
+          "wait<seconds>" pauses),
           then print the LCD as text and a register dump.
       ti84-cli bench [--rom <file>] [--seconds <n>]
           Measure emulation speed relative to real time.
@@ -67,6 +68,11 @@ case "boot":
     emulator.run(seconds: seconds)
     if let keys = option("--keys") {
         for name in keys.split(separator: ",") {
+            if name.hasPrefix("wait") {
+                // "wait<seconds>", e.g. wait1.5, pauses between keys.
+                emulator.run(seconds: Double(name.dropFirst(4)) ?? 1)
+                continue
+            }
             guard let key = Key(rawValue: String(name)) else {
                 print("error: unknown key '\(name)'. Keys: \(Key.allCases.map(\.rawValue).joined(separator: ", "))")
                 exit(1)

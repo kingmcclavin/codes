@@ -32,30 +32,60 @@ final class ROMBootTests: XCTestCase {
         var events: [String] = []
         emu.onEvent = { events.append($0) }
 
-        // Give the boot code and OS time to initialise; a fresh RAM makes
-        // TI-OS show "RAM cleared" before the home screen.
-        let booted = emu.run(seconds: 10) {
-            emu.lcd.displayOn && emu.cpu.interruptMode == 1 && emu.frame.pixels.contains { $0 > 0 }
-        }
-        emu.run(seconds: 1)
-        print(emu.debugSnapshot().summary)
-        print(emu.frame.asciiArt)
-        events.prefix(20).forEach { print("event: \($0)") }
-
-        XCTAssertTrue(booted, "the OS should turn the LCD on and draw something")
+        // After a reset the boot code validates the OS and hands over; TI-OS
+        // then initialises RAM and powers down, waiting for ON (as a real
+        // calculator does after its batteries are inserted).
+        emu.run(seconds: 3)
+        XCTAssertTrue(events.contains("Flash unlocked"), "boot code should use the privileged unlock sequence")
         XCTAssertEqual(emu.cpu.interruptMode, 1, "TI-OS runs in interrupt mode 1")
-        XCTAssertTrue(emu.lcd.displayOn)
-        XCTAssertEqual(emu.mapper.banks[0], .flash(0))
+        XCTAssertTrue(emu.cpu.iff1)
 
-        // The OS should react to keys through its own keyboard scan.
-        let before = emu.frame.pixels
-        for key: Key in [.two, .add, .three] {
+        func tap(_ key: Key) {
             emu.setKey(key, pressed: true)
-            emu.run(seconds: 0.15)
+            emu.run(seconds: 0.1)
             emu.setKey(key, pressed: false)
-            emu.run(seconds: 0.15)
+            emu.run(seconds: 0.2)
         }
+
+        tap(.on)
+        let booted = emu.run(seconds: 3) { emu.lcd.displayOn && emu.frame.pixels.contains { $0 > 0 } }
         print(emu.frame.asciiArt)
-        XCTAssertNotEqual(emu.frame.pixels, before, "typing should change the screen")
+        XCTAssertTrue(booted, "ON should turn the calculator on and the OS should draw")
+
+        // Clear the home screen, then compute 2+3*4 and check the OS drew
+        // "14" right-aligned on the result line.
+        tap(.clear)
+        tap(.clear)
+        for key: Key in [.two, .add, .three, .multiply, .four, .enter] { tap(key) }
+        emu.run(seconds: 0.5)
+        print(emu.frame.asciiArt)
+        print(emu.debugSnapshot().summary)
+        XCTAssertEqual(glyphs(in: emu.frame, textRow: 1, columns: 14...15), glyphs14,
+                       "TI-OS should display 14 as the result of 2+3*4")
     }
+
+    /// Pixels of the 6×8 character cells at (textRow, columns) on the home
+    /// screen (glyphs occupy rows 1–7 of each cell).
+    private func glyphs(in frame: LCDFrame, textRow: Int, columns: ClosedRange<Int>) -> [Bool] {
+        var out: [Bool] = []
+        for y in (textRow * 8 + 1)...(textRow * 8 + 7) {
+            for column in columns {
+                for x in (column * 6)..<(column * 6 + 6) where x < LCDFrame.width {
+                    out.append(frame.isOn(x: x, y: y))
+                }
+            }
+        }
+        return out
+    }
+
+    /// "14" as TI-OS draws it right-aligned in the large font (x 84–95).
+    private let glyphs14: [Bool] = [
+        ".#......#...",
+        "##.....##...",
+        ".#....#.#...",
+        ".#...#..#...",
+        ".#...#####..",
+        ".#......#...",
+        "###.....#...",
+    ].flatMap { $0.map { $0 == "#" } }
 }
