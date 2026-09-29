@@ -44,6 +44,8 @@ final class PDFImportTests: XCTestCase {
         let renderer = PageRenderer(assetsURL: assets)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
+        format.opaque = true
+        format.preferredRange = .standard   // 8-bit BGRA
         let image = UIGraphicsImageRenderer(size: page.size, format: format).image { ctx in
             renderer.drawPage(page, in: ctx.cgContext)
         }
