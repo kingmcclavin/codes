@@ -60,6 +60,13 @@ project containing the same emulator and UI.
 4. Press **ON**. After a reset TI-OS stays off until ON is pressed, just like
    the real calculator after new batteries.
 
+**Exporting an .ipa:** in the running app, open **Settings ▸ Export App as .ipa**.
+Enter a name, pick an icon image from Photos or Files, optionally change the
+bundle identifier, then tap **Export IPA** and choose where to save it. The
+.ipa is unsigned. Install it with a sideloading tool such as AltStore or
+SideStore, which signs it with your Apple ID. The custom icon is written as
+PNG files referenced from `Info.plist`, replacing the Playgrounds icon.
+
 The playground is generated from `Sources/` by `Scripts/make-playground.sh`
 (Swift Playgrounds needs a single module). Re-run the script after changing
 the package sources.

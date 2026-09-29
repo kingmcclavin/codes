@@ -53,6 +53,18 @@ struct SettingsView: View {
                     Text("Reset Calculator is a hardware reset that keeps memory. Reset RAM clears RAM so the OS starts fresh. Erase Archive restores Flash from the original ROM image.")
                 }
 
+                Section {
+                    NavigationLink {
+                        ExportView()
+                    } label: {
+                        Label("Export App as .ipa", systemImage: "square.and.arrow.up")
+                    }
+                } header: {
+                    Text("Export")
+                } footer: {
+                    Text("Save this app as an .ipa with your own name and icon, to install with a sideloading tool.")
+                }
+
                 if let rom = model.rom {
                     Section("ROM") {
                         LabeledContent("Model", value: rom.model.rawValue)
