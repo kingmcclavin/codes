@@ -4,84 +4,93 @@ import SwiftUI
 struct InkPadApp: App {
     @StateObject private var store = DocumentStore.shared
     @StateObject private var preferences = AppPreferences.shared
+    @StateObject private var tabs = TabsModel(store: .shared)
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(store)
                 .environmentObject(preferences)
+                .environmentObject(tabs)
         }
     }
 }
 
+/// Tab bar on top; below it either the library (folder sidebar + list) or
+/// the active document.
 struct RootView: View {
     @EnvironmentObject private var store: DocumentStore
-    @EnvironmentObject private var preferences: AppPreferences
-    @State private var path: [LibraryRoute] = []
+    @EnvironmentObject private var tabs: TabsModel
+    @State private var sidebarSelection: SidebarItem? = .allDocuments
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var didRestore = false
 
     var body: some View {
-        NavigationStack(path: $path) {
-            LibraryView(folderID: nil, navigate: { path.append($0) })
-                .navigationDestination(for: LibraryRoute.self) { route in
-                    switch route {
-                    case let .folder(id):
-                        LibraryView(folderID: id, navigate: { path.append($0) })
-                    case let .document(id):
-                        DocumentLoaderView(documentID: id)
-                            .toolbar(.hidden, for: .navigationBar)
-                    }
+        VStack(spacing: 0) {
+            if !tabs.tabs.isEmpty {
+                DocumentTabBar()
+            }
+            ZStack {
+                library
+                    .opacity(tabs.showsLibrary ? 1 : 0)
+                    .allowsHitTesting(tabs.showsLibrary)
+                if let id = tabs.activeID {
+                    documentView(id)
+                        .id(id)
+                        .transition(.opacity)
                 }
-        }
-        .onAppear {
-            store.reload()
-            // Reopen the document the user was working in, inside its folder.
-            guard !didRestore else { return }
-            didRestore = true
-            if let id = preferences.lastOpenedDocumentID, store.exists(id) {
-                let folder = store.summaries.first { $0.id == id }?.folderID
-                path = store.path(to: folder).map { LibraryRoute.folder($0.id) } + [LibraryRoute.document(id)]
             }
         }
-        .onChange(of: path) { _, newValue in
-            if case let .document(id)? = newValue.last {
-                preferences.lastOpenedDocumentID = id
-            } else {
-                preferences.lastOpenedDocumentID = nil
-                store.reload()
+        .onAppear {
+            guard !didRestore else { return }
+            didRestore = true
+            store.reload()
+            tabs.restore()
+        }
+        .onChange(of: store.summaries) { _, docs in
+            tabs.prune(existing: Set(docs.map(\.id)))
+        }
+        .onChange(of: store.folders) { _, folders in
+            if let id = sidebarSelection?.folderID, !folders.contains(where: { $0.id == id }) {
+                sidebarSelection = .allDocuments
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            tabs.flushAll()
+        }
+    }
+
+    private var library: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            LibrarySidebar(selection: $sidebarSelection)
+        } detail: {
+            NavigationStack {
+                LibraryView(folderID: sidebarSelection?.folderID, navigate: navigate)
+                    .id(sidebarSelection)
             }
         }
     }
-}
 
-/// Loads a document off the main thread, then shows the editor.
-struct DocumentLoaderView: View {
-    let documentID: UUID
-    @EnvironmentObject private var store: DocumentStore
-    @State private var editor: EditorModel?
-    @State private var error: String?
-
-    var body: some View {
-        Group {
-            if let editor {
-                EditorView(editor: editor)
-            } else if let error {
-                ContentUnavailableView("Can't Open Document", systemImage: "exclamationmark.triangle", description: Text(error))
-            } else {
-                ProgressView()
-            }
+    @ViewBuilder
+    private func documentView(_ id: UUID) -> some View {
+        if let editor = tabs.editors[id] {
+            EditorView(editor: editor, onClose: { tabs.showLibrary() })
+        } else if let error = tabs.loadErrors[id] {
+            ContentUnavailableView("Can't Open Document", systemImage: "exclamationmark.triangle", description: Text(error))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(uiColor: .systemBackground))
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(uiColor: .systemBackground))
         }
-        .task(id: documentID) {
-            guard editor == nil else { return }
-            let store = self.store
-            let id = documentID
-            let result = await Task.detached(priority: .userInitiated) { () -> Result<DocumentModel, Error> in
-                Result { try store.load(id) }
-            }.value
-            switch result {
-            case let .success(doc): editor = EditorModel(document: doc, store: store)
-            case let .failure(e): error = e.localizedDescription
-            }
+    }
+
+    private func navigate(_ route: LibraryRoute) {
+        switch route {
+        case .library: sidebarSelection = .allDocuments
+        case let .folder(id): sidebarSelection = .folder(id)
+        case let .document(id): tabs.open(id)
         }
     }
 }

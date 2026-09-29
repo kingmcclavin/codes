@@ -2,6 +2,8 @@ import SwiftUI
 
 struct EditorView: View {
     @ObservedObject var editor: EditorModel
+    /// Called by the back button; defaults to dismissing the view.
+    var onClose: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var renaming = false
     @State private var renameText = ""
@@ -51,7 +53,7 @@ struct EditorView: View {
 
     private func close() {
         editor.flush()
-        dismiss()
+        if let onClose { onClose() } else { dismiss() }
     }
 }
 

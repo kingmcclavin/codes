@@ -2,6 +2,8 @@ import SwiftUI
 
 /// Navigation destinations in the library.
 enum LibraryRoute: Hashable {
+    /// The top level of the library.
+    case library
     case folder(UUID)
     case document(UUID)
 }
@@ -103,6 +105,17 @@ struct LibraryView: View {
                         .keyboardShortcut("n", modifiers: [.command, .shift])
                 } label: {
                     Label("New", systemImage: "plus")
+                }
+            }
+            if let folder = store.folder(folderID) {
+                ToolbarItem(placement: .topBarLeading) {
+                    // Up one level (the sidebar shows the whole tree).
+                    Button {
+                        navigate(folder.parentID.map { LibraryRoute.folder($0) } ?? LibraryRoute.library)
+                    } label: {
+                        Label(store.folder(folder.parentID)?.name ?? "All Documents", systemImage: "chevron.left")
+                            .labelStyle(.titleAndIcon)
+                    }
                 }
             }
             if folderID == nil {
