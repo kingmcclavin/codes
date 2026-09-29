@@ -109,59 +109,30 @@ struct LibrarySidebar: View {
     }
 }
 
-/// Browser-style strip of open documents.
+/// Slim, browser-style strip of open documents shown above a notebook.
+/// Tabs are plain titles; the active one is marked with an underline and is
+/// the only one showing a close button.
 struct DocumentTabBar: View {
     @EnvironmentObject private var tabs: TabsModel
 
     var body: some View {
-        HStack(spacing: 0) {
-            Button {
-                tabs.showLibrary()
-            } label: {
-                Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 15, weight: .medium))
-                    .frame(width: 44, height: 34)
-                    .background(RoundedRectangle(cornerRadius: 8)
-                        .fill(tabs.showsLibrary ? Color(uiColor: .systemBackground) : .clear))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(tabs.showsLibrary ? Color.accentColor : .secondary)
-            .accessibilityLabel("Library")
-            .padding(.leading, 8)
-
-            Divider().frame(height: 20).padding(.horizontal, 6)
-
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
-                        ForEach(tabs.tabs, id: \.self) { id in
-                            DocumentTab(id: id, title: tabs.title(for: id), isActive: tabs.activeID == id)
-                                .id(id)
-                        }
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 2) {
+                    ForEach(tabs.tabs, id: \.self) { id in
+                        DocumentTab(id: id, title: tabs.title(for: id), isActive: tabs.activeID == id)
+                            .id(id)
                     }
-                    .padding(.vertical, 4)
                 }
-                .onChange(of: tabs.activeID) { _, id in
-                    guard let id else { return }
-                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id) }
-                }
+                .padding(.horizontal, 10)
             }
-
-            Button {
-                tabs.showLibrary()
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .medium))
-                    .frame(width: 40, height: 34)
+            .onChange(of: tabs.activeID) { _, id in
+                guard let id else { return }
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id) }
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .accessibilityLabel("Open Another Document")
-            .padding(.trailing, 6)
         }
-        .frame(height: 42)
-        .background(Color(uiColor: .secondarySystemBackground))
-        .overlay(alignment: .bottom) { Divider() }
+        .frame(height: 30)
+        .background(.bar)
     }
 }
 
@@ -172,34 +143,33 @@ private struct DocumentTab: View {
     @EnvironmentObject private var tabs: TabsModel
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "doc.text")
-                .font(.system(size: 12))
-                .foregroundStyle(isActive ? Color.accentColor : .secondary)
+        HStack(spacing: 4) {
             Text(title)
-                .font(.subheadline.weight(isActive ? .semibold : .regular))
+                .font(.caption.weight(isActive ? .semibold : .regular))
                 .lineLimit(1)
                 .foregroundStyle(isActive ? .primary : .secondary)
-            Button {
-                withAnimation(.easeOut(duration: 0.15)) { tabs.close(id) }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
+            if isActive {
+                Button {
+                    withAnimation(.easeOut(duration: 0.15)) { tabs.close(id) }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.tertiary)
+                .accessibilityLabel("Close \(title)")
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .accessibilityLabel("Close \(title)")
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 6)
-        .frame(minWidth: 120, maxWidth: 220, minHeight: 34)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isActive ? Color(uiColor: .systemBackground) : Color.primary.opacity(0.04))
-                .shadow(color: .black.opacity(isActive ? 0.08 : 0), radius: 2, y: 1)
-        )
+        .padding(.horizontal, 10)
+        .frame(maxWidth: 180, minHeight: 30)
+        .overlay(alignment: .bottom) {
+            Capsule()
+                .fill(isActive ? Color.accentColor : .clear)
+                .frame(height: 2)
+                .padding(.horizontal, 8)
+        }
         .contentShape(Rectangle())
         .onTapGesture { tabs.activate(id) }
         .contextMenu {

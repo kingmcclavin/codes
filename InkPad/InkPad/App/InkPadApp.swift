@@ -16,8 +16,8 @@ struct InkPadApp: App {
     }
 }
 
-/// Tab bar on top; below it either the library (folder sidebar + list) or
-/// the active document.
+/// Either the library (folder sidebar + list) or the active document, with
+/// a slim tab strip above documents when several are open.
 struct RootView: View {
     @EnvironmentObject private var store: DocumentStore
     @EnvironmentObject private var tabs: TabsModel
@@ -27,8 +27,10 @@ struct RootView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !tabs.tabs.isEmpty {
+            // Only inside a notebook, and only when there is something to switch to.
+            if !tabs.showsLibrary && tabs.tabs.count > 1 {
                 DocumentTabBar()
+                Divider()
             }
             ZStack {
                 library
