@@ -187,6 +187,17 @@ if let spec = option("--dis") {
     }
 }
 
+// --find HEXBYTES searches RAM for a byte pattern after the run.
+if let pat = option("--find") {
+    var bytes = [UInt8]()
+    var i = pat.startIndex
+    while i < pat.endIndex { let j = pat.index(i, offsetBy: 2); bytes.append(UInt8(pat[i..<j], radix: 16)!); i = j }
+    let ram = emu.ram.contents
+    for o in 0...(ram.count - bytes.count) where Array(ram[o..<o + bytes.count]) == bytes {
+        print(String(format: "found at %06X", 0xD00000 + o))
+    }
+}
+
 // --dump ADDR:N hex-dumps emulated memory after the run.
 if let spec = option("--dump") {
     let p = spec.split(separator: ":")

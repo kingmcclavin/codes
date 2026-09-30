@@ -21,20 +21,36 @@ public final class Scheduler {
     public static let ticksPer32k: UInt64 = 46_875
     public static let ticksPer6MHz: UInt64 = 256
 
-    /// Total CPU cycles executed since power-on.
-    public var cycles: Int64 = 0
-    /// The CPU stops its inner loop once `cycles >= stopCycles`.
-    public var stopCycles: Int64 = 0
+    /// clock[0] = total CPU cycles since power-on, clock[1] = stop cycle for the
+    /// CPU's inner loop. Kept in raw memory: the CPU and bus update it on every
+    /// memory access.
+    public let clock: UnsafeMutablePointer<Int64>
 
-    private var anchorTicks: UInt64 = 0
-    private var anchorCycles: Int64 = 0
-    public private(set) var ticksPerCycle: UInt64 = 256
+    /// Total CPU cycles executed since power-on.
+    public var cycles: Int64 {
+        get { clock[0] }
+        set { clock[0] = newValue }
+    }
+    /// The CPU stops its inner loop once `cycles >= stopCycles`.
+    public var stopCycles: Int64 {
+        get { clock[1] }
+        set { clock[1] = newValue }
+    }
+
+    @exclusivity(unchecked) private var anchorTicks: UInt64 = 0
+    @exclusivity(unchecked) private var anchorCycles: Int64 = 0
+    @exclusivity(unchecked) public private(set) var ticksPerCycle: UInt64 = 256
     /// Cycle budget of the current `run` call.
     var runLimit: Int64 = 0
 
     private var deadlines = [UInt64](repeating: .max, count: SchedulerEvent.allCases.count)
 
-    public init() {}
+    public init() {
+        clock = .allocate(capacity: 2)
+        clock.initialize(repeating: 0, count: 2)
+    }
+
+    deinit { clock.deallocate() }
 
     /// Current emulated time in base ticks.
     @inline(__always) public var now: UInt64 {

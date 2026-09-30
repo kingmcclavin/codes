@@ -129,10 +129,18 @@ public final class Emulator {
         return Int(scheduler.cycles - start)
     }
 
-    /// Runs for the given amount of emulated time.
+    /// Runs for the given amount of emulated time (independent of CPU clock
+    /// changes made by the ROM along the way). Returns the cycles executed.
     @discardableResult
     public func run(seconds: Double) -> Int {
-        run(cycles: Int(Double(scheduler.cpuHz) * seconds))
+        let target = scheduler.now &+ UInt64(seconds * Double(Scheduler.baseHz))
+        var executed = 0
+        while scheduler.now < target {
+            let remaining = (target - scheduler.now + scheduler.ticksPerCycle - 1) / scheduler.ticksPerCycle
+            executed += run(cycles: Int(max(1, remaining)))
+            if cpu.breakpointHit { break }
+        }
+        return executed
     }
 
     /// Executes exactly one instruction (debugger), processing due events first.

@@ -44,13 +44,15 @@ public final class LCDController: IODevice {
     public private(set) var palette = [UInt8](repeating: 0, count: 0x200)
     public private(set) var cursor = [UInt8](repeating: 0, count: 0x400)
 
-    unowned let scheduler: Scheduler
-    unowned let interrupts: InterruptController
-    unowned let bus: MemoryBus
-    unowned let panel: LCDPanel
+    unowned(unsafe) let scheduler: Scheduler
+    unowned(unsafe) let interrupts: InterruptController
+    unowned(unsafe) let bus: MemoryBus
+    unowned(unsafe) let panel: LCDPanel
 
     /// Most recent displayed frame (only touched by the emulation thread).
     public private(set) var frame = LCDFrame()
+    /// Set when controller state changed in a way that requires re-streaming.
+    @exclusivity(unchecked) var needsStream = true
     public private(set) var framesRendered: UInt64 = 0
     /// Called on the emulation thread whenever `frame` changes.
     public var onFrame: ((LCDFrame) -> Void)?
@@ -69,6 +71,8 @@ public final class LCDController: IODevice {
         cursor = [UInt8](repeating: 0, count: 0x400)
         scheduler.cancel(.lcdFrame)
         updateInterrupt()
+        updateVRAMWatch()
+        invalidate()
     }
 
     public var enabled: Bool { control & 1 != 0 }
@@ -120,22 +124,36 @@ public final class LCDController: IODevice {
         scheduler.schedule(.lcdFrame, after: framePeriod)
     }
 
-    /// Streams one frame to the panel (if the controller is running) and publishes
-    /// the panel image if it changed.
+    /// Streams one frame to the panel (if the controller is running and anything
+    /// it would send changed) and publishes the panel image if it changed.
     public func render() {
-        if enabled && powered {
+        if enabled && powered && (bus.vramDirty || needsStream) {
+            bus.vramDirty = false
+            needsStream = false
             stream()
+            panel.contentChanged = true
         }
         framesRendered += 1
-        var next = frame
-        let changed = next.pixels.withUnsafeMutableBytes { raw -> Bool in
-            panel.present(into: raw.bindMemory(to: UInt32.self))
-        }
-        if changed {
-            next.serial = frame.serial &+ 1
-            frame = next
-            onFrame?(frame)
-        }
+        guard panel.contentChanged else { return }
+        panel.contentChanged = false
+        let differs = frame.pixels.withUnsafeBytes { panel.differs(from: $0.bindMemory(to: UInt32.self)) }
+        guard differs else { return }
+        frame.pixels.withUnsafeMutableBytes { panel.present(into: $0.bindMemory(to: UInt32.self)) }
+        frame.serial &+= 1
+        onFrame?(frame)
+    }
+
+    /// Forces the next `render()` to re-stream and republish (after a state load).
+    public func invalidate() {
+        needsStream = true
+        bus.vramDirty = true
+        panel.contentChanged = true
+    }
+
+    private func updateVRAMWatch() {
+        let base = upbase & 0xFF_FFF8
+        bus.vramWatch = base >= 0xD00000 && base < 0xE00000 ? (base - 0xD00000) & 0x7FFFF : 0
+        needsStream = true
     }
 
     @inline(__always) private func rgba(r: UInt32, g: UInt32, b: UInt32) -> UInt32 {
@@ -169,6 +187,22 @@ public final class LCDController: IODevice {
         }
 
         panel.beginFrame()
+
+        // Fast path: the OS configuration (16 bpp 5:6:5 from RAM into the panel's
+        // full 320x240 window in natural order).
+        if mode == 6 && panel.isIdentityMapping && total == LCDPanel.columns * LCDPanel.rows,
+           addr >= 0xD00000, addr - 0xD00000 + UInt32(total * 2) <= ramSize {
+            let src = UnsafeRawPointer(ram + Int(addr - 0xD00000))
+            let dst = panel.gram
+            let sr: UInt32 = bgr ? 11 : 0, sb: UInt32 = bgr ? 0 : 11
+            for i in 0..<total {
+                let v = UInt32(truncatingIfNeeded: src.load(fromByteOffset: i &* 2, as: UInt16.self))
+                let r5 = (v >> sr) & 0x1F, g6 = (v >> 5) & 0x3F, b5 = (v >> sb) & 0x1F
+                dst[i] = 0xFF00_0000 | (b5 << 19 | (b5 >> 2) << 16) | (g6 << 10 | (g6 >> 4) << 8) | (r5 << 3 | r5 >> 2)
+            }
+            return
+        }
+
         switch mode {
         case 4, 6, 7:
             // 16 bpp (1:5:5:5, 5:6:5) or 12 bpp (4:4:4), two bytes per pixel.
@@ -246,15 +280,19 @@ public final class LCDController: IODevice {
     public func write(_ offset: UInt16, value: UInt8) {
         let o = Int(offset)
         switch o {
-        case 0x000..<0x010: setByte(&timing[o >> 2], o, value)
+        case 0x000..<0x010:
+            setByte(&timing[o >> 2], o, value)
+            needsStream = true
         case 0x010..<0x014:
             setByte(&upbase, o, value)
             upbase &= 0xFF_FFF8
+            updateVRAMWatch()
         case 0x014..<0x018:
             setByte(&lpbase, o, value)
             lpbase &= 0xFF_FFF8
         case 0x018..<0x01C:
             setByte(&control, o, value)
+            needsStream = true
             scheduleFrame()
         case 0x01C..<0x020:
             setByte(&imsc, o, value)
@@ -263,7 +301,9 @@ public final class LCDController: IODevice {
         case 0x028..<0x02C:
             ris &= ~(UInt32(value) << (UInt32(o & 3) * 8))
             updateInterrupt()
-        case 0x200..<0x400: palette[o - 0x200] = value
+        case 0x200..<0x400:
+            palette[o - 0x200] = value
+            needsStream = true
         case 0x800..<0xC00: cursor[o - 0x800] = value
         default: break
         }
@@ -281,6 +321,8 @@ public final class LCDController: IODevice {
             control = newValue.control; imsc = newValue.imsc; ris = newValue.ris
             palette = newValue.palette; cursor = newValue.cursor
             updateInterrupt()
+            updateVRAMWatch()
+            invalidate()
             scheduleFrame()
         }
     }
@@ -314,7 +356,9 @@ public final class LCDPanel {
     private var readBits: [Bool] = []
 
     /// Panel RAM, RGBA pixels, row-major 320x240.
-    public private(set) var gram: [UInt32]
+    public let gram: UnsafeMutablePointer<UInt32>
+    /// Set whenever what the glass shows may have changed.
+    @exclusivity(unchecked) public var contentChanged = true
     // Address counter.
     private var curCol = 0, curRow = 0
 
@@ -322,7 +366,16 @@ public final class LCDPanel {
     public var trace: ((Bool, UInt8) -> Void)?
 
     public init() {
-        gram = [UInt32](repeating: 0xFFFF_FFFF, count: LCDPanel.columns * LCDPanel.rows)
+        gram = .allocate(capacity: LCDPanel.columns * LCDPanel.rows)
+        gram.initialize(repeating: 0xFFFF_FFFF, count: LCDPanel.columns * LCDPanel.rows)
+    }
+
+    deinit { gram.deallocate() }
+
+    /// True when streamed pixels land in panel RAM in natural row-major order.
+    var isIdentityMapping: Bool {
+        madctl & 0xE0 == 0 && columnStart == 0 && rowStart == 0
+            && columnEnd == LCDPanel.columns - 1 && rowEnd == LCDPanel.rows - 1
     }
 
     public func reset() {
@@ -332,6 +385,7 @@ public final class LCDPanel {
         rowStart = 0; rowEnd = LCDPanel.rows - 1
         shiftIn = 0; bitCount = 0; readBits = []
         curCol = 0; curRow = 0
+        contentChanged = true
     }
 
     public var displayVisible: Bool { !sleeping && displayOn }
@@ -354,15 +408,13 @@ public final class LCDPanel {
     }
 
     public func writeCommand(_ c: UInt8) {
+        contentChanged = true
         command = c
         params = []
         readBits = []
         var reply: [UInt8] = []
         switch c {
-        case 0x01:                                    // software reset
-            let keep = gram
-            reset()
-            gram = keep
+        case 0x01: reset()                            // software reset (RAM kept)
         case 0x10: sleeping = true
         case 0x11: sleeping = false
         case 0x20: inverted = false
@@ -384,6 +436,7 @@ public final class LCDPanel {
 
     public func writeData(_ d: UInt8) {
         params.append(d)
+        contentChanged = true
         switch (command, params.count) {
         case (0x36, 1): madctl = d
         case (0x3A, 1): colmod = d
@@ -426,21 +479,32 @@ public final class LCDPanel {
         }
     }
 
-    /// Writes what the glass shows into `out`; returns true if anything changed.
-    func present(into out: UnsafeMutableBufferPointer<UInt32>) -> Bool {
-        var changed = false
+    /// The colour the glass shows for panel RAM pixel `i`.
+    @inline(__always) private func shown(_ i: Int, invert: UInt32) -> UInt32 {
+        displayVisible ? gram[i] ^ invert : 0xFF00_0000
+    }
+
+    /// True if the glass image differs from `current`.
+    func differs(from current: UnsafeBufferPointer<UInt32>) -> Bool {
+        let n = min(current.count, LCDPanel.columns * LCDPanel.rows)
         if !displayVisible {
-            for i in 0..<out.count where out[i] != 0xFF00_0000 { out[i] = 0xFF00_0000; changed = true }
-            return changed
+            for i in 0..<n where current[i] != 0xFF00_0000 { return true }
+            return false
+        }
+        if !inverted { return memcmp(current.baseAddress!, gram, n * 4) != 0 }
+        for i in 0..<n where current[i] != gram[i] ^ 0x00FF_FFFF { return true }
+        return false
+    }
+
+    /// Writes what the glass shows into `out`.
+    func present(into out: UnsafeMutableBufferPointer<UInt32>) {
+        let n = min(out.count, LCDPanel.columns * LCDPanel.rows)
+        if displayVisible && !inverted {
+            out.baseAddress!.update(from: gram, count: n)
+            return
         }
         let invert: UInt32 = inverted ? 0x00FF_FFFF : 0
-        gram.withUnsafeBufferPointer { g in
-            for i in 0..<min(out.count, g.count) {
-                let c = g[i] ^ invert
-                if out[i] != c { out[i] = c; changed = true }
-            }
-        }
-        return changed
+        for i in 0..<n { out[i] = shown(i, invert: invert) }
     }
 
     public struct State: Codable, Equatable {
@@ -481,7 +545,7 @@ public final class SPIController: IODevice {
     private var rxFIFO: [UInt32] = []
     private var txShift: UInt32 = 0
 
-    unowned let panel: LCDPanel
+    unowned(unsafe) let panel: LCDPanel
 
     init(panel: LCDPanel) { self.panel = panel }
 

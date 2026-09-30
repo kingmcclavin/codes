@@ -10,43 +10,46 @@ import Foundation
 /// Instruction decoding lives in `Instructions.swift`.
 public final class CPU {
     /// The register file (`registers` is the public name; `r` is used internally).
-    var r = Registers()
+    @exclusivity(unchecked) var r = Registers()
     public var registers: Registers {
         get { r }
         set { r = newValue }
     }
 
-    unowned let bus: MemoryBus
-    unowned let scheduler: Scheduler
+    unowned(unsafe) let bus: MemoryBus
+    unowned(unsafe) let scheduler: Scheduler
+    /// Shared bus state and cycle counter (see `BusFastState`).
+    let mem: UnsafeMutablePointer<BusFastState>
+    let clock: UnsafeMutablePointer<Int64>
 
-    public var halted = false
-    public var adl = false
-    public var madl = false
-    public var ief1 = false
-    public var ief2 = false
-    public var im: UInt8 = 0
+    @exclusivity(unchecked) public var halted = false
+    @exclusivity(unchecked) public var adl = false
+    @exclusivity(unchecked) public var madl = false
+    @exclusivity(unchecked) public var ief1 = false
+    @exclusivity(unchecked) public var ief2 = false
+    @exclusivity(unchecked) public var im: UInt8 = 0
     /// Set by EI: interrupts are not accepted until one more instruction executes.
-    var iefWait = false
+    @exclusivity(unchecked) var iefWait = false
 
     /// Maskable interrupt request line, driven by the interrupt controller.
-    public var irq = false
+    @exclusivity(unchecked) public var irq = false
     /// Non-maskable interrupt request (edge; cleared when serviced).
-    public var nmi = false
+    @exclusivity(unchecked) public var nmi = false
 
     // Per-instruction decode state.
-    var L = false          // data/register width is 24-bit
-    var IL = false         // immediate / jump width is 24-bit
-    var suffixed = false
-    var prefix = 0         // 0 = HL, 2 = IX (DD), 3 = IY (FD)
+    @exclusivity(unchecked) var L = false          // data/register width is 24-bit
+    @exclusivity(unchecked) var IL = false         // immediate / jump width is 24-bit
+    @exclusivity(unchecked) var suffixed = false
+    @exclusivity(unchecked) var prefix = 0         // 0 = HL, 2 = IX (DD), 3 = IY (FD)
     /// Address of the first byte of the instruction being executed.
-    public private(set) var instructionPC: UInt32 = 0
+    @exclusivity(unchecked) public private(set) var instructionPC: UInt32 = 0
 
     // Debugging.
     public var breakpoints = Set<UInt32>() { didSet { hasBreakpoints = !breakpoints.isEmpty } }
-    private var hasBreakpoints = false
+    @exclusivity(unchecked) private var hasBreakpoints = false
     /// Suppresses the breakpoint check for exactly one instruction (resume from a hit).
-    public var ignoreBreakpointOnce = false
-    public private(set) var breakpointHit = false
+    @exclusivity(unchecked) public var ignoreBreakpointOnce = false
+    @exclusivity(unchecked) public private(set) var breakpointHit = false
     public private(set) var lastUnsupported: String?
     public var unsupportedCount = 0
     public var onUnsupported: ((String) -> Void)?
@@ -56,6 +59,8 @@ public final class CPU {
     public init(bus: MemoryBus, scheduler: Scheduler) {
         self.bus = bus
         self.scheduler = scheduler
+        mem = bus.fast
+        clock = scheduler.clock
     }
 
     /// Stops execution before the next instruction, as if a breakpoint was hit
@@ -86,7 +91,7 @@ public final class CPU {
     /// Executes instructions until the scheduler's stop point, a breakpoint, or HALT.
     public func execute() {
         breakpointHit = false
-        while scheduler.cycles < scheduler.stopCycles {
+        while clock[0] < clock[1] {
             let blockIRQ = iefWait
             iefWait = false
             if nmi {
@@ -97,7 +102,7 @@ public final class CPU {
             }
             if halted {
                 // Nothing to do until an interrupt: fast-forward to the next event.
-                scheduler.cycles = scheduler.stopCycles
+                clock[0] = clock[1]
                 return
             }
             if hasBreakpoints {
@@ -131,7 +136,7 @@ public final class CPU {
     public func step() {
         instructionPC = r.pc
         L = adl; IL = adl; suffixed = false; prefix = 0
-        scheduler.cycles &+= 1
+        clock[0] &+= 1
         var op = fetchOpcode()
         while true {
             switch op {
@@ -169,7 +174,7 @@ public final class CPU {
         halted = false
         ief1 = false
         ief2 = false
-        scheduler.cycles &+= 2
+        clock[0] &+= 2
         let vector: UInt32
         if im == 2 {
             // Vector table at {I, bus byte}; the CE bus floats high.
@@ -186,7 +191,7 @@ public final class CPU {
         halted = false
         ief2 = ief1
         ief1 = false
-        scheduler.cycles &+= 2
+        clock[0] &+= 2
         interruptCall(0x66)
     }
 
@@ -211,7 +216,7 @@ public final class CPU {
 
     /// Forms a 24-bit bus address from a register value in the given mode.
     @inline(__always) func address(_ v: UInt32, _ wide: Bool) -> UInt32 {
-        wide ? v & 0xFF_FFFF : (UInt32(r.mbase) << 16) | (v & 0xFFFF)
+        wide ? v & 0xFF_FFFF : (UInt32(truncatingIfNeeded: r.mbase) << 16) | (v & 0xFFFF)
     }
 
     /// Writes `v` into a multi-byte register honoring the current data width.
@@ -224,7 +229,7 @@ public final class CPU {
     // MARK: - Fetch
 
     @inline(__always) func fetch() -> UInt8 {
-        let v = bus.read(address(r.pc, adl))
+        let v = MemoryBus.read(mem, adl ? r.pc : address(r.pc, false))
         r.pc = mask(r.pc &+ 1, adl)
         return v
     }
@@ -236,32 +241,32 @@ public final class CPU {
 
     /// Fetches a 16- or 24-bit immediate according to IL.
     @inline(__always) func fetchWord() -> UInt32 {
-        var v = UInt32(fetch())
-        v |= UInt32(fetch()) << 8
-        if IL { v |= UInt32(fetch()) << 16 }
+        var v = UInt32(truncatingIfNeeded: fetch())
+        v |= UInt32(truncatingIfNeeded: fetch()) << 8
+        if IL { v |= UInt32(truncatingIfNeeded: fetch()) << 16 }
         return v
     }
 
     /// Fetches a signed displacement, sign-extended to 32 bits.
     @inline(__always) func fetchDisplacement() -> UInt32 {
-        UInt32(bitPattern: Int32(Int8(bitPattern: fetch())))
+        UInt32(bitPattern: Int32(truncatingIfNeeded: Int8(bitPattern: fetch())))
     }
 
     // MARK: - Data memory (addressed with width L)
 
     @inline(__always) func readByte(_ a: UInt32) -> UInt8 {
-        bus.read(address(a, L))
+        MemoryBus.read(mem, address(a, L))
     }
 
     @inline(__always) func writeByte(_ a: UInt32, _ v: UInt8) {
-        bus.write(address(a, L), value: v)
+        MemoryBus.write(mem, address(a, L), v)
     }
 
     /// Reads a 16/24-bit little-endian word (width L).
     func readWordAt(_ a: UInt32) -> UInt32 {
-        var v = UInt32(readByte(a))
-        v |= UInt32(readByte(a &+ 1)) << 8
-        if L { v |= UInt32(readByte(a &+ 2)) << 16 }
+        var v = UInt32(truncatingIfNeeded: readByte(a))
+        v |= UInt32(truncatingIfNeeded: readByte(a &+ 1)) << 8
+        if L { v |= UInt32(truncatingIfNeeded: readByte(a &+ 2)) << 16 }
         return v
     }
 
@@ -276,20 +281,20 @@ public final class CPU {
     @inline(__always) func pushByte(_ v: UInt8, long: Bool) {
         if long {
             r.spl = (r.spl &- 1) & 0xFF_FFFF
-            bus.write(r.spl, value: v)
+            MemoryBus.write(mem, r.spl, v)
         } else {
             r.sps = (r.sps &- 1) & 0xFFFF
-            bus.write(UInt32(r.mbase) << 16 | r.sps, value: v)
+            MemoryBus.write(mem, UInt32(truncatingIfNeeded: r.mbase) << 16 | r.sps, v)
         }
     }
 
     @inline(__always) func popByte(long: Bool) -> UInt8 {
         if long {
-            let v = bus.read(r.spl)
+            let v = MemoryBus.read(mem, r.spl)
             r.spl = (r.spl &+ 1) & 0xFF_FFFF
             return v
         } else {
-            let v = bus.read(UInt32(r.mbase) << 16 | r.sps)
+            let v = MemoryBus.read(mem, UInt32(truncatingIfNeeded: r.mbase) << 16 | r.sps)
             r.sps = (r.sps &+ 1) & 0xFFFF
             return v
         }
@@ -302,9 +307,9 @@ public final class CPU {
     }
 
     func pop() -> UInt32 {
-        var v = UInt32(popByte(long: L))
-        v |= UInt32(popByte(long: L)) << 8
-        if L { v |= UInt32(popByte(long: L)) << 16 }
+        var v = UInt32(truncatingIfNeeded: popByte(long: L))
+        v |= UInt32(truncatingIfNeeded: popByte(long: L)) << 8
+        if L { v |= UInt32(truncatingIfNeeded: popByte(long: L)) << 16 }
         return v
     }
 
@@ -348,13 +353,13 @@ public final class CPU {
             let wasADL = popByte(long: true) & 1 != 0
             var target: UInt32
             if adl {
-                target = UInt32(popByte(long: true))
-                target |= UInt32(popByte(long: true)) << 8
-                if wasADL { target |= UInt32(popByte(long: true)) << 16 }
+                target = UInt32(truncatingIfNeeded: popByte(long: true))
+                target |= UInt32(truncatingIfNeeded: popByte(long: true)) << 8
+                if wasADL { target |= UInt32(truncatingIfNeeded: popByte(long: true)) << 16 }
             } else {
-                target = UInt32(popByte(long: false))
-                target |= UInt32(popByte(long: false)) << 8
-                if wasADL { target |= UInt32(popByte(long: true)) << 16 }
+                target = UInt32(truncatingIfNeeded: popByte(long: false))
+                target |= UInt32(truncatingIfNeeded: popByte(long: false)) << 8
+                if wasADL { target |= UInt32(truncatingIfNeeded: popByte(long: true)) << 16 }
             }
             jump(target, wide: wasADL)
         } else {
@@ -365,12 +370,12 @@ public final class CPU {
     // MARK: - I/O
 
     @inline(__always) func portIn(_ port: UInt32) -> UInt8 {
-        scheduler.cycles &+= 2
+        clock[0] &+= 2
         return bus.io.read(UInt16(truncatingIfNeeded: port))
     }
 
     @inline(__always) func portOut(_ port: UInt32, _ v: UInt8) {
-        scheduler.cycles &+= 2
+        clock[0] &+= 2
         bus.io.write(UInt16(truncatingIfNeeded: port), value: v)
     }
 

@@ -147,9 +147,9 @@ extension CPU {
         case 1: add8(v, carry: r.f & Flag.c)
         case 2: r.a = sub8(v, carry: 0)
         case 3: r.a = sub8(v, carry: r.f & Flag.c)
-        case 4: r.a &= v; r.f = szpTable[Int(r.a)] | Flag.h
-        case 5: r.a ^= v; r.f = szpTable[Int(r.a)]
-        case 6: r.a |= v; r.f = szpTable[Int(r.a)]
+        case 4: r.a &= v; r.f = szpTable[Int(truncatingIfNeeded: r.a)] | Flag.h
+        case 5: r.a ^= v; r.f = szpTable[Int(truncatingIfNeeded: r.a)]
+        case 6: r.a |= v; r.f = szpTable[Int(truncatingIfNeeded: r.a)]
         default:
             _ = sub8(v, carry: 0)
             // CP takes the undocumented bits from the operand.
@@ -159,7 +159,7 @@ extension CPU {
 
     @inline(__always) func add8(_ v: UInt8, carry: UInt8) {
         let a = r.a
-        let res = UInt16(a) + UInt16(v) + UInt16(carry)
+        let res = UInt16(truncatingIfNeeded: a) &+ UInt16(truncatingIfNeeded: v) &+ UInt16(truncatingIfNeeded: carry)
         let r8 = UInt8(truncatingIfNeeded: res)
         var f = r8 & (Flag.s | Flag.x | Flag.y)
         if r8 == 0 { f |= Flag.z }
@@ -172,7 +172,7 @@ extension CPU {
 
     @inline(__always) func sub8(_ v: UInt8, carry: UInt8) -> UInt8 {
         let a = r.a
-        let res = Int(a) - Int(v) - Int(carry)
+        let res = Int(truncatingIfNeeded: a) &- Int(truncatingIfNeeded: v) &- Int(truncatingIfNeeded: carry)
         let r8 = UInt8(truncatingIfNeeded: res)
         var f = (r8 & (Flag.s | Flag.x | Flag.y)) | Flag.n
         if r8 == 0 { f |= Flag.z }
@@ -262,7 +262,7 @@ extension CPU {
         case 6: cout = v >> 7; res = v << 1 | 1                      // SLL (not an eZ80 op)
         default: cout = v & 1; res = v >> 1                          // SRL
         }
-        r.f = szpTable[Int(res)] | cout
+        r.f = szpTable[Int(truncatingIfNeeded: res)] | cout
         return res
     }
 
@@ -283,37 +283,21 @@ extension CPU {
     }
 
     // MARK: - Main opcode table
+    //
+    // The dispatcher declares no locals: in unoptimized builds every local of a
+    // function is initialised on entry, so instructions that need temporaries live
+    // in their own small functions.
 
     func executeMain(_ op: UInt8) {
         switch op {
         case 0x00: break                                             // NOP
-        case 0x08:                                                   // EX AF,AF'
-            let a = r.a, f = r.f
-            r.a = r.a_; r.f = r.f_; r.a_ = a; r.f_ = f
-        case 0x10:                                                   // DJNZ d
-            let d = fetchDisplacement()
-            r.b = r.b &- 1
-            if r.b != 0 { r.pc = mask(r.pc &+ d, adl); scheduler.cycles &+= 1 }
-        case 0x18:                                                   // JR d
-            let d = fetchDisplacement()
-            r.pc = mask(r.pc &+ d, adl)
-            scheduler.cycles &+= 1
-        case 0x20, 0x28, 0x30, 0x38:                                 // JR cc,d
-            let d = fetchDisplacement()
-            if condition((op >> 3) & 3) { r.pc = mask(r.pc &+ d, adl); scheduler.cycles &+= 1 }
-
-        case 0x01, 0x11, 0x21:                                       // LD rp,nn
-            setRP(op >> 4, fetchWord())
-        case 0x31:
-            if prefix != 0 {                                         // LD IY,(IX+d) / LD IX,(IY+d)
-                let a = indexAddress()
-                otherIndex = readWordAt(a)
-            } else {
-                sp = fetchWord()
-            }
-        case 0x09, 0x19, 0x29, 0x39:                                 // ADD HL,rp
-            setIndex(addWide(index, rp(op >> 4)))
-
+        case 0x08: exAF()                                            // EX AF,AF'
+        case 0x10: djnz()                                            // DJNZ d
+        case 0x18: jr(true)                                          // JR d
+        case 0x20, 0x28, 0x30, 0x38: jr(condition((op >> 3) & 3))    // JR cc,d
+        case 0x01, 0x11, 0x21: setRP(op >> 4, fetchWord())           // LD rp,nn
+        case 0x31: ld31()                                            // LD SP,nn / LD IY,(IX+d)
+        case 0x09, 0x19, 0x29, 0x39: setIndex(addWide(index, rp(op >> 4))) // ADD HL,rp
         case 0x02: writeByte(mask(r.bc, L), r.a)                     // LD (BC),A
         case 0x12: writeByte(mask(r.de, L), r.a)                     // LD (DE),A
         case 0x22: writeWordAt(fetchWord(), index)                   // LD (nn),HL
@@ -322,131 +306,156 @@ extension CPU {
         case 0x1A: r.a = readByte(mask(r.de, L))                     // LD A,(DE)
         case 0x2A: setIndex(readWordAt(fetchWord()))                 // LD HL,(nn)
         case 0x3A: r.a = readByte(fetchWord())                       // LD A,(nn)
-
-        case 0x03, 0x13, 0x23, 0x33:                                 // INC rp
-            setRP(op >> 4, rp(op >> 4) &+ 1)
-        case 0x0B, 0x1B, 0x2B, 0x3B:                                 // DEC rp
-            setRP(op >> 4, rp(op >> 4) &- 1)
-
-        case 0x34:                                                   // INC (HL)
-            let a = indexAddress()
-            writeByte(a, inc8(readByte(a)))
-        case 0x35:                                                   // DEC (HL)
-            let a = indexAddress()
-            writeByte(a, dec8(readByte(a)))
+        case 0x03, 0x13, 0x23, 0x33: setRP(op >> 4, rp(op >> 4) &+ 1) // INC rp
+        case 0x0B, 0x1B, 0x2B, 0x3B: setRP(op >> 4, rp(op >> 4) &- 1) // DEC rp
+        case 0x34: incDecMemory(true)                                // INC (HL)
+        case 0x35: incDecMemory(false)                               // DEC (HL)
         case 0x04, 0x0C, 0x14, 0x1C, 0x24, 0x2C, 0x3C:               // INC r
-            let y = (op >> 3) & 7
-            setReg(y, inc8(reg(y)))
+            setReg((op >> 3) & 7, inc8(reg((op >> 3) & 7)))
         case 0x05, 0x0D, 0x15, 0x1D, 0x25, 0x2D, 0x3D:               // DEC r
-            let y = (op >> 3) & 7
-            setReg(y, dec8(reg(y)))
-        case 0x36:                                                   // LD (HL),n
-            let a = indexAddress()
-            writeByte(a, fetch())
-        case 0x3E:
-            if prefix != 0 {                                         // LD (IX+d),IY / LD (IY+d),IX
-                let a = indexAddress()
-                writeWordAt(a, otherIndex)
-            } else {
-                r.a = fetch()
-            }
-        case 0x06, 0x0E, 0x16, 0x1E, 0x26, 0x2E:                     // LD r,n
-            setReg((op >> 3) & 7, fetch())
-
+            setReg((op >> 3) & 7, dec8(reg((op >> 3) & 7)))
+        case 0x36: ldMemoryImmediate()                               // LD (HL),n
+        case 0x3E: ld3E()                                            // LD A,n / LD (IX+d),IY
+        case 0x06, 0x0E, 0x16, 0x1E, 0x26, 0x2E: setReg((op >> 3) & 7, fetch()) // LD r,n
         case 0x07, 0x0F, 0x17, 0x1F, 0x27, 0x2F, 0x37, 0x3F:
-            if prefix != 0 {
-                executeIndexedWideLoad(op)
-            } else {
-                executeAccumulatorOp(op)
-            }
-
-        case 0x76:                                                   // HALT
-            halted = true
-
-        case 0x40...0x7F:                                            // LD r,r'
-            let y = (op >> 3) & 7
-            let z = op & 7
-            if z == 6 {
-                setRegPlain(y, readByte(indexAddress()))
-            } else if y == 6 {
-                let a = indexAddress()
-                writeByte(a, regPlain(z))
-            } else {
-                setReg(y, reg(z))
-            }
-
+            if prefix != 0 { executeIndexedWideLoad(op) } else { executeAccumulatorOp(op) }
+        case 0x76: halted = true                                     // HALT
+        case 0x40...0x7F: ldRegisters(op)                            // LD r,r'
         case 0x80...0xBF:                                            // ALU A,r
-            let z = op & 7
-            let v = z == 6 ? readByte(indexAddress()) : reg(z)
-            alu((op >> 3) & 7, v)
-
+            alu((op >> 3) & 7, op & 7 == 6 ? readByte(indexAddress()) : reg(op & 7))
         case 0xC0, 0xC8, 0xD0, 0xD8, 0xE0, 0xE8, 0xF0, 0xF8:         // RET cc
-            scheduler.cycles &+= 1
+            clock[0] &+= 1
             if condition((op >> 3) & 7) { ret() }
-        case 0xC1, 0xD1, 0xE1:                                       // POP rp2
-            let v = pop()
-            switch op {
-            case 0xC1: put(&r.bc, v)
-            case 0xD1: put(&r.de, v)
-            default: setIndex(v)
-            }
-        case 0xF1:                                                   // POP AF
-            r.af = UInt16(truncatingIfNeeded: pop())
+        case 0xC1: put(&r.bc, pop())                                 // POP BC
+        case 0xD1: put(&r.de, pop())                                 // POP DE
+        case 0xE1: setIndex(pop())                                   // POP HL
+        case 0xF1: r.af = UInt16(truncatingIfNeeded: pop())          // POP AF
         case 0xC9: ret()                                             // RET
-        case 0xD9:                                                   // EXX
-            let bc = r.bc, de = r.de, hl = r.hl
-            r.bc = r.bc_; r.de = r.de_; r.hl = r.hl_
-            r.bc_ = bc; r.de_ = de; r.hl_ = hl
-        case 0xE9:                                                   // JP (HL)
-            jump(index, wide: L)
-        case 0xF9:                                                   // LD SP,HL
-            sp = index
+        case 0xD9: exx()                                             // EXX
+        case 0xE9: jump(index, wide: L)                              // JP (HL)
+        case 0xF9: sp = index                                        // LD SP,HL
         case 0xC2, 0xCA, 0xD2, 0xDA, 0xE2, 0xEA, 0xF2, 0xFA:         // JP cc,nn
-            let t = fetchWord()
-            if condition((op >> 3) & 7) { jump(t, wide: IL) }
-        case 0xC3:                                                   // JP nn
-            jump(fetchWord(), wide: IL)
-        case 0xCB:
-            executeCB()
-        case 0xD3:                                                   // OUT (n),A
-            let n = fetch()
-            portOut(UInt32(r.a) << 8 | UInt32(n), r.a)
-        case 0xDB:                                                   // IN A,(n)
-            let n = fetch()
-            r.a = portIn(UInt32(r.a) << 8 | UInt32(n))
-        case 0xE3:                                                   // EX (SP),HL
-            let s = sp
-            let v = readWordAt(s)
-            writeWordAt(s, index)
-            setIndex(v)
-        case 0xEB:                                                   // EX DE,HL
-            if L { let d = r.de; r.de = r.hl; r.hl = d } else {
-                let d = r.de, h = r.hl
-                put(&r.de, h); put(&r.hl, d)
-            }
-        case 0xF3:                                                   // DI
-            ief1 = false; ief2 = false
-        case 0xFB:                                                   // EI
-            ief1 = true; ief2 = true; iefWait = true
+            jumpConditional(condition((op >> 3) & 7))
+        case 0xC3: jump(fetchWord(), wide: IL)                       // JP nn
+        case 0xCB: executeCB()
+        case 0xD3: outImmediate()                                    // OUT (n),A
+        case 0xDB: inImmediate()                                     // IN A,(n)
+        case 0xE3: exSP()                                            // EX (SP),HL
+        case 0xEB: exDEHL()                                          // EX DE,HL
+        case 0xF3: ief1 = false; ief2 = false                        // DI
+        case 0xFB: ief1 = true; ief2 = true; iefWait = true          // EI
         case 0xC4, 0xCC, 0xD4, 0xDC, 0xE4, 0xEC, 0xF4, 0xFC:         // CALL cc,nn
-            let t = fetchWord()
-            if condition((op >> 3) & 7) { call(t) }
-        case 0xC5: push(mask(r.bc, L))                               // PUSH rp2
-        case 0xD5: push(mask(r.de, L))
-        case 0xE5: push(index)
-        case 0xF5: push(UInt32(r.af))
-        case 0xCD:                                                   // CALL nn
-            call(fetchWord())
-        case 0xED:
-            executeED()
+            callConditional(condition((op >> 3) & 7))
+        case 0xC5: push(mask(r.bc, L))                               // PUSH BC
+        case 0xD5: push(mask(r.de, L))                               // PUSH DE
+        case 0xE5: push(index)                                       // PUSH HL
+        case 0xF5: push(UInt32(truncatingIfNeeded: r.af))            // PUSH AF
+        case 0xCD: call(fetchWord())                                 // CALL nn
+        case 0xED: executeED()
         case 0xC6, 0xCE, 0xD6, 0xDE, 0xE6, 0xEE, 0xF6, 0xFE:         // ALU A,n
             alu((op >> 3) & 7, fetch())
         case 0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF:         // RST p
-            call(UInt32(op & 0x38))
+            call(UInt32(truncatingIfNeeded: op & 0x38))
         default:
             // 0xDD / 0xFD are consumed as prefixes before we get here.
             unsupported([op])
         }
+    }
+
+    private func exAF() {
+        let a = r.a, f = r.f
+        r.a = r.a_; r.f = r.f_; r.a_ = a; r.f_ = f
+    }
+
+    private func exx() {
+        let bc = r.bc, de = r.de, hl = r.hl
+        r.bc = r.bc_; r.de = r.de_; r.hl = r.hl_
+        r.bc_ = bc; r.de_ = de; r.hl_ = hl
+    }
+
+    private func djnz() {
+        let d = fetchDisplacement()
+        r.b = r.b &- 1
+        if r.b != 0 { r.pc = mask(r.pc &+ d, adl); clock[0] &+= 1 }
+    }
+
+    private func jr(_ taken: Bool) {
+        let d = fetchDisplacement()
+        if taken { r.pc = mask(r.pc &+ d, adl); clock[0] &+= 1 }
+    }
+
+    private func jumpConditional(_ taken: Bool) {
+        let t = fetchWord()
+        if taken { jump(t, wide: IL) }
+    }
+
+    private func callConditional(_ taken: Bool) {
+        let t = fetchWord()
+        if taken { call(t) }
+    }
+
+    private func ld31() {
+        if prefix != 0 {                                             // LD IY,(IX+d) / LD IX,(IY+d)
+            let a = indexAddress()
+            otherIndex = readWordAt(a)
+        } else {
+            sp = fetchWord()
+        }
+    }
+
+    private func ld3E() {
+        if prefix != 0 {                                             // LD (IX+d),IY / LD (IY+d),IX
+            let a = indexAddress()
+            writeWordAt(a, otherIndex)
+        } else {
+            r.a = fetch()
+        }
+    }
+
+    private func incDecMemory(_ increment: Bool) {
+        let a = indexAddress()
+        let v = readByte(a)
+        writeByte(a, increment ? inc8(v) : dec8(v))
+    }
+
+    private func ldMemoryImmediate() {
+        let a = indexAddress()                                       // displacement precedes n
+        writeByte(a, fetch())
+    }
+
+    private func ldRegisters(_ op: UInt8) {
+        let y = (op >> 3) & 7
+        let z = op & 7
+        if z == 6 {
+            setRegPlain(y, readByte(indexAddress()))
+        } else if y == 6 {
+            let a = indexAddress()
+            writeByte(a, regPlain(z))
+        } else {
+            setReg(y, reg(z))
+        }
+    }
+
+    private func outImmediate() {
+        let n = fetch()
+        portOut(UInt32(truncatingIfNeeded: r.a) << 8 | UInt32(truncatingIfNeeded: n), r.a)
+    }
+
+    private func inImmediate() {
+        let n = fetch()
+        r.a = portIn(UInt32(truncatingIfNeeded: r.a) << 8 | UInt32(truncatingIfNeeded: n))
+    }
+
+    private func exSP() {
+        let s = sp
+        let v = readWordAt(s)
+        writeWordAt(s, index)
+        setIndex(v)
+    }
+
+    private func exDEHL() {
+        let d = r.de, h = r.hl
+        if L { r.de = h; r.hl = d } else { put(&r.de, h); put(&r.hl, d) }
     }
 
     /// RLCA, RRCA, RLA, RRA, DAA, CPL, SCF, CCF.
@@ -685,7 +694,7 @@ extension CPU {
                     let s = sp
                     sp = UInt32(UInt8(truncatingIfNeeded: s >> 8)) * UInt32(UInt8(truncatingIfNeeded: s))
                 }
-                scheduler.cycles &+= 4
+                clock[0] &+= 4
             case 2:                                                  // LEA IX,IY+d
                 put(&r.ix, mask(r.iy &+ fetchDisplacement(), L))
             case 4:                                                  // TST A,n
@@ -759,7 +768,7 @@ extension CPU {
     /// Re-executes the current instruction on the next step (for repeating forms).
     @inline(__always) private func repeatInstruction() {
         r.pc = instructionPC
-        scheduler.cycles &+= 1
+        clock[0] &+= 1
     }
 
     private func executeBlock(_ op: UInt8) {

@@ -89,7 +89,7 @@ public final class ControlPorts: IODevice {
 /// enables flash, sets the mapped size and the read wait states.
 public final class FlashController: IODevice {
     public var ports = [UInt8](repeating: 0, count: 0x100)
-    unowned let bus: MemoryBus
+    unowned(unsafe) let bus: MemoryBus
 
     init(bus: MemoryBus) {
         self.bus = bus

@@ -32,8 +32,8 @@ public final class GeneralPurposeTimers: IODevice {
     /// Status bits newly raised since the last interrupt update.
     private var fired: UInt32 = 0
 
-    unowned let scheduler: Scheduler
-    unowned let interrupts: InterruptController
+    unowned(unsafe) let scheduler: Scheduler
+    unowned(unsafe) let interrupts: InterruptController
 
     init(scheduler: Scheduler, interrupts: InterruptController) {
         self.scheduler = scheduler

@@ -22,7 +22,7 @@ public final class RealTimeClock: IODevice {
     public private(set) var control: UInt32 = 0
     public private(set) var status: UInt8 = 0
 
-    unowned let interrupts: InterruptController
+    unowned(unsafe) let interrupts: InterruptController
 
     init(interrupts: InterruptController) { self.interrupts = interrupts }
 

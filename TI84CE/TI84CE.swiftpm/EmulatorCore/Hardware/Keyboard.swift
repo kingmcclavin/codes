@@ -105,8 +105,8 @@ public final class Keypad: IODevice {
     private var scanRow = 0
     private var scanChanged = false
 
-    unowned let scheduler: Scheduler
-    unowned let interrupts: InterruptController
+    unowned(unsafe) let scheduler: Scheduler
+    unowned(unsafe) let interrupts: InterruptController
 
     init(scheduler: Scheduler, interrupts: InterruptController) {
         self.scheduler = scheduler

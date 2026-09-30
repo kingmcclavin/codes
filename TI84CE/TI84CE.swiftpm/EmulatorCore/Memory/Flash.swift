@@ -15,7 +15,16 @@ public final class Flash: MemoryDevice {
     public let bytes: UnsafeMutablePointer<UInt8>
 
     public enum Mode: UInt8, Codable { case read, autoselect, cfi, eraseStatus }
-    public private(set) var mode: Mode = .read
+    public private(set) var mode: Mode = .read {
+        didSet {
+            switch mode {
+            case .read: readModeFlag.pointee = true
+            default: readModeFlag.pointee = false
+            }
+        }
+    }
+    /// Mirrors `mode == .read` for the bus fast path.
+    public let readModeFlag: UnsafeMutablePointer<Bool>
     private var step = 0
     private var programArmed = false
     /// Remaining reads that return the embedded-erase status byte instead of array
@@ -30,9 +39,14 @@ public final class Flash: MemoryDevice {
     public init() {
         bytes = .allocate(capacity: Flash.size)
         bytes.initialize(repeating: 0xFF, count: Flash.size)
+        readModeFlag = .allocate(capacity: 1)
+        readModeFlag.initialize(to: true)
     }
 
-    deinit { bytes.deallocate() }
+    deinit {
+        bytes.deallocate()
+        readModeFlag.deallocate()
+    }
 
     public func load(_ image: [UInt8]) {
         let n = min(image.count, Flash.size)
@@ -51,7 +65,7 @@ public final class Flash: MemoryDevice {
     }
 
     /// Fast path used by the bus when the chip is in array-read mode.
-    @inline(__always) public var isReadMode: Bool { mode == .read }
+    @inline(__always) public var isReadMode: Bool { readModeFlag.pointee }
 
     public func read(_ offset: UInt32) -> UInt8 {
         let a = Int(offset) & (Flash.size - 1)

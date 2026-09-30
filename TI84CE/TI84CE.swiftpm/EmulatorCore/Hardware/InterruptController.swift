@@ -41,7 +41,7 @@ public final class InterruptController: IODevice {
     /// Current level of every source line.
     public private(set) var raw: UInt32 = 0
 
-    unowned let cpu: CPU
+    unowned(unsafe) let cpu: CPU
 
     init(cpu: CPU) { self.cpu = cpu }
 
