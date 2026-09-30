@@ -164,8 +164,8 @@ struct ToolButton: View {
                     .frame(width: 14, height: 3)
             }
             .frame(width: 42, height: 40)
-            .background(RoundedRectangle(cornerRadius: 9).fill(isSelected ? Color.accentColor.opacity(0.16) : .clear))
-            .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+            .background(RoundedRectangle(cornerRadius: 9).fill(isSelected ? Color.appAccent.opacity(0.16) : .clear))
+            .foregroundStyle(isSelected ? Color.appAccent : Color.primary)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(tool.displayName)

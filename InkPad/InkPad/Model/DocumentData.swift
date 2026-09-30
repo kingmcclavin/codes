@@ -34,6 +34,9 @@ struct DocumentManifest: Codable {
     var viewState: ViewState
     /// Library folder containing the document (nil = top level).
     var folderID: UUID?
+    /// Custom library color and SF Symbol (nil = default).
+    var color: RGBAColor?
+    var icon: String?
 }
 
 enum ToolKind: String, Codable, CaseIterable, Identifiable {

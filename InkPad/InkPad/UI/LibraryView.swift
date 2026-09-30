@@ -49,6 +49,7 @@ struct LibraryView: View {
     @State private var deletingFolder: Folder?
     @State private var search = ""
     @State private var showExport = false
+    @State private var customizing: LibraryItem?
     @State private var showPDFImporter = false
     @State private var importError: String?
 
@@ -152,6 +153,10 @@ struct LibraryView: View {
                 navigate(.document(id))
             }
         }
+        .sheet(item: $customizing) { item in
+            CustomizeItemView(item: item)
+                .presentationDetents([.large])
+        }
         .sheet(item: $moving) { item in
             MoveToFolderView(item: item)
         }
@@ -181,10 +186,7 @@ struct LibraryView: View {
     private func folderRow(_ folder: Folder) -> some View {
         Button { navigate(.folder(folder.id)) } label: {
             HStack(spacing: 14) {
-                Image(systemName: "folder.fill")
-                    .font(.title2)
-                    .foregroundStyle(.tint)
-                    .frame(width: 32)
+                FolderTile(color: folder.color, icon: folder.icon, width: 38)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(folder.name).font(.body.weight(.medium)).foregroundStyle(.primary)
                     let count = store.itemCount(in: folder.id)
@@ -202,6 +204,7 @@ struct LibraryView: View {
         .dropDestination(for: String.self) { items, _ in drop(items, into: folder.id) }
         .contextMenu {
             Button("Rename", systemImage: "pencil") { startRename(.folder(folder.id), current: folder.name) }
+            Button("Customize…", systemImage: "paintpalette") { customizing = .folder(folder.id) }
             Button("Move to…", systemImage: "folder") { moving = .folder(folder.id) }
             Button("Delete", systemImage: "trash", role: .destructive) { deletingFolder = folder }
         }
@@ -214,10 +217,8 @@ struct LibraryView: View {
     private func documentRow(_ doc: DocumentSummary) -> some View {
         Button { navigate(.document(doc.id)) } label: {
             HStack(spacing: 14) {
-                Image(systemName: "doc.text")
-                    .font(.title2)
-                    .foregroundStyle(.tint)
-                    .frame(width: 32)
+                DocumentTile(color: doc.color, icon: doc.icon, width: 34)
+                    .frame(width: 38)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(doc.title.isEmpty ? "Untitled" : doc.title)
                         .font(.body.weight(.medium))
@@ -239,6 +240,7 @@ struct LibraryView: View {
         .draggable(LibraryItem.document(doc.id).id)
         .contextMenu {
             Button("Rename", systemImage: "pencil") { startRename(.document(doc.id), current: doc.title) }
+            Button("Customize…", systemImage: "paintpalette") { customizing = .document(doc.id) }
             Button("Move to…", systemImage: "folder") { moving = .document(doc.id) }
             Button("Duplicate", systemImage: "plus.square.on.square") { store.duplicate(doc.id) }
             Button("Delete", systemImage: "trash", role: .destructive) { store.delete(doc.id) }

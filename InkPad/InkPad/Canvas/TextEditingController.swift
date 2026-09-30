@@ -17,8 +17,8 @@ final class TextEditingController: NSObject, UITextViewDelegate {
         self.host = host
         super.init()
         textView.delegate = self
-        textView.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.04)
-        textView.layer.borderColor = UIColor.systemBlue.withAlphaComponent(0.6).cgColor
+        textView.backgroundColor = UIColor.appAccent.withAlphaComponent(0.04)
+        textView.layer.borderColor = UIColor.appAccent.withAlphaComponent(0.6).cgColor
         textView.layer.borderWidth = 1
         textView.isScrollEnabled = false
         textView.clipsToBounds = false
@@ -61,7 +61,7 @@ final class TextEditingController: NSObject, UITextViewDelegate {
         textView.attributedText = NSAttributedString(string: textView.text ?? "", attributes: attrs)
         textView.typingAttributes = attrs
         textView.selectedRange = selected
-        textView.tintColor = style.color.isLight ? .systemBlue : style.color.uiColor
+        textView.tintColor = style.color.isLight ? .appAccent : style.color.uiColor
     }
 
     func updateStyle(_ style: TextStyle) {

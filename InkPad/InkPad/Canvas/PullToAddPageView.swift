@@ -37,11 +37,11 @@ final class PullToAddPageView: UIView {
         track.fillColor = UIColor.clear.cgColor
         track.lineWidth = 3
         progressRing.fillColor = UIColor.clear.cgColor
-        progressRing.strokeColor = UIColor.systemBlue.cgColor
+        progressRing.strokeColor = UIColor.appAccent.cgColor
         progressRing.lineWidth = 3
         progressRing.lineCap = .round
         progressRing.strokeEnd = 0
-        fill.fillColor = UIColor.systemBlue.cgColor
+        fill.fillColor = UIColor.appAccent.cgColor
         fill.opacity = 0
 
         icon.image = UIImage(systemName: "doc.badge.plus")
@@ -49,7 +49,7 @@ final class PullToAddPageView: UIView {
         addSubview(icon)
 
         arrow.image = UIImage(systemName: "arrow.up", withConfiguration: UIImage.SymbolConfiguration(weight: .bold))
-        arrow.tintColor = .systemBlue
+        arrow.tintColor = .appAccent
         arrow.contentMode = .scaleAspectFit
         addSubview(arrow)
 
@@ -71,7 +71,7 @@ final class PullToAddPageView: UIView {
         track.strokeColor = UIColor.secondaryLabel.withAlphaComponent(0.35).cgColor
         ghostPage.backgroundColor = UIColor.label.withAlphaComponent(0.04)
         ghostPage.layer.borderColor = UIColor.label.withAlphaComponent(0.08).cgColor
-        label.textColor = isArmed ? .systemBlue : .secondaryLabel
+        label.textColor = isArmed ? .appAccent : .secondaryLabel
         icon.tintColor = isArmed ? .white : .secondaryLabel
     }
 

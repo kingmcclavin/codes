@@ -76,4 +76,26 @@ final class LibraryTests: XCTestCase {
         store.reload()
         XCTAssertEqual(store.documents(in: a.id).first?.title, "Renamed")
     }
+
+    @MainActor
+    func testCustomAppearanceSurvivesAutosaveOfOpenDocument() throws {
+        let folder = store.createFolder(name: "Chem", in: nil)
+        let id = try makeDocument(in: nil)
+        let doc = try store.load(id)   // opened before the library changes it
+
+        store.setAppearance(.document(id), color: LibraryPalette.colors[4], icon: "flask")
+        store.setAppearance(.folder(folder.id), color: LibraryPalette.colors[7], icon: "atom")
+        store.moveDocument(id, to: folder.id)
+
+        doc.title = "Lab Notes"
+        try DocumentStore.write(try XCTUnwrap(doc.takeSnapshot()), to: store.packageURL(id))
+        store.reload()
+
+        let summary = try XCTUnwrap(store.summaries.first { $0.id == id })
+        XCTAssertEqual(summary.title, "Lab Notes")
+        XCTAssertEqual(summary.icon, "flask")
+        XCTAssertEqual(summary.color, LibraryPalette.colors[4])
+        XCTAssertEqual(summary.folderID, folder.id)
+        XCTAssertEqual(store.folder(folder.id)?.icon, "atom")
+    }
 }

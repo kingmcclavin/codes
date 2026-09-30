@@ -9,10 +9,12 @@ struct DocumentSummary: Identifiable, Hashable {
     var pageCount: Int
     var pageSize: CGSize
     var folderID: UUID?
+    var color: RGBAColor?
+    var icon: String?
 
     static func == (a: DocumentSummary, b: DocumentSummary) -> Bool {
         a.id == b.id && a.title == b.title && a.modifiedAt == b.modifiedAt && a.pageCount == b.pageCount
-            && a.folderID == b.folderID
+            && a.folderID == b.folderID && a.color == b.color && a.icon == b.icon
     }
 
     func hash(into h: inout Hasher) { h.combine(id) }
@@ -25,6 +27,9 @@ struct Folder: Codable, Identifiable, Hashable {
     /// Containing folder (nil = top level).
     var parentID: UUID?
     var createdAt = Date()
+    /// Custom color and SF Symbol shown in the library (nil = default).
+    var color: RGBAColor?
+    var icon: String?
 }
 
 enum DocumentStoreError: LocalizedError {
@@ -101,7 +106,8 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
                   let m = try? Self.decoder().decode(DocumentManifest.self, from: data) else { continue }
             result.append(DocumentSummary(id: m.id, title: m.title, createdAt: m.createdAt, modifiedAt: m.modifiedAt,
                                           pageCount: m.pageIDs.count, pageSize: m.firstPageSize,
-                                          folderID: m.folderID.flatMap { id in folders.contains { $0.id == id } ? id : nil }))
+                                          folderID: m.folderID.flatMap { id in folders.contains { $0.id == id } ? id : nil },
+                                          color: m.color, icon: m.icon))
         }
         summaries = result.sorted { $0.modifiedAt > $1.modifiedAt }
     }
@@ -258,6 +264,34 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
         saveFolders()
     }
 
+    /// Sets the library color and icon of a document or folder.
+    func setAppearance(_ item: LibraryItem, color: RGBAColor?, icon: String?) {
+        switch item {
+        case let .document(id):
+            updateManifest(id) {
+                $0.color = color
+                $0.icon = icon
+            }
+            reload()
+        case let .folder(id):
+            guard let i = folders.firstIndex(where: { $0.id == id }) else { return }
+            folders[i].color = color
+            folders[i].icon = icon
+            saveFolders()
+        }
+    }
+
+    func appearance(of item: LibraryItem) -> (color: RGBAColor?, icon: String?) {
+        switch item {
+        case let .document(id):
+            let s = summaries.first { $0.id == id }
+            return (s?.color, s?.icon)
+        case let .folder(id):
+            let f = folder(id)
+            return (f?.color, f?.icon)
+        }
+    }
+
     func moveDocument(_ id: UUID, to folder: UUID?) {
         updateManifest(id) { $0.folderID = folder }
         reload()
@@ -310,15 +344,25 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
         try fm.createDirectory(at: pagesURL(pkg), withIntermediateDirectories: true)
         try fm.createDirectory(at: assetsURL(pkg), withIntermediateDirectories: true)
         let enc = encoder()
+        var manifest = snapshot.manifest
+        if let data = try? Data(contentsOf: manifestURL(pkg)),
+           let existing = try? decoder().decode(DocumentManifest.self, from: data) {
+            // Folder, color and icon are owned by the library, which may change
+            // them while the document is open; never overwrite them from a
+            // document snapshot.
+            manifest.folderID = existing.folderID
+            manifest.color = existing.color
+            manifest.icon = existing.icon
+        }
         for page in snapshot.dirtyPages where snapshot.livePageIDs.contains(page.id) {
             try enc.encode(page).write(to: pageURL(pkg, page.id), options: .atomic)
         }
         // Manifest last: it is the commit point that references the pages.
-        try enc.encode(snapshot.manifest).write(to: manifestURL(pkg), options: .atomic)
+        try enc.encode(manifest).write(to: manifestURL(pkg), options: .atomic)
 
         // Remove files of deleted pages.
         if let files = try? fm.contentsOfDirectory(at: pagesURL(pkg), includingPropertiesForKeys: nil) {
-            let live = Set(snapshot.manifest.pageIDs.map { "\($0.uuidString).json" })
+            let live = Set(manifest.pageIDs.map { "\($0.uuidString).json" })
             for f in files where !live.contains(f.lastPathComponent) { try? fm.removeItem(at: f) }
         }
     }

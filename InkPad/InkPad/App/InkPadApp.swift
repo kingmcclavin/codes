@@ -21,6 +21,7 @@ struct InkPadApp: App {
 struct RootView: View {
     @EnvironmentObject private var store: DocumentStore
     @EnvironmentObject private var tabs: TabsModel
+    @EnvironmentObject private var preferences: AppPreferences
     @State private var sidebarSelection: SidebarItem? = .allDocuments
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var didRestore = false
@@ -43,6 +44,7 @@ struct RootView: View {
                 }
             }
         }
+        .tint(preferences.accentColor?.color)
         .onAppear {
             guard !didRestore else { return }
             didRestore = true

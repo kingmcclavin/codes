@@ -131,7 +131,7 @@ struct PageFormatEditor: View {
                                 .fill((choice.color ?? format.customColor).color)
                                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.secondary.opacity(0.4)))
                                 .overlay(RoundedRectangle(cornerRadius: 6)
-                                    .strokeBorder(Color.accentColor, lineWidth: format.backgroundChoice == choice ? 3 : 0))
+                                    .strokeBorder(Color.appAccent, lineWidth: format.backgroundChoice == choice ? 3 : 0))
                                 .frame(width: 44, height: 56)
                             Text(choice.title).font(.caption).foregroundStyle(.primary)
                         }

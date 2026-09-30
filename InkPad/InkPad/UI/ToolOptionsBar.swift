@@ -53,7 +53,7 @@ struct ColorStrip: View {
                 .overlay(Circle().strokeBorder(Color.primary.opacity(0.15)))
                 .frame(width: 24, height: 24)
                 .padding(3)
-                .overlay(Circle().strokeBorder(selected ? Color.accentColor : .clear, lineWidth: 2))
+                .overlay(Circle().strokeBorder(selected ? Color.appAccent : .clear, lineWidth: 2))
         }
         .buttonStyle(.plain)
     }
@@ -74,7 +74,7 @@ struct WidthPicker: View {
                         .fill(Color.primary)
                         .frame(width: 5 + CGFloat(i) * 5, height: 5 + CGFloat(i) * 5)
                         .frame(width: 30, height: 30)
-                        .background(Circle().fill(abs(width - w) < 0.05 ? Color.accentColor.opacity(0.18) : .clear))
+                        .background(Circle().fill(abs(width - w) < 0.05 ? Color.appAccent.opacity(0.18) : .clear))
                 }
                 .buttonStyle(.plain)
             }

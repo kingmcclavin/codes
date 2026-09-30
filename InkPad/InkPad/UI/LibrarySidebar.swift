@@ -33,6 +33,7 @@ struct LibrarySidebar: View {
     @EnvironmentObject private var store: DocumentStore
     @EnvironmentObject private var tabs: TabsModel
     @State private var showExport = false
+    @State private var showAppearance = false
 
     var body: some View {
         List(selection: $selection) {
@@ -45,7 +46,12 @@ struct LibrarySidebar: View {
 
             Section("Folders") {
                 OutlineGroup(FolderNode.tree(from: store), children: \.children) { node in
-                    Label(node.folder.name, systemImage: "folder")
+                    Label {
+                        Text(node.folder.name)
+                    } icon: {
+                        Image(systemName: node.folder.icon ?? "folder")
+                            .foregroundStyle(node.folder.color.map { AnyShapeStyle($0.color) } ?? AnyShapeStyle(.tint))
+                    }
                         .badge(store.documents(in: node.folder.id).count)
                         .tag(SidebarItem.folder(node.folder.id))
                         .dropDestination(for: String.self) { items, _ in drop(items, into: node.folder.id) }
@@ -82,12 +88,18 @@ struct LibrarySidebar: View {
         .navigationTitle("InkPad")
         .toolbar {
             ToolbarItem(placement: .bottomBar) {
-                Button("Export App (.ipa)…", systemImage: "app.badge") { showExport = true }
-                    .labelStyle(.titleAndIcon)
-                    .font(.footnote)
+                Menu {
+                    Button("Appearance…", systemImage: "paintpalette") { showAppearance = true }
+                    Button("Export App (.ipa)…", systemImage: "app.badge") { showExport = true }
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                        .labelStyle(.titleAndIcon)
+                        .font(.footnote)
+                }
             }
         }
         .sheet(isPresented: $showExport) { ExportView() }
+        .sheet(isPresented: $showAppearance) { AppearanceSettingsView() }
     }
 
     private func drop(_ payloads: [String], into target: UUID?) -> Bool {
@@ -166,7 +178,7 @@ private struct DocumentTab: View {
         .frame(maxWidth: 180, minHeight: 30)
         .overlay(alignment: .bottom) {
             Capsule()
-                .fill(isActive ? Color.accentColor : .clear)
+                .fill(isActive ? Color.appAccent : .clear)
                 .frame(height: 2)
                 .padding(.horizontal, 8)
         }

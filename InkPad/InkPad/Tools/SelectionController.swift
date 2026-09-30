@@ -165,7 +165,7 @@ final class SelectionController {
         }
         let b = currentBox
         let corners = b.corners.map { $0.applying(t) }
-        let tint = UIColor.systemBlue
+        let tint = UIColor.appAccent
         ctx.saveGState()
         ctx.setStrokeColor(tint.withAlphaComponent(0.9).cgColor)
         ctx.setLineWidth(1)
