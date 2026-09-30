@@ -11,9 +11,9 @@ struct CalculatorScreen: View {
 
     var body: some View {
         GeometryReader { geo in
-            // Stop above the home indicator so no key sits under it.
-            let usable = CGSize(width: geo.size.width,
-                                height: geo.size.height - geo.safeAreaInsets.bottom - 4)
+            // The layout respects the safe area, so the keys end above the home
+            // indicator (the background still runs edge to edge).
+            let usable = geo.size
             HStack(spacing: 0) {
                 CalculatorView(availableSize: calculatorSize(in: usable),
                                onSettings: { showSettings = true },
@@ -27,7 +27,6 @@ struct CalculatorScreen: View {
             }
             .frame(width: usable.width, height: usable.height, alignment: .top)
         }
-        .ignoresSafeArea(.container, edges: .bottom)
         .background(CalculatorView.bodyGradient.ignoresSafeArea())
         .background(HardwareKeyboardCapture(onPress: controller.press, onRelease: controller.release)
                         .frame(width: 0, height: 0))
