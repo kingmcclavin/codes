@@ -11,8 +11,11 @@ struct CalculatorScreen: View {
 
     var body: some View {
         GeometryReader { geo in
+            // Extend into most of the home-indicator area so the keys reach the bottom.
+            let usable = CGSize(width: geo.size.width,
+                                height: geo.size.height - geo.safeAreaInsets.bottom * 0.35)
             HStack(spacing: 0) {
-                CalculatorView(availableSize: calculatorSize(in: geo.size),
+                CalculatorView(availableSize: calculatorSize(in: usable),
                                onSettings: { showSettings = true },
                                onDebugger: { showDebuggerSheet = true })
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -22,7 +25,9 @@ struct CalculatorScreen: View {
                         .frame(width: min(420, geo.size.width * 0.42))
                 }
             }
+            .frame(width: usable.width, height: usable.height, alignment: .top)
         }
+        .ignoresSafeArea(.container, edges: .bottom)
         .background(CalculatorView.bodyGradient.ignoresSafeArea())
         .background(HardwareKeyboardCapture(onPress: controller.press, onRelease: controller.release)
                         .frame(width: 0, height: 0))
@@ -96,8 +101,9 @@ struct CalculatorView: View {
     private var portrait: some View {
         let width = availableSize.width - margin * 2
         let spacing: CGFloat = 8
-        // Give the LCD the full width unless that leaves too little room for keys.
-        let minKeypad = KeyboardView.minimumHeight(forWidth: width)
+        // The keypad gets at least ~62% of the height (like a phone calculator
+        // layout); the 4:3 LCD takes the rest, narrowing if it has to.
+        let minKeypad = max(KeyboardView.minimumHeight(forWidth: width), availableSize.height * 0.62)
         let maxScreenHeight = availableSize.height - minKeypad - spacing - margin
         let screenWidth = min(width, lcdWidth(forScreenHeight: maxScreenHeight))
         let screenHeight = screenHeightFor(width: screenWidth)
