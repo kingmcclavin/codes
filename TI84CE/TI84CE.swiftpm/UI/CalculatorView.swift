@@ -11,9 +11,9 @@ struct CalculatorScreen: View {
 
     var body: some View {
         GeometryReader { geo in
-            // Extend into most of the home-indicator area so the keys reach the bottom.
+            // Stop above the home indicator so no key sits under it.
             let usable = CGSize(width: geo.size.width,
-                                height: geo.size.height - geo.safeAreaInsets.bottom * 0.35)
+                                height: geo.size.height - geo.safeAreaInsets.bottom - 4)
             HStack(spacing: 0) {
                 CalculatorView(availableSize: calculatorSize(in: usable),
                                onSettings: { showSettings = true },
