@@ -23,6 +23,7 @@ struct CalculatorScreen: View {
                 }
             }
         }
+        .background(CalculatorView.bodyGradient.ignoresSafeArea())
         .background(HardwareKeyboardCapture(onPress: controller.press, onRelease: controller.release)
                         .frame(width: 0, height: 0))
         .sheet(isPresented: $showSettings) {
@@ -65,147 +66,162 @@ struct CalculatorScreen: View {
     }
 }
 
-/// The calculator body: LCD with bezel above the keypad (portrait) or beside it
-/// (wide screens such as iPhone landscape).
+/// The calculator body, filling the screen edge to edge: LCD with its bezel above
+/// the keypad (portrait) or beside it (wide screens such as iPhone landscape).
+/// App controls live in a pop-up menu (⋯) in the LCD bezel.
 struct CalculatorView: View {
     @EnvironmentObject private var controller: EmulatorController
     let availableSize: CGSize
     let onSettings: () -> Void
     let onDebugger: () -> Void
 
-    private let bodyColor = Color(red: 0.09, green: 0.09, blue: 0.10)
-    private let faceColor = Color(red: 0.14, green: 0.14, blue: 0.15)
+    static let bodyGradient = LinearGradient(
+        colors: [Color(red: 0.14, green: 0.14, blue: 0.15), Color(red: 0.08, green: 0.08, blue: 0.09)],
+        startPoint: .top, endPoint: .bottom)
+
+    /// Height of the strip at the top of the bezel that holds the menu button.
+    private let menuStrip: CGFloat = 24
+    private let margin: CGFloat = 6
 
     var body: some View {
         let wide = availableSize.width > availableSize.height * 1.15
         Group {
             if wide { landscape } else { portrait }
         }
+        .frame(width: availableSize.width, height: availableSize.height)
     }
 
-    // MARK: Portrait: the physical calculator's proportions
+    // MARK: Portrait: LCD on top, keypad filling the rest of the screen
 
     private var portrait: some View {
-        // Choose the body width so screen + keypad fit the available height.
-        let margin: CGFloat = 12
-        let maxWidth = min(availableSize.width - margin * 2, 560)
-        let width = fittedWidth(maxWidth: maxWidth, maxHeight: availableSize.height - margin * 2)
-        let pad = width * 0.05
-        let keypadWidth = width - pad * 2
-        return VStack(spacing: width * 0.035) {
-            header(width: width)
-            screen(width: keypadWidth * 0.94)
-            KeyboardView(width: keypadWidth, onPress: controller.press, onRelease: controller.release)
+        let width = availableSize.width - margin * 2
+        let spacing: CGFloat = 8
+        // Give the LCD the full width unless that leaves too little room for keys.
+        let minKeypad = KeyboardView.minimumHeight(forWidth: width)
+        let maxScreenHeight = availableSize.height - minKeypad - spacing - margin
+        let screenWidth = min(width, lcdWidth(forScreenHeight: maxScreenHeight))
+        let screenHeight = screenHeightFor(width: screenWidth)
+        let keypadHeight = availableSize.height - screenHeight - spacing - margin
+        return VStack(spacing: spacing) {
+            screen(width: screenWidth)
+            KeyboardView(width: width, height: keypadHeight,
+                         onPress: controller.press, onRelease: controller.release)
         }
-        .padding(pad)
-        .padding(.bottom, pad * 0.5)
-        .background(
-            RoundedRectangle(cornerRadius: width * 0.08, style: .continuous)
-                .fill(LinearGradient(colors: [faceColor, bodyColor], startPoint: .top, endPoint: .bottom))
-                .shadow(color: .black.opacity(0.6), radius: 18, y: 8)
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    /// Largest body width whose total height fits `maxHeight`.
-    private func fittedWidth(maxWidth: CGFloat, maxHeight: CGFloat) -> CGFloat {
-        func height(_ w: CGFloat) -> CGFloat {
-            let pad = w * 0.05
-            let kw = w - pad * 2
-            let screenH = kw * 0.94 * 0.75 + kw * 0.94 * 0.12
-            return pad * 2.5 + 28 + w * 0.07 + screenH + KeyboardView.height(forWidth: kw)
-        }
-        var lo: CGFloat = 200, hi = max(200, maxWidth)
-        for _ in 0..<20 {
-            let mid = (lo + hi) / 2
-            if height(mid) <= maxHeight { lo = mid } else { hi = mid }
-        }
-        return lo
+        .padding(.horizontal, margin)
+        .padding(.bottom, margin)
+        .frame(width: availableSize.width, height: availableSize.height, alignment: .top)
     }
 
     // MARK: Landscape: screen beside keypad
 
     private var landscape: some View {
-        let h = availableSize.height - 24
-        let keypadWidth = min(availableSize.width * 0.45, keypadWidthFitting(height: h))
-        let screenWidth = min(availableSize.width - keypadWidth - 60, (h - 60) / 0.87)
-        return HStack(spacing: 20) {
-            VStack(spacing: 10) {
-                header(width: screenWidth)
-                screen(width: screenWidth)
-            }
-            KeyboardView(width: keypadWidth, onPress: controller.press, onRelease: controller.release)
+        let height = availableSize.height - margin * 2
+        let keypadWidth = min(availableSize.width * 0.46, keypadWidthFitting(height: height))
+        let screenWidth = min(availableSize.width - keypadWidth - margin * 3,
+                              lcdWidth(forScreenHeight: height))
+        return HStack(spacing: margin * 2) {
+            screen(width: screenWidth)
+                .frame(maxWidth: .infinity)
+            KeyboardView(width: keypadWidth, height: height,
+                         onPress: controller.press, onRelease: controller.release)
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(LinearGradient(colors: [faceColor, bodyColor], startPoint: .leading, endPoint: .trailing))
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(margin)
+        .frame(width: availableSize.width, height: availableSize.height)
     }
 
     private func keypadWidthFitting(height: CGFloat) -> CGFloat {
         var lo: CGFloat = 150, hi: CGFloat = 900
         for _ in 0..<20 {
             let mid = (lo + hi) / 2
-            if KeyboardView.height(forWidth: mid) <= height { lo = mid } else { hi = mid }
+            if KeyboardView.minimumHeight(forWidth: mid) <= height { lo = mid } else { hi = mid }
         }
         return lo
     }
 
-    // MARK: Pieces
+    // MARK: Screen with bezel and menu
 
-    private func header(width: CGFloat) -> some View {
-        HStack(spacing: 12) {
-            Text("TI-84 Plus CE")
-                .font(.system(size: max(12, width * 0.045), weight: .heavy, design: .rounded))
-                .italic()
-                .foregroundColor(Color(white: 0.85))
-            Spacer()
-            if controller.isPaused {
-                Text(controller.breakpointAddress.map { String(format: "BREAK %06X", $0) } ?? "PAUSED")
-                    .font(.caption2.monospaced().bold())
-                    .foregroundColor(.orange)
-            } else if controller.speed != .normal {
-                Text("\(controller.speedPercent)%")
-                    .font(.caption2.monospaced())
-                    .foregroundColor(.secondary)
-            }
-            toolbarButton(controller.isPaused ? "play.fill" : "pause.fill", label: controller.isPaused ? "Resume" : "Pause") {
-                controller.togglePause()
-            }
-            if controller.debuggerEnabled {
-                toolbarButton("ladybug", label: "Debugger", action: onDebugger)
-            }
-            toolbarButton("gearshape", label: "Settings", action: onSettings)
-        }
-        .frame(height: 28)
+    private func bezel(for width: CGFloat) -> CGFloat { max(4, width * 0.015) }
+
+    private func screenHeightFor(width: CGFloat) -> CGFloat {
+        let b = bezel(for: width)
+        return (width - b * 2) * 0.75 + b + menuStrip
     }
 
-    private func toolbarButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(Color(white: 0.75))
-                .frame(width: 30, height: 28)
+    private func lcdWidth(forScreenHeight height: CGFloat) -> CGFloat {
+        // Inverse of screenHeightFor (bezel ≈ 1.5% of width).
+        var lo: CGFloat = 80, hi: CGFloat = 2000
+        for _ in 0..<24 {
+            let mid = (lo + hi) / 2
+            if screenHeightFor(width: mid) <= height { lo = mid } else { hi = mid }
         }
-        .accessibilityLabel(label)
+        return lo
     }
 
-    /// LCD with its bezel (4:3 display area).
+    /// LCD (4:3) inside a black bezel whose top strip carries the ⋯ menu.
     private func screen(width: CGFloat) -> some View {
-        let bezel = width * 0.06
-        let lcdWidth = width - bezel * 2
-        return ZStack {
-            RoundedRectangle(cornerRadius: width * 0.04, style: .continuous)
-                .fill(Color(white: 0.04))
+        let b = bezel(for: width)
+        let lcdWidth = width - b * 2
+        return VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                if controller.isPaused {
+                    Text(controller.breakpointAddress.map { String(format: "BREAK %06X", $0) } ?? "PAUSED")
+                        .font(.caption2.monospaced().bold())
+                        .foregroundColor(.orange)
+                } else if controller.speed != .normal {
+                    Text("\(controller.speedPercent)%")
+                        .font(.caption2.monospaced())
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                appMenu {
+                    Image(systemName: "ellipsis.circle.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(Color(white: 0.6))
+                        .frame(width: 44, height: menuStrip)
+                        .contentShape(Rectangle())
+                }
+            }
+            .padding(.leading, b + 4)
+            .frame(height: menuStrip)
             if let runner = controller.runner {
                 LCDView(runner: runner, pixelGrid: controller.showPixelGrid)
                     .frame(width: lcdWidth, height: lcdWidth * 0.75)
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.black, lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: 2))
+                    .contextMenu { menuItems }          // long-press the LCD for the menu too
             }
         }
-        .frame(width: width, height: lcdWidth * 0.75 + bezel * 2)
+        .padding(.bottom, b)
+        .frame(width: width)
+        .background(RoundedRectangle(cornerRadius: max(8, width * 0.03), style: .continuous)
+                        .fill(Color(white: 0.03)))
+    }
+
+    private func appMenu<Label: View>(@ViewBuilder label: () -> Label) -> some View {
+        let content = label()
+        return Menu { menuItems } label: { content }
+            .accessibilityLabel("Menu")
+    }
+
+    @ViewBuilder private var menuItems: some View {
+        Button {
+            controller.togglePause()
+        } label: {
+            Label(controller.isPaused ? "Resume" : "Pause",
+                  systemImage: controller.isPaused ? "play.fill" : "pause.fill")
+        }
+        Button(action: onSettings) {
+            Label("Settings", systemImage: "gearshape")
+        }
+        if controller.debuggerEnabled {
+            Button(action: onDebugger) {
+                Label("Debugger", systemImage: "ladybug")
+            }
+        }
+        Divider()
+        Button {
+            controller.resetCalculator()
+        } label: {
+            Label("Reset Calculator", systemImage: "arrow.counterclockwise")
+        }
     }
 }

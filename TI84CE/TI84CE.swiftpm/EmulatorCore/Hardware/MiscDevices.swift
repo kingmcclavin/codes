@@ -57,8 +57,17 @@ public final class Backlight: IODevice {
         regs[0x24] = 0x00
     }
 
+    /// The level the OS programs by default (0x95). The real screen looks fully lit
+    /// there, so only levels darker than this dim the rendered image.
+    public static let defaultLevel: UInt8 = 0x95
+
     /// Brightness as a fraction 0...1 for the renderer.
-    public var brightness: Double { 1.0 - Double(regs[0x24]) / 255.0 * 0.85 }
+    public var brightness: Double {
+        let level = regs[0x24]
+        guard level > Backlight.defaultLevel else { return 1 }
+        let darker = Double(level - Backlight.defaultLevel) / Double(255 - Int(Backlight.defaultLevel))
+        return 1 - darker * 0.75
+    }
 
     public func read(_ offset: UInt16) -> UInt8 { regs[Int(offset & 0xFF)] }
     public func write(_ offset: UInt16, value: UInt8) { regs[Int(offset & 0xFF)] = value }
