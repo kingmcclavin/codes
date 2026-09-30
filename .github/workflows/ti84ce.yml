@@ -1,0 +1,40 @@
+name: TI-84 CE emulator
+
+on:
+  push:
+    paths:
+      - "TI84CE/**"
+      - ".github/workflows/ti84ce.yml"
+  pull_request:
+    paths:
+      - "TI84CE/**"
+  workflow_dispatch:
+
+jobs:
+  core-tests:
+    name: Emulator core tests (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests (ROM boot tests are skipped: no ROM in the repository)
+        working-directory: TI84CE
+        run: swift test
+
+  ios-app:
+    name: Build iOS app (Simulator)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: xcodebuild -version
+      - name: Build TI84CE.swiftpm for the iOS Simulator
+        working-directory: TI84CE/TI84CE.swiftpm
+        run: |
+          xcodebuild -list
+          SCHEME=$(xcodebuild -list -json | python3 -c 'import json,sys; d=json.load(sys.stdin); s=(d.get("workspace") or d.get("project") or {}).get("schemes", []); print(next((x for x in s if "84" in x), s[0]))')
+          echo "Building scheme: $SCHEME"
+          xcodebuild build -scheme "$SCHEME" \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO | tail -n 80
+          exit ${PIPESTATUS[0]}

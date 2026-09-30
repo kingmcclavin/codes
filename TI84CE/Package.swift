@@ -17,6 +17,11 @@ let package = Package(
             name: "EmulatorCore",
             path: "TI84CE.swiftpm/EmulatorCore"
         ),
+        .target(
+            name: "Platform",
+            dependencies: ["EmulatorCore"],
+            path: "TI84CE.swiftpm/Platform"
+        ),
         .executableTarget(
             name: "ce-headless",
             dependencies: ["EmulatorCore"],
@@ -29,7 +34,7 @@ let package = Package(
         ),
         .testTarget(
             name: "EmulatorCoreTests",
-            dependencies: ["EmulatorCore"],
+            dependencies: ["EmulatorCore", "Platform"],
             path: "Tests/EmulatorCoreTests"
         ),
     ]
