@@ -54,6 +54,14 @@ struct SettingsView: View {
                     Button("Import a different ROM…") { importing = true }
                 }
 
+                Section {
+                    ExportIPAButton()
+                } header: {
+                    Text("Export")
+                } footer: {
+                    Text("Saves this app as an .ipa file. Use a signing / sideloading tool (for example Sideloadly, AltStore or ESign) to set your own app name and icon and install it. ROM files are never included in the export.")
+                }
+
                 Section("Developer") {
                     Toggle("Show debugger", isOn: $controller.debuggerEnabled)
                 }

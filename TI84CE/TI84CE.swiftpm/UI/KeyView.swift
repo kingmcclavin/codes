@@ -40,6 +40,8 @@ struct KeyView: View {
     private var cap: some View {
         RoundedRectangle(cornerRadius: capHeight * 0.32, style: .continuous)
             .fill(definition.style.capColor)
+            // The drop shadow belongs to the key body only, so the legends stay crisp.
+            .shadow(color: .black.opacity(isPressed ? 0 : 0.5), radius: 0, x: 0, y: isPressed ? 0 : 2)
             .overlay(
                 RoundedRectangle(cornerRadius: capHeight * 0.32, style: .continuous)
                     .stroke(Color.white.opacity(isHovered ? 0.55 : 0.12), lineWidth: isHovered ? 1.5 : 0.8)
@@ -52,7 +54,6 @@ struct KeyView: View {
                     .minimumScaleFactor(0.5)
                     .padding(.horizontal, 3)
             )
-            .shadow(color: .black.opacity(isPressed ? 0 : 0.5), radius: 0, x: 0, y: isPressed ? 0 : 2)
             .brightness(isPressed ? -0.18 : 0)
             .scaleEffect(isPressed ? 0.95 : 1)
             .frame(height: capHeight)
