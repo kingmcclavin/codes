@@ -55,6 +55,7 @@ struct RGBAColor: Codable, Hashable {
     static let white = RGBAColor(r: 1, g: 1, b: 1)
     static let offWhite = RGBAColor(r: 0.984, g: 0.973, b: 0.941)
     static let paperBlack = RGBAColor(r: 0.09, g: 0.09, b: 0.10)
+    static let paperDarkGray = RGBAColor(r: 0.20, g: 0.20, b: 0.215)
 
     /// Ink palette tuned to read well on both light and dark paper.
     static let inkPalette: [RGBAColor] = [

@@ -168,13 +168,15 @@ final class CanvasViewController: UIViewController {
         }
         if size != lastLayoutSize {
             // Rotation / multitasking resize: keep the same content point centered.
-            let oldFit = fitWidthScale(for: lastLayoutSize)
-            let wasFitWidth = abs(scrollView.zoomScale - oldFit) < 0.02
+            let pageWidth = pageViews[currentPageID]?.frame.width ?? 1
+            let oldEdgeFit = lastLayoutSize.width / max(pageWidth, 1)
+            let wasFitWidth = abs(scrollView.zoomScale - fitWidthScale(for: lastLayoutSize)) < 0.02
+                || abs(scrollView.zoomScale - oldEdgeFit) < 0.01 * oldEdgeFit
             let anchor = CGPoint(x: (scrollView.contentOffset.x + lastLayoutSize.width / 2) / scrollView.zoomScale,
                                  y: (scrollView.contentOffset.y + lastLayoutSize.height / 2) / scrollView.zoomScale)
             lastLayoutSize = size
             updateZoomLimits()
-            if wasFitWidth { scrollView.zoomScale = fitWidthScale(for: size) }
+            if wasFitWidth { scrollView.zoomScale = (size.width / max(pageWidth, 1)).clamped(scrollView.minimumZoomScale, scrollView.maximumZoomScale) }
             layoutPages()
             center(on: anchor)
         }
@@ -270,9 +272,12 @@ final class CanvasViewController: UIViewController {
             let z = scrollView.zoomScale
             scrollView.contentOffset = clampOffset(CGPoint(x: state.contentOffset.x * z, y: state.contentOffset.y * z))
         } else {
-            scrollView.zoomScale = fitWidthScale(for: scrollView.bounds.size)
+            let first = document.pages.first.flatMap { pageViews[$0.id] }
+            scrollView.zoomScale = first.map { edgeFitScale(for: $0.frame) } ?? fitWidthScale(for: scrollView.bounds.size)
             layoutPages()
-            scrollView.contentOffset = CGPoint(x: -scrollView.contentInset.left, y: -scrollView.contentInset.top)
+            let z = scrollView.zoomScale
+            scrollView.contentOffset = clampOffset(CGPoint(x: (first?.frame.minX ?? 0) * z, y: -scrollView.contentInset.top))
+            lockHorizontalScrollIfPageFits()
         }
         updateCurrentPage()
         editor.zoomPercent = Int((scrollView.zoomScale * 100).rounded())
@@ -437,10 +442,13 @@ final class CanvasViewController: UIViewController {
 
     /// Finger double-tap: fit the tapped page to the screen. Double-tapping
     /// again (while still fitted) returns to the previous zoom and position.
+    /// Finger double-tap: zoom so the tapped page's left and right edges
+    /// touch the screen edges (the spot under the finger stays put).
+    /// Double-tapping again returns to the previous zoom and position.
     @objc private func handleDoubleTap(_ g: UITapGestureRecognizer) {
         guard let v = pageView(near: g.location(in: container)) else { return }
         if let previous = zoomBeforeFit, previous.pageID == v.pageID,
-           abs(scrollView.zoomScale - fitScale(for: v.frame)) < 0.01 * scrollView.zoomScale {
+           abs(scrollView.zoomScale - edgeFitScale(for: v.frame)) < 0.01 * scrollView.zoomScale {
             zoomBeforeFit = nil
             UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseInOut, .allowUserInteraction]) {
                 self.scrollView.setZoomScale(previous.zoom, animated: false)
@@ -449,13 +457,18 @@ final class CanvasViewController: UIViewController {
             return
         }
         zoomBeforeFit = (v.pageID, scrollView.zoomScale, scrollView.contentOffset)
-        fit(pageView: v)
+        fitEdges(of: v, keeping: g.location(in: container), atScreenY: g.location(in: scrollView).y - scrollView.contentOffset.y)
     }
 
     private var zoomBeforeFit: (pageID: UUID, zoom: CGFloat, offset: CGPoint)?
 
+    /// Zoom at which the page is exactly as wide as the screen.
+    private func edgeFitScale(for pageFrame: CGRect) -> CGFloat {
+        (scrollView.bounds.width / max(pageFrame.width, 1)).clamped(scrollView.minimumZoomScale, scrollView.maximumZoomScale)
+    }
+
     /// Largest zoom at which the whole page is visible.
-    private func fitScale(for pageFrame: CGRect) -> CGFloat {
+    private func wholePageScale(for pageFrame: CGRect) -> CGFloat {
         let margin: CGFloat = 12
         let avail = CGSize(width: scrollView.bounds.width - 2 * margin,
                            height: scrollView.bounds.height - keyboardInset - 2 * margin)
@@ -463,15 +476,32 @@ final class CanvasViewController: UIViewController {
         return s.clamped(scrollView.minimumZoomScale, scrollView.maximumZoomScale)
     }
 
-    /// Zooms so the page fills the screen and centers it.
-    private func fit(pageView v: PageView, animated: Bool = true) {
-        let z = fitScale(for: v.frame)
+    /// Fits the page's edges to the screen edges. `anchor` (container
+    /// coordinates) is kept at `screenY` vertically; nil keeps the page top.
+    private func fitEdges(of v: PageView, keeping anchor: CGPoint? = nil, atScreenY screenY: CGFloat = 0, animated: Bool = true) {
+        let z = edgeFitScale(for: v.frame)
+        let apply = {
+            self.scrollView.setZoomScale(z, animated: false)
+            let y = anchor.map { $0.y * z - screenY } ?? v.frame.minY * z
+            self.scrollView.contentOffset = self.clampOffset(CGPoint(x: v.frame.minX * z, y: y))
+            self.lockHorizontalScrollIfPageFits()
+        }
+        animate(apply, animated: animated)
+    }
+
+    /// Zooms so the whole page is visible and centers it.
+    private func fitWhole(pageView v: PageView, animated: Bool = true) {
+        let z = wholePageScale(for: v.frame)
         let apply = {
             self.scrollView.setZoomScale(z, animated: false)
             let offset = CGPoint(x: v.frame.midX * z - self.scrollView.bounds.width / 2,
                                  y: v.frame.midY * z - (self.scrollView.bounds.height - self.keyboardInset) / 2)
             self.scrollView.contentOffset = self.clampOffset(offset)
         }
+        animate(apply, animated: animated)
+    }
+
+    private func animate(_ apply: @escaping () -> Void, animated: Bool) {
         if animated {
             UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: apply) { _ in
                 self.updateCurrentPage()
@@ -677,14 +707,14 @@ final class CanvasViewController: UIViewController {
 
     func fitPage() {
         guard let v = pageViews[currentPageID] else { return }
-        fit(pageView: v)
+        fitWhole(pageView: v)
     }
 
+    /// Page edges to screen edges, keeping the middle of the view in place.
     func fitWidth() {
-        let fit = fitWidthScale(for: scrollView.bounds.size)
+        guard let v = pageViews[currentPageID] else { return }
         let anchor = visibleContentRect.center
-        scrollView.setZoomScale(fit, animated: false)
-        center(on: CGPoint(x: contentSize.width / 2, y: anchor.y))
+        fitEdges(of: v, keeping: anchor, atScreenY: scrollView.bounds.height / 2)
     }
 
     func setZoom(_ scale: CGFloat) {

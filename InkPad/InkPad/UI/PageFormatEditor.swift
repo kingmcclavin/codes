@@ -1,12 +1,13 @@
 import SwiftUI
 
 enum BackgroundChoice: String, CaseIterable, Identifiable {
-    case white, offWhite, black, custom
+    case white, offWhite, darkGray, black, custom
     var id: String { rawValue }
     var title: String {
         switch self {
         case .white: return "White"
         case .offWhite: return "Off-white"
+        case .darkGray: return "Dark Grey"
         case .black: return "Black"
         case .custom: return "Custom"
         }
@@ -15,6 +16,7 @@ enum BackgroundChoice: String, CaseIterable, Identifiable {
         switch self {
         case .white: return .white
         case .offWhite: return .offWhite
+        case .darkGray: return .paperDarkGray
         case .black: return .paperBlack
         case .custom: return nil
         }
@@ -49,6 +51,7 @@ struct PageFormat: Equatable {
         }
         if background.color.isClose(to: .white) { backgroundChoice = .white }
         else if background.color.isClose(to: .offWhite) { backgroundChoice = .offWhite }
+        else if background.color.isClose(to: .paperDarkGray) { backgroundChoice = .darkGray }
         else if background.color.isClose(to: .paperBlack) { backgroundChoice = .black }
         else { backgroundChoice = .custom; customColor = background.color }
         template = background.template
@@ -74,6 +77,9 @@ struct PageFormat: Equatable {
 
 struct PageFormatEditor: View {
     @Binding var format: PageFormat
+    @ObservedObject private var prefs = AppPreferences.shared
+    @State private var savingSize = false
+    @State private var sizeName = ""
 
     var body: some View {
         Section("Page Size") {
@@ -85,9 +91,28 @@ struct PageFormatEditor: View {
                         }
                     }
                 }
+                if !prefs.savedPageSizes.isEmpty {
+                    Section(PaperSize.Category.saved.rawValue) {
+                        ForEach(prefs.savedPageSizes) { saved in
+                            let p = saved.paperSize
+                            Text("\(p.name)  ·  \(p.subtitle)").tag(Optional(p.id))
+                        }
+                    }
+                }
                 Text("Custom").tag(String?.none)
             }
             .pickerStyle(.menu)
+
+            if let id = format.paperID, let saved = prefs.savedPageSizes.first(where: { $0.paperSize.id == id }) {
+                Button("Delete Saved Size “\(saved.name)”", systemImage: "trash", role: .destructive) {
+                    let size = format.size
+                    prefs.savedPageSizes.removeAll { $0.id == saved.id }
+                    format.paperID = nil
+                    format.unit = .points
+                    format.customWidth = Double(size.width)
+                    format.customHeight = Double(size.height)
+                }
+            }
 
             if format.paperID == nil {
                 HStack {
@@ -102,6 +127,11 @@ struct PageFormatEditor: View {
                 }
                 Picker("Units", selection: Binding(get: { format.unit }, set: { convertUnit(to: $0) })) {
                     ForEach(LengthUnit.allCases) { Text($0.displayName).tag($0) }
+                }
+                Button("Save This Size…", systemImage: "star") {
+                    let s = format.size
+                    sizeName = String(format: "%.0f × %.0f", s.width, s.height)
+                    savingSize = true
                 }
             }
 
@@ -118,6 +148,13 @@ struct PageFormatEditor: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
+        }
+        .alert("Save Page Size", isPresented: $savingSize) {
+            TextField("Name", text: $sizeName)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") { saveCurrentSize() }
+        } message: {
+            Text("Saved sizes appear under “My Sizes” when creating notebooks and in Page Settings.")
         }
 
         Section("Background") {
@@ -166,6 +203,15 @@ struct PageFormatEditor: View {
                 }
             }
         }
+    }
+
+    private func saveCurrentSize() {
+        let size = format.size
+        let name = sizeName.trimmingCharacters(in: .whitespaces)
+        let saved = SavedPageSize(name: name.isEmpty ? "My Size" : name, width: size.width, height: size.height)
+        prefs.savedPageSizes.append(saved)
+        format.orientation = size.width > size.height ? .landscape : .portrait
+        format.paperID = saved.paperSize.id
     }
 
     private func convertUnit(to unit: LengthUnit) {

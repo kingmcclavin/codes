@@ -207,6 +207,13 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(PaperSize.matching(CGSize(width: 792, height: 612))?.paper.id, "letter")
     }
 
+    func testLongScrollPresetAndDarkGreyPaper() {
+        XCTAssertEqual(PaperSize.find("long-455x2500")?.size(for: .portrait), CGSize(width: 455, height: 2500))
+        XCTAssertTrue(PageBackground(color: .paperDarkGray).isDark, "dark grey paper gets light template lines")
+        XCTAssertEqual(PageFormat(size: CGSize(width: 455, height: 2500), background: PageBackground(color: .paperDarkGray)).backgroundChoice,
+                       .darkGray)
+    }
+
     func testSpatialGridQuery() {
         var grid = SpatialGrid(cellSize: 100)
         let a = UUID(), b = UUID()

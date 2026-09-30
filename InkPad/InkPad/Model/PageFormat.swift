@@ -47,8 +47,21 @@ enum PageOrientation: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// A page size the user saved for reuse.
+struct SavedPageSize: Codable, Identifiable, Hashable {
+    var id = UUID()
+    var name: String
+    /// Points, as entered (orientation is chosen separately).
+    var width: CGFloat
+    var height: CGFloat
+
+    var paperSize: PaperSize {
+        PaperSize(id: "saved:\(id.uuidString)", name: name, width: width, height: height, category: .saved)
+    }
+}
+
 struct PaperSize: Identifiable, Hashable {
-    enum Category: String { case paper = "Paper", screen = "Screen", other = "Other" }
+    enum Category: String { case paper = "Paper", screen = "Screen", other = "Other", saved = "My Sizes" }
 
     let id: String
     let name: String
@@ -70,7 +83,7 @@ struct PaperSize: Identifiable, Hashable {
             let w = unit.fromPoints(width), h = unit.fromPoints(height)
             let fmt = usesInches ? "%.1f × %.1f in" : "%.0f × %.0f mm"
             return String(format: fmt, w, h)
-        case .screen, .other:
+        case .screen, .other, .saved:
             return String(format: "%.0f × %.0f pt", width, height)
         }
     }
@@ -88,17 +101,22 @@ struct PaperSize: Identifiable, Hashable {
     static let ipadMini = PaperSize(id: "ipad-mini", name: "iPad mini", width: 744, height: 1133, category: .screen)
     static let widescreen = PaperSize(id: "16x9", name: "Widescreen 16:9", width: 720, height: 1280, category: .screen)
     static let standard4x3 = PaperSize(id: "4x3", name: "Standard 4:3", width: 768, height: 1024, category: .screen)
+    /// Tall scrolling page (fits an 11-inch iPad's width at about 180%).
+    static let longScroll = PaperSize(id: "long-455x2500", name: "Long Scroll", width: 455, height: 2500, category: .other)
 
     static let all: [PaperSize] = [
-        .letter, .legal, .tabloid, .a3, .a4, .a5, .square,
+        .letter, .legal, .tabloid, .a3, .a4, .a5, .square, .longScroll,
         .ipadPro13, .ipadPro11, .ipadAir, .ipadMini, .widescreen, .standard4x3,
     ]
 
-    static func find(_ id: String?) -> PaperSize? { all.first { $0.id == id } }
+    /// Built-in sizes followed by the user's saved sizes.
+    static var allIncludingSaved: [PaperSize] { all + AppPreferences.shared.savedPageSizes.map(\.paperSize) }
+
+    static func find(_ id: String?) -> PaperSize? { allIncludingSaved.first { $0.id == id } }
 
     /// Finds a preset matching a concrete page size (either orientation).
     static func matching(_ size: CGSize) -> (paper: PaperSize, orientation: PageOrientation)? {
-        for p in all {
+        for p in allIncludingSaved {
             for o in PageOrientation.allCases {
                 let s = p.size(for: o)
                 if abs(s.width - size.width) < 0.5 && abs(s.height - size.height) < 0.5 { return (p, o) }

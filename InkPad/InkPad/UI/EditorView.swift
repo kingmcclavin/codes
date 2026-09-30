@@ -211,8 +211,8 @@ struct ZoomControl: View {
                 Image(systemName: "minus").frame(width: 34, height: 32)
             }
             Menu {
-                Button("Fit Page", systemImage: "arrow.down.right.and.arrow.up.left") { editor.canvas?.fitPage() }
-                Button("Fit Width", systemImage: "arrow.left.and.right") { editor.canvas?.fitWidth() }
+                Button("Fit to Screen Edges", systemImage: "arrow.left.and.right") { editor.canvas?.fitWidth() }
+                Button("Fit Whole Page", systemImage: "arrow.down.right.and.arrow.up.left") { editor.canvas?.fitPage() }
                 Divider()
                 ForEach([50, 100, 150, 200, 400, 800], id: \.self) { p in
                     Button("\(p)%") { editor.canvas?.setZoom(CGFloat(p) / 100) }

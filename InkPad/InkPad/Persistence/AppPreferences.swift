@@ -9,6 +9,8 @@ final class AppPreferences: ObservableObject {
 
     @Published var customPresets: [PenPreset] { didSet { save(customPresets, key: Keys.presets) } }
     @Published private(set) var recentColors: [RGBAColor] { didSet { save(recentColors, key: Keys.recent) } }
+    /// Page sizes saved from "Custom" in the page format editor.
+    @Published var savedPageSizes: [SavedPageSize] { didSet { save(savedPageSizes, key: Keys.pageSizes) } }
     /// App-wide accent color (nil = system blue).
     @Published var accentColor: RGBAColor? { didSet { save(accentColor, key: Keys.accent) } }
     @Published var lastOpenedDocumentID: UUID? {
@@ -20,12 +22,14 @@ final class AppPreferences: ObservableObject {
         static let recent = "recentColors"
         static let lastDocument = "lastOpenedDocument"
         static let accent = "accentColor"
+        static let pageSizes = "savedPageSizes"
     }
 
     private init() {
         customPresets = Self.load([PenPreset].self, key: Keys.presets) ?? []
         recentColors = Self.load([RGBAColor].self, key: Keys.recent) ?? []
         accentColor = Self.load(RGBAColor?.self, key: Keys.accent) ?? nil
+        savedPageSizes = Self.load([SavedPageSize].self, key: Keys.pageSizes) ?? []
         lastOpenedDocumentID = UserDefaults.standard.string(forKey: Keys.lastDocument).flatMap(UUID.init(uuidString:))
     }
 
