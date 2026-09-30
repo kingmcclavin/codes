@@ -1,0 +1,14 @@
+# Build output
+.build/
+.swiftpm/xcode/
+*.xcodeproj
+DerivedData/
+
+# ROM images are copyrighted by Texas Instruments: never commit them.
+*.rom
+*.8ek
+*.8eu
+*.ppm
+
+# Local helper
+run.sh
