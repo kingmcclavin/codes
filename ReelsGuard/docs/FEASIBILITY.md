@@ -111,3 +111,19 @@ followed, or is the same creator whose profile the chain started on.
 - **Family Controls entitlement:** distributing an app that uses FamilyControls
   requires requesting the entitlement from Apple. Development builds work
   without it.
+
+## Swift Playgrounds (iPad) build
+
+Swift Playgrounds builds a single app target. It can't build app extensions,
+and it can't add the Family Controls or App Group entitlements. The
+`ReelsGuard.swiftpm` build therefore contains only the in-app browser, which
+is the surface with the most complete filtering anyway:
+
+| Feature | Xcode build | Playgrounds build |
+|---|---|---|
+| Filtered in-app Instagram browser | ✅ | ✅ |
+| Settings, Strict Mode, Reel time limit, follow list | ✅ | ✅ |
+| Shared with me | ✅ share sheet or paste | ✅ paste only |
+| Safari extension | ✅ | ❌ needs an app extension |
+| Share extension | ✅ | ❌ needs an app extension |
+| Screen Time lock and shield | ✅ | ❌ needs extensions and the Family Controls entitlement |

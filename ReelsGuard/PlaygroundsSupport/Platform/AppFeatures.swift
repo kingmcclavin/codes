@@ -1,0 +1,8 @@
+/// Swift Playgrounds build: in-app browser only. Playgrounds can't build app
+/// extensions (share, Safari, Screen Time shield) or use the Family Controls
+/// entitlement.
+enum AppFeatures {
+    static let hasShareExtension = false
+    static let hasSafariExtension = false
+    static let hasScreenTime = false
+}

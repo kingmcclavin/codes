@@ -126,3 +126,8 @@ test('direct-message pages are never scraped', async () => {
   assert.deepEqual(plain(sent.map((m) => m.type)), ['page']);
   dom.window.close();
 });
+
+test('the copy embedded in the app (ObserverScript.swift) is up to date', () => {
+  const swift = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'App', 'Sources', 'Browser', 'ObserverScript.swift'), 'utf8');
+  assert.ok(swift.includes(SOURCE.trimEnd()), 'run scripts/build-playgrounds-app.py');
+});

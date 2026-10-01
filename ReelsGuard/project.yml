@@ -31,8 +31,6 @@ targets:
     platform: iOS
     sources:
       - path: App/Sources
-      - path: Shared/WebGuard/reels-observer.js
-        buildPhase: resources
     dependencies:
       - package: ReelsGuardCore
       - target: ReelsGuardShare

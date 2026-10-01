@@ -1,0 +1,307 @@
+// GENERATED from Shared/WebGuard/reels-observer.js by scripts/build-playgrounds-app.py.
+// Do not edit; edit the .js file and rerun the script.
+
+enum ObserverScript {
+    static let source = ##"""
+/*
+ * Reels Guard — page observer for instagram.com.
+ *
+ * Runs in an isolated JavaScript world (a WKContentWorld in the app's web view,
+ * a content script in Safari). It never makes decisions itself: it reports
+ * what the user is looking at to the host, and applies the host's verdict.
+ *
+ * What it reads:
+ *   - location.href
+ *   - on Reel pages: the creator's profile link and any Follow/Following button
+ *     next to the playing video
+ *   - on profile pages: whether the header shows "Following"
+ * What it never reads: DM contents, captions, comments, form fields, cookies.
+ * On /direct/ pages it only reports the URL kind.
+ *
+ * Instagram's markup is undocumented and changes often. Everything that
+ * depends on it is in the "DOM heuristics" section below so it can be
+ * updated in one place. Follow/Following detection is English-only.
+ */
+(function (root) {
+  'use strict';
+  if (root.ReelsGuardObserver) return;
+
+  // Keep in sync with InstagramURLClassifier.reservedSegments (Swift).
+  var RESERVED = new Set([
+    'accounts', 'about', 'api', 'ajax', 'archive', 'challenge', 'data', 'developer',
+    'direct', 'directory', 'emails', 'explore', 'graphql', 'legal', 'locations',
+    'notifications', 'oauth', 'p', 'privacy', 'reel', 'reels', 'session', 'settings',
+    'static', 'stories', 'topics', 'tv', 'web', 'your_activity'
+  ]);
+  var USERNAME_RE = /^[A-Za-z0-9._]{1,30}$/;
+  var INSTAGRAM_HOST_RE = /(^|\.)instagram\.com$/i;
+
+  var URL_POLL_MS = 300;
+  var TICK_MS = 5000;
+  var CREATOR_RETRY_MS = 250;
+  var CREATOR_RETRIES = 6;
+
+  // ---------------------------------------------------------------------------
+  // URL parsing (mirrors InstagramURLClassifier for the parts the observer needs)
+
+  function isUsername(segment) {
+    return USERNAME_RE.test(segment) && !RESERVED.has(segment.toLowerCase());
+  }
+
+  function parsePath(pathname) {
+    var segs = pathname.split('/').filter(Boolean);
+    if (segs.length === 0) return { kind: 'home' };
+    var first = segs[0].toLowerCase();
+    var second = segs[1];
+    if (first === 'reels' && second && second.toLowerCase() === 'audio') return { kind: 'other' };
+    if (first === 'reel' || first === 'reels' || first === 'tv') {
+      return second ? { kind: 'reel', id: second, author: null } : { kind: 'reelsFeed' };
+    }
+    if (first === 'direct') return { kind: 'direct' };
+    if (isUsername(segs[0])) {
+      var sub = second ? second.toLowerCase() : null;
+      if ((sub === 'reel' || sub === 'reels' || sub === 'tv') && segs[2]) {
+        return { kind: 'reel', id: segs[2], author: first };
+      }
+      if (sub === null || sub === 'reels' || sub === 'tagged') return { kind: 'profile', username: first };
+    }
+    return { kind: 'other' };
+  }
+
+  // ---------------------------------------------------------------------------
+  // DOM heuristics
+
+  function usernameFromHref(href) {
+    var u;
+    try { u = new URL(href, root.location.href); } catch (e) { return null; }
+    if (!INSTAGRAM_HOST_RE.test(u.hostname)) return null;
+    var segs = u.pathname.split('/').filter(Boolean);
+    if (segs.length !== 1 || !isUsername(segs[0])) return null;
+    return segs[0].toLowerCase();
+  }
+
+  function reelIdFromHref(href) {
+    var u;
+    try { u = new URL(href, root.location.href); } catch (e) { return null; }
+    var p = parsePath(u.pathname);
+    return p.kind === 'reel' ? p.id : null;
+  }
+
+  function visibleRatio(el) {
+    var r = el.getBoundingClientRect();
+    var vw = root.innerWidth || 0, vh = root.innerHeight || 0;
+    var w = Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0));
+    var h = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+    var area = r.width * r.height;
+    return area > 0 ? (w * h) / area : 0;
+  }
+
+  function mostVisibleVideo() {
+    var best = null, bestRatio = 0.5;
+    var videos = root.document.querySelectorAll('video');
+    for (var i = 0; i < videos.length; i++) {
+      var ratio = visibleRatio(videos[i]);
+      if (ratio > bestRatio) { best = videos[i]; bestRatio = ratio; }
+    }
+    return best;
+  }
+
+  /** Nearest ancestor of `el` (within a few levels) that links to a profile. */
+  function findCreator(el) {
+    for (var depth = 0; el && depth < 12; depth++, el = el.parentElement) {
+      var links = el.querySelectorAll('a[href]');
+      for (var i = 0; i < links.length; i++) {
+        var name = usernameFromHref(links[i].getAttribute('href'));
+        if (name) return { creator: name, container: el };
+      }
+    }
+    return { creator: null, container: null };
+  }
+
+  function followHintIn(container, creator) {
+    if (!container) return 'unknown';
+    var buttons = container.querySelectorAll('button, div[role="button"]');
+    for (var i = 0; i < buttons.length; i++) {
+      var text = (buttons[i].textContent || '').trim();
+      if (text === 'Following') return 'following';
+      if (text === 'Follow') return 'notFollowing';
+    }
+    return creator ? 'noFollowButton' : 'unknown';
+  }
+
+  /** Reel id for a video: a single /reel/<id>/ link in its container, if any. */
+  function reelIdNear(video) {
+    var el = video;
+    for (var depth = 0; el && depth < 8; depth++, el = el.parentElement) {
+      var links = el.querySelectorAll('a[href*="/reel"]');
+      var ids = new Set();
+      for (var i = 0; i < links.length; i++) {
+        var id = reelIdFromHref(links[i].getAttribute('href'));
+        if (id) ids.add(id);
+      }
+      if (ids.size === 1) return ids.values().next().value;
+      if (ids.size > 1) return null;
+    }
+    return null;
+  }
+
+  function profileHeaderFollowing() {
+    var header = root.document.querySelector('header');
+    if (!header) return null;
+    var buttons = header.querySelectorAll('button, div[role="button"]');
+    for (var i = 0; i < buttons.length; i++) {
+      var text = (buttons[i].textContent || '').trim();
+      if (text === 'Following' || text === 'Requested') return text === 'Following';
+      if (text === 'Follow' || text === 'Follow Back') return false;
+    }
+    return null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Observer
+
+  function start(transport, hooks) {
+    hooks = hooks || {};
+    var queue = Promise.resolve();
+    var blocked = false;
+    var lastHref = null;
+    var current = { kind: 'other' };
+    var lastReelId = null;
+    var navToken = 0;
+    var firstVideoSinceNav = true;
+    var videoIds = new WeakMap();
+    var syntheticCounter = 0;
+
+    function send(message) {
+      queue = queue
+        .then(function () { return transport.send(message); })
+        .then(apply)
+        .catch(function () { /* host unavailable: fail open */ });
+      return queue;
+    }
+
+    function apply(response) {
+      if (!response) return;
+      if (response.decision === 'block') {
+        blocked = true;
+        pauseAll();
+        if (hooks.onBlock) hooks.onBlock(response);
+      } else if (blocked) {
+        blocked = false;
+        if (hooks.onAllow) hooks.onAllow(response);
+      }
+    }
+
+    function pauseAll() {
+      var videos = root.document.querySelectorAll('video, audio');
+      for (var i = 0; i < videos.length; i++) {
+        try { videos[i].pause(); } catch (e) { /* ignore */ }
+      }
+    }
+
+    function isReelContext() { return current.kind === 'reel' || current.kind === 'reelsFeed'; }
+
+    function reportReel(id, video, urlAuthor) {
+      if (id === lastReelId) return;
+      lastReelId = id;
+      var found = video ? findCreator(video) : { creator: null, container: null };
+      var creator = urlAuthor || found.creator;
+      send({
+        type: 'reel',
+        url: root.location.href,
+        reelID: id,
+        creator: creator,
+        followHint: followHintIn(found.container, creator)
+      });
+    }
+
+    function reportReelFromUrl(id, urlAuthor, token, attempt) {
+      if (token !== navToken || id === lastReelId) return;
+      var video = mostVisibleVideo();
+      var hasCreator = urlAuthor || (video && findCreator(video).creator);
+      if (hasCreator || attempt >= CREATOR_RETRIES) {
+        if (video && !videoIds.has(video)) { videoIds.set(video, id); firstVideoSinceNav = false; }
+        reportReel(id, video, urlAuthor);
+        return;
+      }
+      setTimeout(function () { reportReelFromUrl(id, urlAuthor, token, attempt + 1); }, CREATOR_RETRY_MS);
+    }
+
+    function learnFromProfile(username, token, attempt) {
+      if (token !== navToken) return;
+      var following = profileHeaderFollowing();
+      if (following !== null) {
+        send({ type: 'profile', username: username, following: following });
+      } else if (attempt < CREATOR_RETRIES) {
+        setTimeout(function () { learnFromProfile(username, token, attempt + 1); }, CREATOR_RETRY_MS * 2);
+      }
+    }
+
+    function onUrlChange() {
+      var href = root.location.href;
+      if (href === lastHref) return;
+      lastHref = href;
+      navToken++;
+      firstVideoSinceNav = true;
+      current = parsePath(root.location.pathname);
+
+      if (current.kind === 'reel') {
+        reportReelFromUrl(current.id, current.author, navToken, 0);
+        return;
+      }
+      lastReelId = null;
+      send({ type: 'page', url: href });
+      if (current.kind === 'profile') learnFromProfile(current.username, navToken, 0);
+    }
+
+    function idForVideo(video) {
+      if (videoIds.has(video)) return videoIds.get(video);
+      var id = reelIdNear(video);
+      if (!id && firstVideoSinceNav && current.kind === 'reel') id = current.id;
+      if (!id) id = 'video-' + (++syntheticCounter);
+      firstVideoSinceNav = false;
+      videoIds.set(video, id);
+      return id;
+    }
+
+    function onPlay(event) {
+      var video = event.target;
+      if (!video || video.tagName !== 'VIDEO') return;
+      if (blocked) { video.pause(); return; }
+      if (!isReelContext() || visibleRatio(video) < 0.5) return;
+      reportReel(idForVideo(video), video, null);
+    }
+
+    function onTick() {
+      if (blocked || !isReelContext() || root.document.visibilityState !== 'visible') return;
+      var videos = root.document.querySelectorAll('video');
+      for (var i = 0; i < videos.length; i++) {
+        if (!videos[i].paused && !videos[i].ended) {
+          send({ type: 'tick', seconds: TICK_MS / 1000 });
+          return;
+        }
+      }
+    }
+
+    // Isolated worlds can't see the page's history.pushState calls, so the URL
+    // is polled. This is cheap: a string comparison every 300 ms.
+    root.document.addEventListener('play', onPlay, true);
+    root.addEventListener('popstate', onUrlChange);
+    setInterval(onUrlChange, URL_POLL_MS);
+    setInterval(onTick, TICK_MS);
+    setInterval(function () { if (blocked) pauseAll(); }, 1000);
+    onUrlChange();
+
+    return {
+      reset: function () { blocked = false; lastHref = null; lastReelId = null; onUrlChange(); }
+    };
+  }
+
+  root.ReelsGuardObserver = {
+    start: start,
+    // Exposed for tests.
+    _internal: { parsePath: parsePath, usernameFromHref: usernameFromHref, reelIdFromHref: reelIdFromHref }
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+"""##
+}

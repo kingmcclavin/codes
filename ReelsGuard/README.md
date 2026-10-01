@@ -27,7 +27,34 @@ The blocking screen is intentionally plain: a title, one sentence of
 explanation, and a single **Back to Instagram** button. There is no "watch
 anyway" and no "next Reel" button.
 
-## Build
+## Run it on an iPad (Swift Playgrounds, no Mac needed)
+
+`ReelsGuard.swiftpm` is a Swift Playgrounds app. It contains the in-app
+filtered Instagram browser, every setting, Strict Mode, the Reel time limit,
+*Shared with me* and the follow list.
+
+It **doesn't** contain the Safari extension, the share extension or the Screen
+Time lock. Swift Playgrounds can't build app extensions or use Apple's Family
+Controls entitlement, so those need the full Xcode project on a Mac. To
+watch a Reel someone sent you, copy its link in Instagram and paste it into
+*Shared with me*.
+
+1. On the iPad, open this link in Safari (sign in to GitHub if asked):
+   `https://github.com/kingmcclavin/codes/archive/refs/heads/claude/reels-guard-ios.zip`
+2. In the **Files** app, open **Downloads** and tap the ZIP to unzip it.
+3. Open the unzipped folder, then `ReelsGuard`, and tap **`ReelsGuard.swiftpm`**.
+   It opens in Swift Playgrounds. Requires iPadOS 17+ and a recent Swift Playgrounds.
+4. Tap **Run** (▶). Then tap **Open Instagram** and sign in on instagram.com.
+
+The app runs inside Swift Playgrounds. Putting it on your Home Screen or on an
+iPhone means publishing it through App Store Connect / TestFlight (Swift
+Playgrounds can do this from the iPad). That requires a paid Apple Developer
+Program membership.
+
+The `.swiftpm` folder is generated. When developing, edit the originals and run
+`scripts/build-playgrounds-app.py` (`--check` verifies it's current).
+
+## Build the full version (Mac + Xcode)
 
 Requirements: Xcode 15+, iOS 17+ device (Screen Time APIs don't work in the
 simulator), [XcodeGen](https://github.com/yonaskolb/XcodeGen).
@@ -85,11 +112,14 @@ cd Shared/WebGuard && npm install && npm test
 ```
 ReelsGuard/
 ├── project.yml                     XcodeGen spec (app + 4 extensions)
+├── ReelsGuard.swiftpm/             GENERATED Swift Playgrounds app (iPad)
+├── PlaygroundsSupport/             Playgrounds-only manifest and Platform/ files
+├── scripts/build-playgrounds-app.py  regenerates the two generated outputs
 ├── Packages/ReelsGuardCore/        Foundation-only policy package + tests
 ├── Shared/WebGuard/                reels-observer.js (shared) + Node tests
 ├── App/Sources/                    SwiftUI companion app
-│   ├── Browser/                    guarded WKWebView
-│   ├── ScreenTime/                 FamilyControls / ManagedSettings
+│   ├── Browser/                    guarded WKWebView (+ generated ObserverScript.swift)
+│   ├── Platform/                   App entry, Screen Time, Safari setup: swapped out in Playgrounds
 │   ├── Model/                      settings view model
 │   └── Views/                      control screen, block screen, etc.
 ├── Extensions/
