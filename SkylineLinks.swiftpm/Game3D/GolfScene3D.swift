@@ -490,7 +490,10 @@ final class GolfScene3D: NSObject, GolfRenderer {
         eye = P3.lerp(eye, eyeTarget, k)
         look = P3.lerp(look, lookTarget, kl)
         cameraNode.position = eye.scn
-        cameraNode.look(at: look.scn)
+        // Always use world "up" so the camera never rolls sideways as the aim turns.
+        cameraNode.look(at: look.scn,
+                        up: SCNVector3(x: 0, y: 1, z: 0),
+                        localFront: SCNVector3(x: 0, y: 0, z: -1))
     }
 
     /// Behind the ball, looking down the aim line, with the ball a little below screen centre.
@@ -498,9 +501,9 @@ final class GolfScene3D: NSObject, GolfRenderer {
         let toTarget = aimTo - aimFrom
         let f = toTarget.length > 0.01 ? toTarget.normalized : (hole.cup - aimFrom).normalized
         let g = hole.groundHeight(at: aimFrom)
-        let back = isPutt ? 4.5 : 9.0
-        let height = isPutt ? 1.9 : 3.6
-        let ballBelowCentre = isPutt ? 0.12 : 0.18
+        let back = isPutt ? 5.0 : 12.0
+        let height = isPutt ? 2.4 : 6.0
+        let ballBelowCentre = isPutt ? 0.2 : 0.28
         let ballAngle = atan(height / back)
         let half = degreesToRadians(GolfScene3D.fieldOfView / 2)
         let pitch = ballAngle - atan(ballBelowCentre * tan(half))
