@@ -27,6 +27,8 @@ struct PlayerProgress: Codable {
     var hapticsOn: Bool = true
     var soundOn: Bool = true
     var showTutorial: Bool = true
+    /// Play rounds in the SceneKit 3D view (false = top-down 2D view).
+    var use3D: Bool = true
 
     init() {}
 
@@ -54,6 +56,7 @@ struct PlayerProgress: Codable {
         hapticsOn = try c.decodeIfPresent(Bool.self, forKey: .hapticsOn) ?? true
         soundOn = try c.decodeIfPresent(Bool.self, forKey: .soundOn) ?? true
         showTutorial = try c.decodeIfPresent(Bool.self, forKey: .showTutorial) ?? true
+        use3D = try c.decodeIfPresent(Bool.self, forKey: .use3D) ?? true
         ensureStarterSet()
     }
 

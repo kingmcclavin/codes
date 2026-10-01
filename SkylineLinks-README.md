@@ -32,7 +32,7 @@ Requirements: Swift Playgrounds 4.4 or newer and iPadOS 17 or newer.
 
 | Step | Action |
 |------|--------|
-| Aim | Drag anywhere on the course to move the yellow target. The dotted line shows the no‑wind flight and roll. |
+| Aim | **3D:** drag left/right to turn, up/down to change distance (the yellow ring is the target). **2D:** drag anywhere to move the target. The dotted line shows the no‑wind flight and roll. |
 | Club | Pick a club from the strip at the bottom. The game pre‑selects a sensible club and target every shot. |
 | Power | **Hold** the swing button. Release when the bar reaches the white line (100% = exactly the aimed distance; up to 110% overswing). |
 | Timing | **Tap** again as the needle crosses the green **PERFECT** zone. The needle bounces back and forth (a little faster each pass) until you tap. Early pulls left and hooks, late pushes right and slices. |
@@ -63,7 +63,11 @@ SkylineLinks.swiftpm
 │   ├── CameraController.swift  smooth framing camera rig
 │   ├── CourseRenderer.swift    turns a GolfHole into SpriteKit shapes
 │   ├── GolfGameScene.swift     SKScene: rendering, ball animation, camera, particles, aim drag
+│   ├── GolfRenderer.swift      the interface both the 2D and 3D views implement
 │   └── RoundController.swift   round rules: strokes, penalties, clubs, swing → shot
+├── Game3D/
+│   ├── Course3DBuilder.swift   terrain mesh following elevation, painted course texture, 3D trees/rocks/cacti
+│   └── GolfScene3D.swift       SceneKit view: chase camera, ball, flag, aim ring, preview, effects, drag aiming
 ├── Swing/SwingSystem.swift     timing windows, 3‑step swing meter, shot planner, auto aim advisor, score names
 ├── Clubs/
 │   ├── Club.swift              11 club types, rarities, stats
@@ -102,6 +106,18 @@ All seven planned stages are present in a first pass:
 6. **Campaign:** 10 courses (Clover Meadows → Grand Summit) with themed visuals and rising difficulty,
    3 / 9 / 18-hole rounds, rival target scores, unlocks and a rewards screen.
 7. **Polish:** camera fly-over intro, ball trail, sand/water/leaf/confetti particles, synthesized sounds, haptics.
+
+### 3D view (SceneKit)
+
+Rounds play in 3D by default. **Settings → 3D view** switches back to the classic top-down 2D view at any time.
+Both views share the same rules, physics, swing and HUD; only the drawing and camera differ.
+
+* Camera sits behind the ball looking down the aim line, follows the ball in flight, drops low for putts,
+  and the 👁 button gives a high overview of the hole.
+* The ground is a mesh that follows the hole's uphill/downhill shape, textured with a painted top-down
+  image of the hole so fairway, green and bunker edges stay sharp. Trees, pines, palms, cacti and rocks are 3D.
+* SceneKit is built into iPadOS and works in Swift Playgrounds. Apple has marked it as no longer getting new
+  features, but it continues to run.
 
 ### Verification notes
 

@@ -16,6 +16,7 @@ struct SettingsView: View {
                             Toggle("Sound effects", isOn: $store.progress.soundOn)
                             Toggle("Haptics", isOn: $store.progress.hapticsOn)
                             Toggle("Show swing tutorial", isOn: $store.progress.showTutorial)
+                            Toggle("3D view (turn off for classic top-down 2D)", isOn: $store.progress.use3D)
                         }
                         .font(.headline)
                         .foregroundColor(.white)
@@ -26,7 +27,7 @@ struct SettingsView: View {
                             Text("HOW TO PLAY")
                                 .font(.caption.weight(.heavy))
                                 .foregroundColor(.white.opacity(0.6))
-                            Text("1. Drag anywhere on the course to move the yellow target.")
+                            Text("1. Aim: in 3D drag left/right to turn and up/down for distance; in 2D drag the yellow target.")
                             Text("2. Pick a club from the strip at the bottom (the game suggests one).")
                             Text("3. Press and HOLD the swing button. Release when the power bar reaches the white line (100%).")
                             Text("4. Tap again when the needle crosses the green PERFECT zone.")

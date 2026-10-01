@@ -14,14 +14,20 @@ struct GameView: View {
         self.store = store
         self.navigate = navigate
         let course = CourseDatabase.course(courseIndex)
-        _controller = StateObject(wrappedValue: RoundController(course: course, length: length, bag: store.bag()))
+        _controller = StateObject(wrappedValue: RoundController(course: course, length: length, bag: store.bag(),
+                                                               use3D: store.progress.use3D))
         _showTutorial = State(initialValue: store.progress.showTutorial)
     }
 
     var body: some View {
         ZStack {
-            GameSceneContainer(scene: controller.scene, paused: paused)
-                .ignoresSafeArea()
+            if let scene3D = controller.scene3D {
+                Golf3DContainer(renderer: scene3D, paused: paused)
+                    .ignoresSafeArea()
+            } else if let scene2D = controller.scene2D {
+                GameSceneContainer(scene: scene2D, paused: paused)
+                    .ignoresSafeArea()
+            }
 
             GameHUD(controller: controller, paused: $paused)
 
@@ -37,7 +43,7 @@ struct GameView: View {
             }
 
             if showTutorial && controller.phase == .aiming && controller.holeIndex == 0 && controller.strokes == 0 {
-                TutorialCard {
+                TutorialCard(is3D: controller.scene3D != nil) {
                     showTutorial = false
                     store.dismissTutorial()
                 }
@@ -93,6 +99,7 @@ struct GameSceneContainer: View {
 }
 
 struct TutorialCard: View {
+    var is3D = false
     let onDismiss: () -> Void
 
     var body: some View {
@@ -102,7 +109,9 @@ struct TutorialCard: View {
                 Text("HOW TO SWING")
                     .font(.system(size: 26, weight: .black, design: .rounded))
                     .foregroundColor(UIStyle.gold)
-                step("hand.draw.fill", "Drag anywhere on the course to move the yellow target.")
+                step("hand.draw.fill", is3D
+                     ? "Drag left/right to aim and up/down to change distance. The yellow ring is your target."
+                     : "Drag anywhere on the course to move the yellow target.")
                 step("rectangle.stack.fill", "Choose a club at the bottom. A good one is picked for you.")
                 step("hand.tap.fill", "HOLD the swing button. Power rises.")
                 step("arrow.up.to.line", "RELEASE at the white line for 100% of the aimed distance.")

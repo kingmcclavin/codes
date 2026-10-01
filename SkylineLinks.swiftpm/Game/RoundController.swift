@@ -60,7 +60,11 @@ final class RoundController: ObservableObject {
     let length: RoundLength
     let holes: [GolfHole]
     let bag: [ClubType: EquippedClub]
-    let scene: GolfGameScene
+    /// The active view of the course (2D or 3D).
+    let renderer: GolfRenderer
+    /// Exactly one of these is set, depending on the view mode.
+    let scene2D: GolfGameScene?
+    let scene3D: GolfScene3D?
     let meter = SwingMeterModel()
 
     @Published private(set) var holeIndex = 0
@@ -84,13 +88,23 @@ final class RoundController: ObservableObject {
     private var previewDirty = false
     private var rng = SeededRandom(seed: UInt64.random(in: 1...UInt64.max))
 
-    init(course: GolfCourse, length: RoundLength, bag: [ClubType: EquippedClub]) {
+    init(course: GolfCourse, length: RoundLength, bag: [ClubType: EquippedClub], use3D: Bool) {
         self.course = course
         self.length = length
         self.holes = course.holes(for: length)
         self.bag = bag
-        self.scene = GolfGameScene(size: CGSize(width: 1024, height: 768))
-        self.scene.controller = self
+        if use3D {
+            let s = GolfScene3D()
+            self.scene3D = s
+            self.scene2D = nil
+            self.renderer = s
+        } else {
+            let s = GolfGameScene(size: CGSize(width: 1024, height: 768))
+            self.scene2D = s
+            self.scene3D = nil
+            self.renderer = s
+        }
+        self.renderer.attach(self)
     }
 
     // MARK: - Derived info for the HUD
@@ -135,9 +149,9 @@ final class RoundController: ObservableObject {
         previousPos = h.tee
         overview = false
         phase = .intro
-        scene.loadHole(h, theme: theme)
-        scene.placeBall(at: ballPos)
-        scene.playIntro { [weak self] in
+        renderer.loadHole(h, theme: theme)
+        renderer.placeBall(at: ballPos)
+        renderer.playIntro { [weak self] in
             guard let self = self else { return }
             if self.phase == .intro {
                 self.phase = .aiming
@@ -151,7 +165,7 @@ final class RoundController: ObservableObject {
     }
 
     func skipIntro() {
-        scene.skipIntro()
+        renderer.skipIntro()
     }
 
     private func prepareShot() {
@@ -205,10 +219,10 @@ final class RoundController: ObservableObject {
 
     func toggleOverview() {
         overview.toggle()
-        scene.setOverview(overview)
+        renderer.setOverview(overview)
     }
 
-    /// Called every frame by the scene.
+    /// Called every frame by the renderer.
     func tick(_ dt: Double) {
         if previewDirty && phase == .aiming {
             refreshPreview()
@@ -231,7 +245,7 @@ final class RoundController: ObservableObject {
             let start = BallState(pos: from, z: h.groundHeight(at: from), vel: dir * speed, vz: 0,
                                   backspin: 0, sideSpin: 0, phase: .rolling)
             let trace = BallSimulator.trace(hole: h, start: start, options: SimOptions(), sampleEvery: 0.04)
-            scene.setPreview(points: trace.points, landingIndex: nil, isPutt: true, visibleFraction: mods.puttPreviewFraction)
+            renderer.setPreview(points: trace.points, landingIndex: nil, isPutt: true, visibleFraction: mods.puttPreviewFraction)
             playsLike = targetDistance
         } else {
             let angle = club.type.launchAngle
@@ -242,10 +256,13 @@ final class RoundController: ObservableObject {
             let start = BallState(pos: from, z: h.groundHeight(at: from), vel: v, vz: vz,
                                   backspin: mods.backspin, sideSpin: 0, phase: .flight)
             let trace = BallSimulator.trace(hole: h, start: start, options: opts, sampleEvery: 0.06)
-            scene.setPreview(points: trace.points, landingIndex: trace.landingIndex, isPutt: false, visibleFraction: 1)
+            renderer.setPreview(points: trace.points, landingIndex: trace.landingIndex, isPutt: false, visibleFraction: 1)
             playsLike = ShotSolver.flatCarry(speed: speed, launchAngleDeg: angle)
         }
-        scene.setAim(from: from, to: to, rotation: viewRotation, isPutt: isPutting)
+        if renderer.cameraFollowsAim && targetDistance > 0.05 {
+            viewRotation = (to - from).angle - Double.pi / 2
+        }
+        renderer.setAim(from: from, to: to, rotation: viewRotation, isPutt: isPutting)
     }
 
     // MARK: - Swing input (from the HUD button)
@@ -315,7 +332,7 @@ final class RoundController: ObservableObject {
             }
         }
         phase = .ballMoving
-        scene.launch(shot)
+        renderer.launch(shot)
     }
 
     // MARK: - Ball results
@@ -342,7 +359,7 @@ final class RoundController: ObservableObject {
             finishHole(pickedUp: true)
             return
         }
-        scene.placeBall(at: ballPos)
+        renderer.placeBall(at: ballPos)
         prepareShot()
     }
 
