@@ -302,7 +302,8 @@ final class GolfScene3D: NSObject, GolfRenderer {
     private func placeClub() {
         guard let hole = hole, sim == nil, pendingShot == nil else { return }
         _ = syncClubModel()
-        swingRig.place(ballGround: ballGround, groundHeight: hole.groundHeight(at: ballGround), aimDir: aimTo - aimFrom)
+        swingRig.place(ballGround: ballGround, groundHeight: hole.groundHeight(at: ballGround), aimDir: aimTo - aimFrom,
+                       ballRadius: GolfScene3D.ballRadius)
     }
 
     private func outcomeColor(_ outcome: SwingOutcome?) -> UIColor {

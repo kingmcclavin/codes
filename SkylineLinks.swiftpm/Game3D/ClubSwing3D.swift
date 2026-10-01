@@ -5,6 +5,29 @@ import simd
 /// Procedural 3D club models (no asset files). Each club has its grip end at the node origin
 /// and the head at (0, -length, 0). Local +X is the clubface direction, +Z points toward the toe.
 enum ClubModel3D {
+    /// The ball is drawn oversized so it stays visible, so clubs are drawn larger to match.
+    static let visualScale = 2.2
+
+    /// Head layout in model units: `up` = head centre above the shaft end, `toe` = head centre
+    /// offset toward the toe, `faceHalf` = half the head's depth behind the face, `halfHeight` = half its height.
+    static func headLayout(for type: ClubType) -> (up: Double, toe: Double, faceHalf: Double, halfHeight: Double) {
+        switch type {
+        case .driver, .wood3, .wood5:
+            let size = woodSize(type)
+            return (size * 0.5, size, size * 0.9, size * 0.55)
+        case .putter:
+            return (0.015, 0.05, 0.0175, 0.015)
+        case .pitchingWedge, .sandWedge, .lobWedge:
+            return (0.03, 0.04, 0.009, 0.0325)
+        default:
+            return (0.025, 0.04, 0.009, 0.0275)
+        }
+    }
+
+    static func woodSize(_ type: ClubType) -> Double {
+        type == .driver ? 0.07 : (type == .wood3 ? 0.06 : 0.055)
+    }
+
     /// Club length in yards (slightly stylised).
     static func length(for type: ClubType) -> Double {
         switch type {
@@ -57,13 +80,12 @@ enum ClubModel3D {
         let head: SCNNode
         switch type {
         case .driver, .wood3, .wood5:
-            let size: Double = type == .driver ? 0.07 : (type == .wood3 ? 0.06 : 0.055)
+            let size = woodSize(type)
             let sphere = SCNSphere(radius: CGFloat(size))
             sphere.segmentCount = 18
             sphere.materials = [shiny(UIColor(white: 0.1, alpha: 1), shininess: 80)]
             head = SCNNode(geometry: sphere)
             head.scale = SCNVector3(x: 0.9, y: 0.55, z: 1.45)
-            head.position = SCNVector3(x: 0, y: Float(-L + size * 0.5), z: Float(size * 1.0))
             // A thin accent stripe on the crown.
             let stripe = SCNBox(width: 0.008, height: 0.004, length: CGFloat(size * 1.6), chamferRadius: 0)
             stripe.materials = [shiny(accent)]
@@ -74,14 +96,14 @@ enum ClubModel3D {
             let box = SCNBox(width: 0.035, height: 0.03, length: 0.11, chamferRadius: 0.008)
             box.materials = [chrome]
             head = SCNNode(geometry: box)
-            head.position = SCNVector3(x: 0, y: Float(-L + 0.015), z: 0.05)
         default:
             let isWedge = type == .pitchingWedge || type == .sandWedge || type == .lobWedge
             let box = SCNBox(width: 0.018, height: isWedge ? 0.065 : 0.055, length: 0.085, chamferRadius: 0.005)
             box.materials = [chrome]
             head = SCNNode(geometry: box)
-            head.position = SCNVector3(x: 0, y: Float(-L + 0.025), z: 0.04)
         }
+        let layout = headLayout(for: type)
+        head.position = SCNVector3(x: 0, y: Float(-L + layout.up), z: Float(layout.toe))
         root.addChildNode(head)
         return (root, head)
     }
@@ -143,7 +165,7 @@ final class ClubSwingRig {
     }
 
     /// Puts the club at address behind the ball, aimed down `aimDir`.
-    func place(ballGround: Vec2, groundHeight: Double, aimDir: Vec2) {
+    func place(ballGround: Vec2, groundHeight: Double, aimDir: Vec2, ballRadius: Double) {
         guard state != .downswing else { return }
         if state != .address {
             angle = 0
@@ -156,10 +178,19 @@ final class ClubSwingRig {
         let leftS = SIMD3<Float>(Float(left.x), 0, Float(-left.y))
         let up = SIMD3<Float>(0, 1, 0)
         let toHands = clubType == .putter ? simd_normalize(leftS * 0.3 + up * 0.95) : simd_normalize(leftS * 0.55 + up * 0.835)
-        let headPos = SIMD3<Float>(Float(ballGround.x - f.x * 0.07), Float(groundHeight + 0.01), Float(-(ballGround.y - f.y * 0.07)))
-        let hands = headPos + toHands * Float(L)
         let z = simd_cross(x, toHands)
-        root.simdTransform = simd_float4x4(SIMD4<Float>(x, 0), SIMD4<Float>(toHands, 0), SIMD4<Float>(z, 0), SIMD4<Float>(hands, 1))
+        let s = ClubModel3D.visualScale
+        let head = ClubModel3D.headLayout(for: clubType)
+        // Head centre sits on the ground just behind the ball, face square to the target.
+        let gap = ballRadius + head.faceHalf * s + 0.03
+        let headCentre = SIMD3<Float>(Float(ballGround.x - f.x * gap),
+                                      Float(groundHeight + head.halfHeight * s),
+                                      Float(-(ballGround.y - f.y * gap)))
+        let shaftEnd = headCentre - toHands * Float(head.up * s) - z * Float(head.toe * s)
+        let hands = shaftEnd + toHands * Float(L * s)
+        let fs = Float(s)
+        root.simdTransform = simd_float4x4(SIMD4<Float>(x * fs, 0), SIMD4<Float>(toHands * fs, 0),
+                                           SIMD4<Float>(z * fs, 0), SIMD4<Float>(hands, 1))
         state = .address
         root.isHidden = false
         root.opacity = 1
@@ -190,7 +221,7 @@ final class ClubSwingRig {
             followTime = 0.42
             endAngle = 2.5
         }
-        let geo = SCNSphere(radius: 0.035)
+        let geo = SCNSphere(radius: 0.07)
         geo.segmentCount = 6
         let m = SCNMaterial()
         m.diffuse.contents = outcomeColor.withAlphaComponent(0.85)
