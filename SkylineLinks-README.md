@@ -35,7 +35,7 @@ Requirements: Swift Playgrounds 4.4 or newer and iPadOS 17 or newer.
 | Aim | Drag anywhere on the course to move the yellow target. The dotted line shows the no‑wind flight and roll. |
 | Club | Pick a club from the strip at the bottom. The game pre‑selects a sensible club and target every shot. |
 | Power | **Hold** the swing button. Release when the bar reaches the white line (100% = exactly the aimed distance; up to 110% overswing). |
-| Timing | **Tap** again as the needle crosses the green **PERFECT** zone. Early pulls left and hooks, late pushes right and slices. |
+| Timing | **Tap** again as the needle crosses the green **PERFECT** zone. The needle bounces back and forth (a little faster each pass) until you tap. Early pulls left and hooks, late pushes right and slices. |
 | Putt | Hold and release only. Read the pulsing slope arrows; only part of the roll line is shown. |
 | Wind | Shown top right relative to your view. It pushes the ball in flight; the preview ignores it. |
 | 👁 | Toggles a whole-hole overview. ↩︎ resets the aim. |

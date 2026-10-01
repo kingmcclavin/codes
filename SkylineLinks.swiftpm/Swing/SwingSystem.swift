@@ -84,7 +84,10 @@ struct SwingMeterState {
 
     static let maxPower = 1.1
     static let needleStart = -1.05
-    static let needleEnd = 1.25
+    /// The needle bounces between -needleEdge and +needleEdge until the player taps.
+    static let needleEdge = 1.2
+    /// Each pass across the bar gets a little faster, up to this multiple.
+    static let maxNeedleBoost = 1.8
 
     var phase: Phase = .idle
     var power: Double = 0
@@ -94,9 +97,11 @@ struct SwingMeterState {
     /// 1.0 is normal speed; club control lowers it.
     var speed: Double = 1
     private var direction: Double = 1
+    private var needleDirection: Double = 1
+    private var needleBoost: Double = 1
 
     var powerRate: Double { (isPutt ? 0.75 : 0.9) * speed }
-    var needleRate: Double { 2.5 * speed }
+    var needleRate: Double { 2.5 * speed * needleBoost }
 
     mutating func reset() {
         phase = .idle
@@ -104,6 +109,8 @@ struct SwingMeterState {
         lockedPower = 0
         needle = SwingMeterState.needleStart
         direction = 1
+        needleDirection = 1
+        needleBoost = 1
     }
 
     mutating func touchDown() -> Event {
@@ -134,6 +141,8 @@ struct SwingMeterState {
         }
         phase = .accuracy
         needle = SwingMeterState.needleStart
+        needleDirection = 1
+        needleBoost = 1
         return .powerLocked
     }
 
@@ -151,10 +160,13 @@ struct SwingMeterState {
             }
             return .none
         case .accuracy:
-            needle += needleRate * dt
-            if needle >= SwingMeterState.needleEnd {
-                phase = .finished
-                return .completed(power: lockedPower, offset: needle)
+            needle += needleRate * needleDirection * dt
+            let edge = SwingMeterState.needleEdge
+            if needle >= edge || needle <= -edge {
+                // Bounce off the end of the bar and speed up slightly for the next pass.
+                needle = needle.clamped(-edge, edge)
+                needleDirection = -needleDirection
+                needleBoost = min(SwingMeterState.maxNeedleBoost, needleBoost * 1.12)
             }
             return .none
         default:
