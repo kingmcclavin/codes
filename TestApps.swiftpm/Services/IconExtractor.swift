@@ -81,8 +81,7 @@ enum IconExtractor {
     /// reload. Returns normalized PNG data, or nil if decoding failed.
     static func extractIconPNG(from parsed: ParsedIPA) -> Data? {
         guard let iconPath = parsed.iconEntryPath,
-              let raw = try? parsed.zip.extractData(atPath: iconPath),
-              let raw else { return nil }
+              let raw = try? parsed.zip.extractData(atPath: iconPath) else { return nil }
         // On-device UIImage can decode CgBI/optimized PNGs.
         guard let image = UIImage(data: raw) else { return raw } // fall back to raw bytes
         return image.pngData() ?? raw

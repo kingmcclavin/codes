@@ -174,7 +174,7 @@ final class AppLibraryManager: ObservableObject {
     }
 
     func deleteBuild(appID: UUID, versionID: UUID) {
-        guard var app = binding(for: appID) else { return }
+        guard let app = binding(for: appID) else { return }
         guard app.versions.count > 1 else {
             // Last build → delete the whole app.
             deleteApp(appID: appID)
@@ -187,7 +187,6 @@ final class AppLibraryManager: ObservableObject {
                 a.activeVersionID = a.versionsNewestFirst.first!.id
             }
         }
-        _ = app
         DiagnosticLogger.shared.log(.importer, "Deleted build \(versionID.uuidString.prefix(8))")
     }
 

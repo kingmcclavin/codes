@@ -150,7 +150,7 @@ enum IPAParser {
     /// the declared entitlement *keys* for the compatibility report.
     private static func readEntitlementKeys(zip: MiniZip, appPrefix: String) -> [String] {
         guard let data = try? zip.extractData(atPath: appPrefix + "embedded.mobileprovision"),
-              let data, !data.isEmpty else { return [] }
+              !data.isEmpty else { return [] }
         // Find the embedded XML plist inside the CMS blob.
         guard let xmlRange = Self.plistRange(in: data),
               let dict = try? PropertyListSerialization.propertyList(
