@@ -1,0 +1,167 @@
+# Generate the Xcode project with XcodeGen:
+#   brew install xcodegen && xcodegen generate && open ReelsGuard.xcodeproj
+#
+# Before building on a device, replace the bundle id prefix (com.example) and
+# the App Group (group.com.example.reelsguard, also in
+# Packages/ReelsGuardCore/Sources/ReelsGuardCore/SharedStore.swift) with your
+# own, and set DEVELOPMENT_TEAM.
+name: ReelsGuard
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+
+packages:
+  ReelsGuardCore:
+    path: Packages/ReelsGuardCore
+
+targets:
+  ReelsGuard:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/Sources
+      - path: Shared/WebGuard/reels-observer.js
+        buildPhase: resources
+    dependencies:
+      - package: ReelsGuardCore
+      - target: ReelsGuardShare
+      - target: ReelsGuardSafari
+      - target: ReelsGuardShieldConfiguration
+      - target: ReelsGuardShieldAction
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Reels Guard
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        CFBundleURLTypes:
+          - CFBundleURLName: com.example.reelsguard
+            CFBundleURLSchemes:
+              - reelsguard
+    entitlements:
+      path: App/ReelsGuard.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups:
+          - group.com.example.reelsguard
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.reelsguard
+
+  ReelsGuardShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extensions/Share
+    dependencies:
+      - package: ReelsGuardCore
+    info:
+      path: Extensions/Share/Info.plist
+      properties:
+        CFBundleDisplayName: Reels Guard
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsText: true
+    entitlements:
+      path: Extensions/Share/Share.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.example.reelsguard
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.reelsguard.share
+
+  ReelsGuardSafari:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extensions/SafariWeb/SafariWebExtensionHandler.swift
+      - path: Extensions/SafariWeb/Resources
+        buildPhase: resources
+      - path: Shared/WebGuard/reels-observer.js
+        buildPhase: resources
+    dependencies:
+      - package: ReelsGuardCore
+    info:
+      path: Extensions/SafariWeb/Info.plist
+      properties:
+        CFBundleDisplayName: Reels Guard
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.Safari.web-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
+    entitlements:
+      path: Extensions/SafariWeb/SafariWeb.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.example.reelsguard
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.reelsguard.safari
+
+  ReelsGuardShieldConfiguration:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extensions/ShieldConfiguration
+    info:
+      path: Extensions/ShieldConfiguration/Info.plist
+      properties:
+        CFBundleDisplayName: Reels Guard Shield
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettingsUI.shield-configuration-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldConfigurationExtension
+    entitlements:
+      path: Extensions/ShieldConfiguration/ShieldConfiguration.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.reelsguard.shield-configuration
+
+  ReelsGuardShieldAction:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extensions/ShieldAction
+    info:
+      path: Extensions/ShieldAction/Info.plist
+      properties:
+        CFBundleDisplayName: Reels Guard Shield Action
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettings.shield-action-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldActionExtension
+    entitlements:
+      path: Extensions/ShieldAction/ShieldAction.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.reelsguard.shield-action
+
+schemes:
+  ReelsGuard:
+    build:
+      targets:
+        ReelsGuard: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - package: ReelsGuardCore/ReelsGuardCoreTests

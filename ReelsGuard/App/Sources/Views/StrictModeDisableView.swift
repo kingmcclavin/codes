@@ -1,0 +1,60 @@
+import SwiftUI
+
+/// Turning Strict Mode off requires typing a sentence and waiting 30 seconds.
+/// The point isn't to make it impossible, just to make it a decision rather
+/// than a reflex.
+struct StrictModeDisableView: View {
+    static let phrase = "I want to turn off Strict Mode"
+    static let waitSeconds = 30
+
+    let onDisable: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var typed = ""
+    @State private var secondsLeft = StrictModeDisableView.waitSeconds
+
+    private var phraseMatches: Bool {
+        typed.trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare(Self.phrase) == .orderedSame
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text("You turned on Strict Mode on purpose. To turn it off, type the sentence below and wait for the timer.")
+                }
+                Section {
+                    Text(Self.phrase)
+                        .font(.body.monospaced())
+                    TextField("Type the sentence", text: $typed)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                }
+                Section {
+                    Button(role: .destructive) {
+                        onDisable()
+                        dismiss()
+                    } label: {
+                        Text(secondsLeft > 0 ? "Turn Off Strict Mode (\(secondsLeft)s)" : "Turn Off Strict Mode")
+                    }
+                    .disabled(!phraseMatches || secondsLeft > 0)
+                }
+            }
+            .navigationTitle("Turn Off Strict Mode")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Keep It On") { dismiss() }
+                }
+            }
+        }
+        .interactiveDismissDisabled()
+        .task {
+            while secondsLeft > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                if Task.isCancelled { return }
+                secondsLeft -= 1
+            }
+        }
+    }
+}

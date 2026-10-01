@@ -1,0 +1,125 @@
+import Foundation
+
+public struct GuardOutcome: Equatable, Sendable {
+    public var decision: GuardDecision
+    public var state: GuardState
+    public var budget: ReelTimeBudget
+}
+
+/// Pure decision function: (event, state, settings, budget, time) → outcome.
+///
+/// The engine has no side effects and no I/O, which makes the whole policy
+/// unit-testable and lets every enforcement surface (in-app browser, Safari
+/// extension) share exactly the same behaviour.
+public struct ReelsGuardEngine: Sendable {
+    public var rules: [any GuardRule]
+
+    public static let defaultRules: [any GuardRule] = [
+        PageRule(),
+        TimeBudgetRule(),
+        CurrentReelRule(),
+        ContinuationRule(),
+        EntryRule(),
+    ]
+
+    public init(rules: [any GuardRule] = ReelsGuardEngine.defaultRules) {
+        self.rules = rules
+    }
+
+    public func process(
+        _ event: GuardEvent,
+        state: GuardState,
+        settings: GuardSettings,
+        budget: ReelTimeBudget,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> GuardOutcome {
+        var state = state
+        var budget = budget
+        budget.normalize(now: now, calendar: calendar)
+        let policy = EffectivePolicy(settings)
+
+        switch event {
+        case let .watchTick(seconds):
+            guard state.activeReelAllowed, let limit = policy.reelLimit else {
+                return GuardOutcome(decision: .allow, state: state, budget: budget)
+            }
+            if let until = budget.record(seconds: seconds, limit: limit, cooldown: policy.cooldown, now: now) {
+                state.activeReelAllowed = false
+                return GuardOutcome(decision: .block(.timeUp(until: until)), state: state, budget: budget)
+            }
+            return GuardOutcome(decision: .allow, state: state, budget: budget)
+
+        case let .page(kind):
+            if let id = kind.reelID {
+                // A Reel URL without DOM details (creator unknown).
+                let author: String? = { if case let .reel(_, a) = kind { return a } else { return nil } }()
+                return processReel(ReelSighting(reelID: id, creator: author), state: state, settings: settings, policy: policy, budget: budget, now: now)
+            }
+            state.chain = nil
+            state.activeReelID = nil
+            state.activeReelAllowed = false
+            let context = GuardContext(page: kind, sighting: nil, transition: nil, follow: .unknown,
+                                       policy: policy, knownFollows: settings.knownFollows, budget: budget, now: now)
+            let decision = evaluate(context, fallback: .allow)
+            state.lastPage = kind
+            return GuardOutcome(decision: decision, state: state, budget: budget)
+
+        case let .reel(sighting):
+            return processReel(sighting, state: state, settings: settings, policy: policy, budget: budget, now: now)
+        }
+    }
+
+    private func processReel(
+        _ sighting: ReelSighting,
+        state: GuardState,
+        settings: GuardSettings,
+        policy: EffectivePolicy,
+        budget: ReelTimeBudget,
+        now: Date
+    ) -> GuardOutcome {
+        var state = state
+        let follow = FollowResolver(settings: settings).resolve(creator: sighting.creator, hint: sighting.followHint)
+
+        let transition: ReelTransition
+        if let chain = state.chain {
+            transition = chain.currentReelID == sighting.reelID ? .current : .continuation(chain)
+        } else {
+            transition = .entry(EntrySource(previousPage: state.lastPage))
+        }
+
+        let context = GuardContext(page: .reel(id: sighting.reelID, author: sighting.creator), sighting: sighting,
+                                   transition: transition, follow: follow, policy: policy,
+                                   knownFollows: settings.knownFollows, budget: budget, now: now)
+        let decision = evaluate(context, fallback: .block(.recommended))
+
+        if decision.isAllowed {
+            switch transition {
+            case let .entry(source):
+                let anchor: String? = { if case let .profile(u) = source { return u } else { return nil } }()
+                state.chain = ReelChain(entry: source, currentReelID: sighting.reelID, length: 1, anchorCreator: anchor)
+            case .continuation:
+                state.chain?.currentReelID = sighting.reelID
+                state.chain?.length += 1
+            case .current:
+                break
+            }
+        }
+        // A blocked continuation keeps the chain, so swiping back to the
+        // previous (allowed) Reel still works. A blocked entry starts no chain.
+        state.activeReelID = sighting.reelID
+        state.activeReelAllowed = decision.isAllowed
+        return GuardOutcome(decision: decision, state: state, budget: budget)
+    }
+
+    private func evaluate(_ context: GuardContext, fallback: GuardDecision) -> GuardDecision {
+        for rule in rules {
+            switch rule.verdict(for: context) {
+            case .allow: return .allow
+            case let .block(reason): return .block(reason)
+            case .abstain: continue
+            }
+        }
+        return fallback
+    }
+}

@@ -1,0 +1,50 @@
+import SwiftUI
+
+/// The local list used to recognise Reels from accounts the user follows.
+/// Instagram offers no public API for a user's follow list, so this list is
+/// built from the user's own input and from profiles they visit.
+struct FollowedAccountsView: View {
+    @EnvironmentObject private var model: SettingsModel
+    @State private var newName = ""
+
+    var body: some View {
+        List {
+            Section {
+                Toggle("Use on-page hints", isOn: model.binding(\.usePageHints))
+                Toggle("Learn from profiles I visit", isOn: model.binding(\.learnFollowsFromProfiles))
+            } footer: {
+                Text("On-page hints read the Follow / Following button shown next to a Reel's creator. Learning remembers accounts whose profile shows \"Following\" when you visit it. Both are best-effort and work on English-language Instagram only.")
+            }
+
+            Section("Added by you") {
+                HStack {
+                    TextField("username", text: $newName)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .onSubmit(add)
+                    Button("Add", action: add).disabled(newName.isEmpty)
+                }
+                ForEach(model.settings.manualFollows, id: \.self) { Text("@\($0)") }
+                    .onDelete(perform: model.removeManualFollows)
+            }
+
+            Section {
+                if model.settings.learnedFollows.isEmpty {
+                    Text("None yet.").foregroundStyle(.secondary)
+                }
+                ForEach(model.settings.learnedFollows, id: \.self) { Text("@\($0)") }
+                    .onDelete(perform: model.removeLearnedFollows)
+            } header: {
+                Text("Learned from profiles")
+            } footer: {
+                Text("Stored only on this device.")
+            }
+        }
+        .navigationTitle("Accounts I Follow")
+    }
+
+    private func add() {
+        model.addManualFollow(newName)
+        newName = ""
+    }
+}

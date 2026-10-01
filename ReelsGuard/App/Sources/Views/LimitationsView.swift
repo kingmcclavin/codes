@@ -1,0 +1,38 @@
+import SwiftUI
+
+/// In-app summary of docs/FEASIBILITY.md.
+struct LimitationsView: View {
+    var body: some View {
+        List {
+            Section("Works") {
+                Bullet("Instagram opened from Reels Guard: Reels you open from DMs, profiles, shared links and people you follow play normally. Swiping on to a Reel that isn't from someone you follow is blocked.")
+                Bullet("The Reels tab, and Reels opened from Explore or suggestions, are blocked.")
+                Bullet("The same rules in Safari on instagram.com, with the Reels Guard extension turned on.")
+                Bullet("Reels sent to you in the Instagram app can be shared to Reels Guard and watched here without a feed.")
+                Bullet("Optional Reel time limit with a cooldown.")
+                Bullet("Optional Screen Time lock for the whole Instagram app.")
+            }
+            Section("Doesn't work, and can't on iOS") {
+                Bullet("Filtering Reels inside the Instagram app. iOS doesn't let apps see or change other apps' screens. Doing so would need a jailbreak or a modified Instagram, which Reels Guard doesn't use.")
+                Bullet("Opening Reels Guard automatically from the share sheet or the Screen Time shield. iOS doesn't allow it, so you switch apps yourself.")
+                Bullet("Reading your real follow list. Instagram has no public API for it. Reels Guard uses on-page hints and the list in Accounts I Follow.")
+            }
+            Section("Best effort") {
+                Bullet("Creator and follow detection read instagram.com's page, which Instagram changes often. When it can't confirm a follow, the next Reel is blocked rather than allowed.")
+                Bullet("Follow / Following detection works on English-language Instagram.")
+                Bullet("Instagram may change or limit its website at any time.")
+            }
+            Section("Privacy") {
+                Bullet("No account, no server, no analytics. Settings, the Reel timer and your follow list stay on this device.")
+                Bullet("Reels Guard never sees your Instagram password or messages. You sign in on instagram.com itself.")
+            }
+        }
+        .navigationTitle("Can and Can't")
+    }
+}
+
+private struct Bullet: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View { Text(text).font(.callout) }
+}

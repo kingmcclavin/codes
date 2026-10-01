@@ -1,0 +1,59 @@
+import Foundation
+
+/// The optional Reel time limit.
+///
+/// Only Reel watch time inside guarded surfaces counts. Nothing else about
+/// Instagram use is measured. When the limit is off nothing is recorded at all.
+public struct ReelTimeBudget: Codable, Equatable, Sendable {
+    /// Start of the day the usage counter belongs to.
+    public var dayStart: Date
+    public var secondsUsed: TimeInterval
+    public var cooldownUntil: Date?
+
+    /// Longest single tick that is accepted, so one late report can't eat the budget.
+    public static let maxTick: TimeInterval = 15
+
+    public init(dayStart: Date = .distantPast, secondsUsed: TimeInterval = 0, cooldownUntil: Date? = nil) {
+        self.dayStart = dayStart
+        self.secondsUsed = secondsUsed
+        self.cooldownUntil = cooldownUntil
+    }
+
+    /// Ends an expired cooldown and starts a new counter each day.
+    public mutating func normalize(now: Date, calendar: Calendar = .current) {
+        if let until = cooldownUntil {
+            if now >= until {
+                cooldownUntil = nil
+                secondsUsed = 0
+                dayStart = calendar.startOfDay(for: now)
+            }
+            return
+        }
+        let today = calendar.startOfDay(for: now)
+        if dayStart != today {
+            dayStart = today
+            secondsUsed = 0
+        }
+    }
+
+    public func activeCooldown(now: Date) -> Date? {
+        guard let until = cooldownUntil, now < until else { return nil }
+        return until
+    }
+
+    /// Adds watch time. Returns the cooldown end date if this used up the limit.
+    public mutating func record(seconds: TimeInterval, limit: TimeInterval, cooldown: TimeInterval, now: Date) -> Date? {
+        guard activeCooldown(now: now) == nil else { return cooldownUntil }
+        secondsUsed += min(max(seconds, 0), Self.maxTick)
+        if secondsUsed >= limit {
+            let until = now.addingTimeInterval(cooldown)
+            cooldownUntil = until
+            return until
+        }
+        return nil
+    }
+
+    public func remaining(limit: TimeInterval) -> TimeInterval {
+        max(limit - secondsUsed, 0)
+    }
+}

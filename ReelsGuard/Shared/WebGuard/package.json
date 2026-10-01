@@ -1,0 +1,11 @@
+{
+  "name": "reels-guard-web",
+  "private": true,
+  "description": "Tests for the shared Reels Guard page observer",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}
