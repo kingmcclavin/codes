@@ -28,6 +28,12 @@ Requirements: Swift Playgrounds 4.4 or newer and iPadOS 17 or newer.
 
 ---
 
+## Exporting an .ipa
+
+**Settings → Export .ipa** packages the running app (`App/Export/ExportIPA.swift`) and opens the Files
+save sheet. Run the app from Swift Playgrounds first, then export. The .ipa is unsigned, so it must be signed
+(for example with a sideloading tool) before it can be installed on a device.
+
 ## How to play
 
 | Step | Action |
@@ -39,6 +45,7 @@ Requirements: Swift Playgrounds 4.4 or newer and iPadOS 17 or newer.
 | Putt | Hold and release only. Read the pulsing slope arrows; only part of the roll line is shown. |
 | Wind | Shown top right relative to your view. It pushes the ball in flight; the preview ignores it. |
 | 👁 | Toggles a whole-hole overview. ↩︎ resets the aim. |
+| 🔭 LANDING | Moves the camera to the landing area around your target (2D and 3D). Drag to fine-tune the aim there; tap **BALL** to go back. It switches off when you swing. |
 
 Beat (or match) the rival's target score to unlock the next course. Earn coins, buy packs, collect clubs,
 level them up with duplicate cards and swap them into your bag.

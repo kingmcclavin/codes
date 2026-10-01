@@ -14,6 +14,8 @@ protocol GolfRenderer: AnyObject {
     func setPreview(points: [Vec3], landingIndex: Int?, isPutt: Bool, visibleFraction: Double)
     func hidePreview()
     func setOverview(_ on: Bool)
+    /// Camera looks at the aim target (landing area) instead of the ball while aiming.
+    func setLandingView(_ on: Bool)
     func launch(_ shot: ShotLaunch)
 }
 

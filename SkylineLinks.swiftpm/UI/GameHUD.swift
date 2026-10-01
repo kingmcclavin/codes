@@ -83,6 +83,22 @@ struct GameHUD: View {
                 }
             }
             Spacer(minLength: 0)
+            if controller.phase == .aiming || controller.phase == .swinging {
+                Button {
+                    controller.toggleLandingView()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "binoculars.fill")
+                        Text(controller.landingView ? "BALL" : "LANDING")
+                            .font(.system(size: 12, weight: .heavy, design: .rounded))
+                    }
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(controller.landingView ? .black : .white)
+                    .padding(.horizontal, 12)
+                    .frame(height: 40)
+                    .background(Capsule().fill(controller.landingView ? Color(red: 1, green: 0.85, blue: 0.3) : Color.black.opacity(0.5)))
+                }
+            }
             Button {
                 controller.resetAim()
             } label: {

@@ -43,6 +43,7 @@ final class GolfGameScene: SKScene {
     private var aimRotation = 0.0
     private var isPuttView = false
     private var isDragging = false
+    private var landingOn = false
     private var introTime = 0.0
     private var introDone: (() -> Void)?
 
@@ -245,6 +246,10 @@ final class GolfGameScene: SKScene {
         for d in dots { d.isHidden = true }
     }
 
+    func setLandingView(_ on: Bool) {
+        landingOn = on
+    }
+
     func setOverview(_ on: Bool) {
         if on {
             if cameraMode != .overview { modeBeforeOverview = cameraMode }
@@ -357,11 +362,18 @@ final class GolfGameScene: SKScene {
             }
         case .aiming:
             if !isDragging {
-                var pts = [aimFrom, aimTo]
-                if isPuttView, let hole = hole { pts.append(hole.cup) }
-                rig.frame(points: pts, rotation: aimRotation, viewWidth: w, viewHeight: h,
-                          topInset: topInset, bottomInset: bottomInset,
-                          padding: isPuttView ? 3 : 18, minScale: isPuttView ? 0.03 : 0.1)
+                if landingOn {
+                    // Close-up of the landing area around the target.
+                    rig.frame(points: [aimTo], rotation: aimRotation, viewWidth: w, viewHeight: h,
+                              topInset: topInset, bottomInset: bottomInset,
+                              padding: isPuttView ? 4 : 30, minScale: isPuttView ? 0.02 : 0.05)
+                } else {
+                    var pts = [aimFrom, aimTo]
+                    if isPuttView, let hole = hole { pts.append(hole.cup) }
+                    rig.frame(points: pts, rotation: aimRotation, viewWidth: w, viewHeight: h,
+                              topInset: topInset, bottomInset: bottomInset,
+                              padding: isPuttView ? 3 : 18, minScale: isPuttView ? 0.03 : 0.1)
+                }
             }
         case .flight:
             let rolling = sim?.state.phase == .rolling

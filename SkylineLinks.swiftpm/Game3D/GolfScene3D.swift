@@ -93,6 +93,7 @@ final class GolfScene3D: NSObject, GolfRenderer {
     private var introDone: (() -> Void)?
     private var flightDir = Vec2(0, 1)
     private var shotIsPutt = false
+    private var landingOn = false
 
     private var ballGround = Vec2.zero
     private var ballZ = 0.0
@@ -352,6 +353,10 @@ final class GolfScene3D: NSObject, GolfRenderer {
         for d in dots { d.isHidden = true }
     }
 
+    func setLandingView(_ on: Bool) {
+        landingOn = on
+    }
+
     func setOverview(_ on: Bool) {
         if on {
             if mode != .overview { modeBeforeOverview = mode }
@@ -479,7 +484,11 @@ final class GolfScene3D: NSObject, GolfRenderer {
                 done?()
             }
         case .aiming:
-            aimingPose(hole)
+            if landingOn {
+                landingPose(hole)
+            } else {
+                aimingPose(hole)
+            }
         case .flight:
             flightPose(hole)
         case .overview:
@@ -511,6 +520,17 @@ final class GolfScene3D: NSObject, GolfRenderer {
         // Point 30 yards along the view direction, pitched down by `pitch`.
         let lookGround = aimFrom - f * back + f * (30 * cos(pitch))
         lookTarget = P3(world: lookGround, height: g + height - 30 * sin(pitch))
+    }
+
+    /// Hovers above and behind the aim target so the landing area is easy to read.
+    private func landingPose(_ hole: GolfHole) {
+        let toTarget = aimTo - aimFrom
+        let f = toTarget.length > 0.01 ? toTarget.normalized : (hole.cup - aimFrom).normalized
+        let g = hole.groundHeight(at: aimTo)
+        let back = isPutt ? 5.0 : 26.0
+        let height = isPutt ? 6.0 : 24.0
+        eyeTarget = P3(world: aimTo - f * back, height: g + height)
+        lookTarget = P3(world: aimTo + f * (isPutt ? 0.5 : 4), height: g)
     }
 
     /// Chase camera that trails the ball along the shot line.

@@ -40,6 +40,8 @@ struct SettingsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .panel()
 
+                        ExportAppSection()
+
                         Button("Reset all progress") { confirmReset = true }
                             .buttonStyle(BigButtonStyle(color: UIStyle.danger, foreground: .white))
                     }

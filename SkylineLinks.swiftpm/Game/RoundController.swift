@@ -78,6 +78,7 @@ final class RoundController: ObservableObject {
     @Published private(set) var playsLike = 0.0
     @Published private(set) var viewRotation = 0.0
     @Published private(set) var overview = false
+    @Published private(set) var landingView = false
     @Published private(set) var lastHoleTitle = ""
     @Published private(set) var finishedResult: RoundResult?
     @Published var banner: GameBanner?
@@ -148,8 +149,10 @@ final class RoundController: ObservableObject {
         ballPos = h.tee
         previousPos = h.tee
         overview = false
+        landingView = false
         phase = .intro
         renderer.loadHole(h, theme: theme)
+        renderer.setLandingView(false)
         renderer.placeBall(at: ballPos)
         renderer.playIntro { [weak self] in
             guard let self = self else { return }
@@ -219,7 +222,23 @@ final class RoundController: ObservableObject {
 
     func toggleOverview() {
         overview.toggle()
+        if overview && landingView {
+            landingView = false
+            renderer.setLandingView(false)
+        }
         renderer.setOverview(overview)
+    }
+
+    /// Shows the landing area around the aim target. Dragging still adjusts the aim.
+    func toggleLandingView() {
+        guard phase == .aiming || phase == .swinging else { return }
+        landingView.toggle()
+        if landingView && overview {
+            overview = false
+            renderer.setOverview(false)
+        }
+        renderer.setLandingView(landingView)
+        Feedback.shared.impact(.light)
     }
 
     /// Called every frame by the renderer.
@@ -332,6 +351,10 @@ final class RoundController: ObservableObject {
             }
         }
         phase = .ballMoving
+        if landingView {
+            landingView = false
+            renderer.setLandingView(false)
+        }
         renderer.launch(shot)
     }
 
