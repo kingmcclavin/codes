@@ -74,6 +74,7 @@ SkylineLinks.swiftpm
 │   └── RoundController.swift   round rules: strokes, penalties, clubs, swing → shot
 ├── Game3D/
 │   ├── Course3DBuilder.swift   terrain mesh following elevation, painted course texture, 3D trees/rocks/cacti
+│   ├── ClubSwing3D.swift       procedural 3D club models + swing animation (backswing, impact, follow-through, path trail)
 │   └── GolfScene3D.swift       SceneKit view: chase camera, ball, flag, aim ring, preview, effects, drag aiming
 ├── Swing/SwingSystem.swift     timing windows, 3‑step swing meter, shot planner, auto aim advisor, score names
 ├── Clubs/
@@ -123,6 +124,10 @@ Both views share the same rules, physics, swing and HUD; only the drawing and ca
   and the 👁 button gives a high overview of the hole.
 * The ground is a mesh that follows the hole's uphill/downhill shape, textured with a painted top-down
   image of the hole so fairway, green and bunker edges stay sharp. Trees, pines, palms, cacti and rocks are 3D.
+* The selected club is modelled in 3D at the ball (shaft in the card's rarity colour; wood, iron, wedge and
+  putter heads). It follows the power meter on the backswing, holds at the top during the timing step, then
+  swings through; the ball leaves at impact. The club head leaves a trail coloured by the result
+  (green perfect → red poor), and early/late swings visibly cut across the line after impact.
 * SceneKit is built into iPadOS and works in Swift Playgrounds. Apple has marked it as no longer getting new
   features, but it continues to run.
 

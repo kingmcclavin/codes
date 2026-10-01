@@ -94,6 +94,9 @@ final class GolfScene3D: NSObject, GolfRenderer {
     private var flightDir = Vec2(0, 1)
     private var shotIsPutt = false
     private var landingOn = false
+    private let swingRig = ClubSwingRig()
+    /// A struck shot waiting for the club to reach the ball.
+    private var pendingShot: ShotLaunch?
 
     private var ballGround = Vec2.zero
     private var ballZ = 0.0
@@ -171,6 +174,7 @@ final class GolfScene3D: NSObject, GolfRenderer {
         scene.rootNode.addChildNode(ballShadow)
         scene.rootNode.addChildNode(ballNode)
         scene.rootNode.addChildNode(cupNode)
+        scene.rootNode.addChildNode(swingRig.root)
 
         let pole = SCNCylinder(radius: 0.035, height: 3.0)
         pole.materials = [Course3DBuilder.material(.white)]
@@ -271,6 +275,8 @@ final class GolfScene3D: NSObject, GolfRenderer {
         cupNode.position = P3(world: hole.cup, height: cupGround + 0.012).scn
         flagNode.position = P3(world: hole.cup, height: cupGround).scn
         sim = nil
+        pendingShot = nil
+        swingRig.hide()
         hidePreview()
         reticle.isHidden = true
     }
@@ -281,6 +287,33 @@ final class GolfScene3D: NSObject, GolfRenderer {
         ballZ = hole?.groundHeight(at: p) ?? 0
         ballNode.isHidden = false
         ballShadow.isHidden = false
+        placeClub()
+    }
+
+    // MARK: - Club
+
+    private func syncClubModel() -> Bool {
+        guard let c = controller else { return false }
+        let club = c.currentClub
+        return swingRig.setClub(type: club.type, key: club.card.id, accent: club.card.rarity.color.ui)
+    }
+
+    /// Puts the club at address behind the resting ball, aimed at the target.
+    private func placeClub() {
+        guard let hole = hole, sim == nil, pendingShot == nil else { return }
+        _ = syncClubModel()
+        swingRig.place(ballGround: ballGround, groundHeight: hole.groundHeight(at: ballGround), aimDir: aimTo - aimFrom)
+    }
+
+    private func outcomeColor(_ outcome: SwingOutcome?) -> UIColor {
+        guard let o = outcome else { return UIColor.white }
+        switch o {
+        case .perfect: return UIColor(red: 0.2, green: 0.95, blue: 0.4, alpha: 1)
+        case .great: return UIColor(red: 0.65, green: 1, blue: 0.5, alpha: 1)
+        case .good: return UIColor(red: 1, green: 0.9, blue: 0.3, alpha: 1)
+        case .early, .late: return UIColor(red: 1, green: 0.6, blue: 0.2, alpha: 1)
+        case .poor: return UIColor(red: 1, green: 0.3, blue: 0.3, alpha: 1)
+        }
     }
 
     func playIntro(completion: @escaping () -> Void) {
@@ -315,6 +348,7 @@ final class GolfScene3D: NSObject, GolfRenderer {
             stiffness = 3.0
         }
         reticle.isHidden = false
+        placeClub()
     }
 
     func setPreview(points: [Vec3], landingIndex: Int?, isPutt: Bool, visibleFraction: Double) {
@@ -369,19 +403,29 @@ final class GolfScene3D: NSObject, GolfRenderer {
     }
 
     func launch(_ shot: ShotLaunch) {
-        guard let hole = hole else { return }
-        sim = BallSimulator(hole: hole, state: shot.state, options: shot.options)
-        let v = shot.state.vel
-        flightDir = v.length > 0.01 ? v.normalized : (aimTo - aimFrom).normalized
-        shotIsPutt = shot.state.phase == .rolling
-        finishCountdown = 0
-        trailTimer = 0
+        guard hole != nil else { return }
         hidePreview()
         reticle.isHidden = true
+        // Swing the club first; the ball leaves at impact (see frameTick).
+        if swingRig.startDownswing(sideSpin: shot.state.sideSpin, outcomeColor: outcomeColor(shot.outcome)) {
+            pendingShot = shot
+        } else {
+            beginFlight(shot)
+        }
         if mode != .overview {
             mode = .flight
             stiffness = 4.0
         }
+        let v = shot.state.vel
+        flightDir = v.length > 0.01 ? v.normalized : (aimTo - aimFrom).normalized
+        shotIsPutt = shot.state.phase == .rolling
+    }
+
+    private func beginFlight(_ shot: ShotLaunch) {
+        guard let hole = hole else { return }
+        sim = BallSimulator(hole: hole, state: shot.state, options: shot.options)
+        finishCountdown = 0
+        trailTimer = 0
     }
 
     // MARK: - Frame loop
@@ -393,6 +437,15 @@ final class GolfScene3D: NSObject, GolfRenderer {
         if paused { return }
         dt = dt.clamped(0, 1.0 / 20.0)
         controller?.tick(dt)
+        if swingRig.isAtAddress && syncClubModel() {
+            placeClub()
+        }
+        swingRig.update(dt, meter: controller?.meter.state, trailParent: scene.rootNode)
+        if swingRig.takeImpact(), let shot = pendingShot {
+            pendingShot = nil
+            beginFlight(shot)
+            burst(at: P3(world: ballGround, height: ballZ + 0.1), color: UIColor.white, count: 8, size: 0.05, spread: 0.6)
+        }
         stepBall(dt)
         updateCamera(dt)
         layoutDynamicNodes()
