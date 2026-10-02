@@ -1,6 +1,8 @@
 import XCTest
 @testable import InkPad
 
+private func pw(_ x: Double, _ n: Double) -> Double { Foundation.pow(x, n) }
+
 final class SolverTests: XCTestCase {
     private let engine = CalculatorEngine(angleMode: .radians, formulas: BuiltInFormulas.all)
 
@@ -122,26 +124,32 @@ final class StructuralTests: XCTestCase {
         let r = try SectionProperties.compute(.rectangle, ["b": 100, "h": 200])
         XCTAssertEqual(r.area, 20_000)
         XCTAssertEqual(r.centroidY, 100)
-        XCTAssertEqual(r.ix, 100 * pow(200, 3) / 12, accuracy: 1e-6)
+        XCTAssertEqual(r.ix, 100 * pw(200, 3) / 12, accuracy: 1e-6)
         XCTAssertEqual(r.sx, r.ix / 100, accuracy: 1e-9)
 
         let i = try SectionProperties.compute(.iBeam, ["b": 100, "h": 200, "tf": 10, "tw": 6])
         XCTAssertEqual(i.area, 2 * 100 * 10 + 6 * 180, accuracy: 1e-9)
         XCTAssertEqual(i.centroidY, 100, accuracy: 1e-9)
-        let expected = (100 * pow(200, 3) - 94 * pow(180, 3)) / 12
+        let expected: Double = (100 * pw(200, 3) - 94 * pw(180, 3)) / 12
         XCTAssertEqual(i.ix, expected, accuracy: 1e-6)
-        XCTAssertEqual(i.iy, 2 * 10 * pow(100, 3) / 12 + 180 * pow(6, 3) / 12, accuracy: 1e-6)
+        let flanges: Double = 2 * 10 * pw(100, 3) / 12
+        let web: Double = 180 * pw(6, 3) / 12
+        XCTAssertEqual(i.iy, flanges + web, accuracy: 1e-6)
     }
 
     func testHollowShapesAndTee() throws {
         let tube = try SectionProperties.compute(.tube, ["D": 60, "t": 5])
-        XCTAssertEqual(tube.ix, .pi * (pow(60, 4) - pow(50, 4)) / 64, accuracy: 1e-6)
+        let tubeI: Double = Double.pi * (pw(60, 4) - pw(50, 4)) / 64
+        XCTAssertEqual(tube.ix, tubeI, accuracy: 1e-6)
         let box = try SectionProperties.compute(.hollowRectangle, ["b": 100, "h": 200, "t": 10])
-        XCTAssertEqual(box.ix, (100 * pow(200, 3) - 80 * pow(180, 3)) / 12, accuracy: 1e-6)
-        XCTAssertEqual(box.iy, (200 * pow(100, 3) - 180 * pow(80, 3)) / 12, accuracy: 1e-6)
+        let boxIx: Double = (100 * pw(200, 3) - 80 * pw(180, 3)) / 12
+        let boxIy: Double = (200 * pw(100, 3) - 180 * pw(80, 3)) / 12
+        XCTAssertEqual(box.ix, boxIx, accuracy: 1e-6)
+        XCTAssertEqual(box.iy, boxIy, accuracy: 1e-6)
         let tee = try SectionProperties.compute(.tee, ["b": 100, "h": 100, "tf": 20, "tw": 20])
         // Web 20×80 (centroid 40), flange 100×20 (centroid 90): ȳ = (1600·40 + 2000·90) / 3600
-        XCTAssertEqual(tee.centroidY, (1600 * 40 + 2000 * 90) / 3600.0, accuracy: 1e-9)
+        let teeY: Double = (1600 * 40 + 2000 * 90) / 3600
+        XCTAssertEqual(tee.centroidY, teeY, accuracy: 1e-9)
         XCTAssertThrowsError(try SectionProperties.compute(.tube, ["D": 10, "t": 6]))
         XCTAssertThrowsError(try SectionProperties.compute(.rectangle, ["b": 10]))
     }
@@ -155,7 +163,8 @@ final class StructuralTests: XCTestCase {
         XCTAssertEqual(r.reactionRight, p / 2, accuracy: 1e-9)
         XCTAssertEqual(r.maxMoment.value, p * l / 4, accuracy: 1e-6)
         XCTAssertEqual(r.maxMoment.x, l / 2, accuracy: 1e-9)
-        XCTAssertEqual(r.maxDeflection.value, p * pow(l, 3) / (48 * ei), accuracy: p * pow(l, 3) / (48 * ei) * 1e-3)
+        let expected: Double = p * pw(l, 3) / (48 * ei)
+        XCTAssertEqual(r.maxDeflection.value, expected, accuracy: expected * 1e-3)
         XCTAssertEqual(r.maxShear, p / 2, accuracy: 1e-9)
         XCTAssertEqual(r.moment.first ?? 1, 0, accuracy: 1e-9)
         XCTAssertEqual(r.moment.last ?? 1, 0, accuracy: 1e-6)
@@ -166,7 +175,7 @@ final class StructuralTests: XCTestCase {
         let r = try Beam(support: .simplySupported, length: l, loads: [.distributed(w: w, a: 0, b: l)], ei: ei).analyze()
         XCTAssertEqual(r.reactionLeft, w * l / 2, accuracy: 1e-6)
         XCTAssertEqual(r.maxMoment.value, w * l * l / 8, accuracy: 1e-3)
-        let expected = 5 * w * pow(l, 4) / (384 * ei)
+        let expected: Double = 5 * w * pw(l, 4) / (384 * ei)
         XCTAssertEqual(r.maxDeflection.value, expected, accuracy: expected * 1e-3)
     }
 
@@ -177,7 +186,7 @@ final class StructuralTests: XCTestCase {
         XCTAssertEqual(r.fixedMoment, -p * l, accuracy: 1e-9)
         XCTAssertEqual(r.maxMoment.value, -p * l, accuracy: 1e-9)
         XCTAssertEqual(r.moment.last ?? 1, 0, accuracy: 1e-9)
-        let expected = p * pow(l, 3) / (3 * ei)
+        let expected: Double = p * pw(l, 3) / (3 * ei)
         XCTAssertEqual(r.maxDeflection.value, expected, accuracy: expected * 1e-3)
         XCTAssertEqual(r.maxDeflection.x, l, accuracy: 1e-9)
     }
