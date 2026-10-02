@@ -301,8 +301,18 @@ struct CalculatorEngine {
 
     /// Evaluates a standalone expression with explicit values (tools, graphs, tables).
     func evaluate(expression text: String, values: [String: Double]) throws -> Double {
-        let e = try parser().parseExpression(text)
-        return try Scope(engine: self, values: values).evaluate(e)
+        try evaluate(compile(text, names: Set(values.keys)), values: values)
+    }
+
+    /// Parses an expression once for repeated evaluation (graphs, table
+    /// columns). `names` are kept whole by the parser (`vel` ≠ v·e·l).
+    func compile(_ text: String, names: Set<String> = []) throws -> Expr {
+        try ExpressionParser(knownNames: knownNames.union(names)).parseExpression(text)
+    }
+
+    /// Evaluates a compiled expression with explicit values.
+    func evaluate(_ expr: Expr, values: [String: Double]) throws -> Double {
+        try Scope(engine: self, values: values).evaluate(expr)
     }
 
     /// Current value of a calculator variable.

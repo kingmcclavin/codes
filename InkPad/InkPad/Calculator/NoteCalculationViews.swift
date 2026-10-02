@@ -252,8 +252,17 @@ struct CalculationCardEditor: View {
 /// Menu listing open and recent notebooks; picking one opens it and offers
 /// the calculation for insertion on the current page.
 struct InsertIntoNotebookMenu<MenuLabel: View>: View {
-    let block: () -> CalculationBlock
-    @ViewBuilder let label: () -> MenuLabel
+    let item: () -> NoteInsertion?
+    let label: () -> MenuLabel
+
+    init(item: @escaping () -> NoteInsertion?, @ViewBuilder label: @escaping () -> MenuLabel) {
+        self.item = item
+        self.label = label
+    }
+
+    init(block: @escaping () -> CalculationBlock, @ViewBuilder label: @escaping () -> MenuLabel) {
+        self.init(item: { .calculation(block()) }, label: label)
+    }
 
     @EnvironmentObject private var calc: CalculatorStore
     @EnvironmentObject private var tabs: TabsModel
@@ -287,7 +296,8 @@ struct InsertIntoNotebookMenu<MenuLabel: View>: View {
     }
 
     private func insert(into id: UUID) {
-        calc.pendingInsertion = block()
+        guard let payload = item() else { return }
+        calc.pendingInsertion = payload
         tabs.open(id)
     }
 }

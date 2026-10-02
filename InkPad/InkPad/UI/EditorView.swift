@@ -71,9 +71,25 @@ struct EditorView: View {
 
     /// A calculation sent here from the calculator or a formula.
     private func takePendingCalculation() {
-        guard let block = calc.pendingInsertion else { return }
+        guard let item = calc.pendingInsertion else { return }
         calc.pendingInsertion = nil
-        DispatchQueue.main.async { editor.newCalculation(block) }
+        switch item {
+        case let .calculation(block):
+            DispatchQueue.main.async { editor.newCalculation(block) }
+        case let .image(image):
+            insertWhenReady(image, attempts: 10)
+        }
+    }
+
+    /// The canvas is created a moment after the editor appears.
+    private func insertWhenReady(_ image: UIImage, attempts: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            if editor.canvas != nil {
+                editor.insertImage(image)
+            } else if attempts > 0 {
+                insertWhenReady(image, attempts: attempts - 1)
+            }
+        }
     }
 
     private func close() {

@@ -1,5 +1,12 @@
 import Foundation
 import SwiftUI
+import UIKit
+
+/// Something waiting to be placed on the active note's page.
+enum NoteInsertion: Equatable {
+    case calculation(CalculationBlock)
+    case image(UIImage)
+}
 
 /// App-wide calculator state: saved formulas, variables, history and
 /// settings, persisted as small versioned JSON files (works offline, no
@@ -17,7 +24,8 @@ final class CalculatorStore: ObservableObject {
     @Published private(set) var ans: Double?
 
     /// A calculation waiting to be inserted into the active note.
-    @Published var pendingInsertion: CalculationBlock?
+    @Published var pendingInsertion: NoteInsertion?
+    @Published private(set) var tables: [DataTable] = []
 
     private let directory: URL
     private let ioQueue = DispatchQueue(label: "Basis.calculator.io", qos: .utility)
@@ -34,6 +42,7 @@ final class CalculatorStore: ObservableObject {
         userFormulas = load([Formula].self, "formulas.json") ?? []
         variables = load([CalcVariable].self, "variables.json") ?? []
         history = load([CalculationRecord].self, "history.json") ?? []
+        tables = load([DataTable].self, "tables.json") ?? []
     }
 
     // MARK: Engine
@@ -169,6 +178,32 @@ final class CalculatorStore: ObservableObject {
         return result
     }
 
+    // MARK: Data tables
+
+    func table(id: UUID?) -> DataTable? { tables.first { $0.id == id } }
+
+    func save(_ table: DataTable) {
+        var t = table
+        t.modified = Date()
+        if let i = tables.firstIndex(where: { $0.id == t.id }) { tables[i] = t } else { tables.insert(t, at: 0) }
+        save(tables, "tables.json")
+    }
+
+    func delete(_ table: DataTable) {
+        tables.removeAll { $0.id == table.id }
+        save(tables, "tables.json")
+    }
+
+    @discardableResult
+    func duplicate(_ table: DataTable) -> DataTable {
+        var copy = table
+        copy.id = UUID()
+        copy.name += " Copy"
+        copy.created = Date()
+        save(copy)
+        return copy
+    }
+
     // MARK: History
 
     func record(_ r: CalculationRecord) {
@@ -224,11 +259,12 @@ final class CalculatorStore: ObservableObject {
             var formulas: [Formula]
             var variables: [CalcVariable]
             var history: [CalculationRecord]
+            var tables: [DataTable]
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(Export(formulas: userFormulas, variables: variables, history: history)) else { return nil }
+        guard let data = try? encoder.encode(Export(formulas: userFormulas, variables: variables, history: history, tables: tables)) else { return nil }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("Basis Calculator Data.json")
         return (try? data.write(to: url, options: .atomic)) == nil ? nil : url
     }

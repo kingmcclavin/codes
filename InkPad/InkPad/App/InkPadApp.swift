@@ -94,7 +94,7 @@ struct RootView: View {
         case .tools:
             ToolsView()
         case .data:
-            NavigationStack { DataPlaceholderView() }
+            DataHomeView()
         case .history:
             HistoryView()
         case .settings:

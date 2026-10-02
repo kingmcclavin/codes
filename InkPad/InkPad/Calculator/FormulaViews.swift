@@ -562,6 +562,13 @@ struct ToolsView: View {
                              summary: "Length, force, energy, pressure, temperature and more — including compound units.")
                     }
                     .buttonStyle(.plain)
+                    NavigationLink {
+                        FunctionGraphView()
+                    } label: {
+                        card(icon: "function", title: "Function Grapher",
+                             summary: "Plot up to eight functions of x, trace values and add graphs to your notes.")
+                    }
+                    .buttonStyle(.plain)
                     ForEach(featured, id: \.id) { item in
                         if let f = formula(item.id) {
                             NavigationLink(value: f.id) {
@@ -621,7 +628,7 @@ struct BasisSettingsView: View {
                     Button("Export App (.ipa)…", systemImage: "app.badge") { showExportApp = true }
                 }
                 Section {
-                    LabeledContent("Version", value: "Basis 2.0 (Stage 5)")
+                    LabeledContent("Version", value: "Basis 2.0 (Stage 6)")
                 } footer: {
                     Text("Everything is stored on this iPad. Notes live in Files › On My iPad › Basis.")
                 }
@@ -639,15 +646,6 @@ struct BasisSettingsView: View {
 private struct SharedFile: Identifiable {
     let url: URL
     var id: URL { url }
-}
-
-/// Placeholder until the data/graphing stage.
-struct DataPlaceholderView: View {
-    var body: some View {
-        ContentUnavailableView("Data & Graphs", systemImage: "tablecells",
-                               description: Text("Tables, statistics and graphing arrive in Stage 6."))
-            .navigationTitle("Data")
-    }
 }
 
 // MARK: - Pretty math
