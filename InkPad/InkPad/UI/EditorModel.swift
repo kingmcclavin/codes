@@ -18,6 +18,14 @@ struct SelectionSummary: Equatable {
     var opacity: CGFloat?
 }
 
+/// Opens the calculation sheet: a new card (`element == nil`) or an existing one.
+struct CalculationEditRequest: Identifiable {
+    let id = UUID()
+    var block: CalculationBlock
+    var element: TextElement?
+    var pageID: UUID?
+}
+
 /// Bridges the document/engine and the SwiftUI interface.
 @MainActor
 final class EditorModel: ObservableObject {
@@ -52,6 +60,7 @@ final class EditorModel: ObservableObject {
     @Published var shareURL: URL?
     @Published var showPDFImporter = false
     @Published var importError: String?
+    @Published var calculationRequest: CalculationEditRequest?
 
     private var previousTool: ToolKind = .pen
     private var observers: [NSObjectProtocol] = []
@@ -282,6 +291,20 @@ final class EditorModel: ObservableObject {
     func exportPDF() {
         flush()
         shareURL = canvas?.exportPDF()
+    }
+
+    // MARK: Calculations
+
+    func newCalculation(_ block: CalculationBlock = .expression("")) {
+        calculationRequest = CalculationEditRequest(block: block)
+    }
+
+    func commitCalculation(_ request: CalculationEditRequest, block: CalculationBlock, text: String) {
+        if let element = request.element, let pageID = request.pageID {
+            canvas?.updateCalculation(element, pageID: pageID, block: block, text: text)
+        } else {
+            canvas?.insertCalculation(block, text: text)
+        }
     }
 
     func insertImage(_ image: UIImage) {

@@ -110,6 +110,9 @@ struct CalculatorView: View {
                                 UIPasteboard.general.string = r.results.first.map { NumberFormatting.plain($0.value) }
                             }
                             Button("Use Expression", systemImage: "arrow.down.doc") { calc.draftExpression = r.expression }
+                            InsertIntoNotebookMenu(block: { calc.expressionBlock(r.expression) }) {
+                                Label("Insert into Notebook", systemImage: "note.text.badge.plus")
+                            }
                         }
                         .id(r.id)
                     }

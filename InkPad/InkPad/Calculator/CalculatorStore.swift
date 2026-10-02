@@ -17,7 +17,7 @@ final class CalculatorStore: ObservableObject {
     @Published private(set) var ans: Double?
 
     /// A calculation waiting to be inserted into the active note.
-    @Published var pendingInsertion: CalculationRecord?
+    @Published var pendingInsertion: CalculationBlock?
 
     private let directory: URL
     private let ioQueue = DispatchQueue(label: "Basis.calculator.io", qos: .utility)
@@ -47,6 +47,44 @@ final class CalculatorStore: ObservableObject {
     func formula(id: UUID?) -> Formula? {
         guard let id else { return nil }
         return allFormulas.first { $0.id == id }
+    }
+
+    // MARK: Note cards
+
+    func engine(for block: CalculationBlock) -> CalculatorEngine {
+        CalculationBlock.engine(for: block, angleMode: angleMode, library: allFormulas, variables: variables)
+    }
+
+    func renderedText(_ block: CalculationBlock) -> String {
+        block.renderText(engine: engine(for: block))
+    }
+
+    /// A note card for typed lines. Calculator variables used by the lines
+    /// are captured as inputs, so the card shows (and keeps) their values.
+    func expressionBlock(_ text: String) -> CalculationBlock {
+        var block = CalculationBlock.expression(text)
+        let e = engine(for: block)
+        for name in e.inputs(of: block.formula) {
+            if let v = variables.first(where: { $0.name == name }), let x = try? e.value(ofVariable: name) {
+                block.inputs[name] = NumberFormatting.plain(x)
+                if !v.unit.isEmpty { block.formula.variables.append(FormulaVariable(name: name, unit: v.unit)) }
+            }
+        }
+        return block
+    }
+
+    /// A note card for a saved formula.
+    func formulaBlock(_ formula: Formula, inputs: [String: String] = [:]) -> CalculationBlock {
+        CalculationBlock(formula: formula, libraryID: formula.id, inputs: inputs)
+    }
+
+    /// A note card that reproduces a history entry.
+    func block(for record: CalculationRecord) -> CalculationBlock {
+        if let f = formula(id: record.formulaID) {
+            return formulaBlock(f, inputs: Dictionary(record.inputs.map { ($0.name, NumberFormatting.plain($0.value)) },
+                                                      uniquingKeysWith: { a, _ in a }))
+        }
+        return expressionBlock(record.expression)
     }
 
     var categories: [String] {

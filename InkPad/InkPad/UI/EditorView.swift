@@ -6,6 +6,7 @@ struct EditorView: View {
     /// Called by the back button; defaults to dismissing the view.
     var onClose: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var calc: CalculatorStore
     @State private var renaming = false
     @State private var renameText = ""
 
@@ -57,8 +58,22 @@ struct EditorView: View {
         } message: {
             Text(editor.importError ?? "")
         }
+        .sheet(item: $editor.calculationRequest) { request in
+            CalculationCardEditor(block: request.block, isNew: request.element == nil) { block, text in
+                editor.commitCalculation(request, block: block, text: text)
+            }
+        }
+        .onAppear(perform: takePendingCalculation)
+        .onChange(of: calc.pendingInsertion) { _, _ in takePendingCalculation() }
         .onDisappear { editor.flush() }
         .persistentSystemOverlays(.hidden)
+    }
+
+    /// A calculation sent here from the calculator or a formula.
+    private func takePendingCalculation() {
+        guard let block = calc.pendingInsertion else { return }
+        calc.pendingInsertion = nil
+        DispatchQueue.main.async { editor.newCalculation(block) }
     }
 
     private func close() {
@@ -112,6 +127,10 @@ struct EditorToolbar: View {
                     Image(systemName: "photo").frame(width: 40, height: 36)
                 }
                 .accessibilityLabel("Insert Image")
+                Button { editor.newCalculation() } label: {
+                    Image(systemName: "function").frame(width: 40, height: 36)
+                }
+                .accessibilityLabel("Insert Calculation")
             }
             .fixedSize()
 

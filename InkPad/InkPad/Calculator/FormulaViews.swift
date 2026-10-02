@@ -199,6 +199,9 @@ struct FormulaRunView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("Copy Results", systemImage: "doc.on.doc") { UIPasteboard.general.string = resultText }
                     .disabled(!result.isSuccess)
+                InsertIntoNotebookMenu(block: noteBlock) {
+                    Label("Insert into Notebook", systemImage: "note.text.badge.plus")
+                }
                 Button(formula.isBuiltIn ? "Duplicate & Edit" : "Edit", systemImage: "pencil") {
                     editing = formula.isBuiltIn ? calc.duplicate(formula) : formula
                 }
@@ -211,6 +214,14 @@ struct FormulaRunView: View {
             inputs = initialInputs
         }
         .onChange(of: inputs) { _, _ in recorded = false }
+    }
+
+    /// This run (inputs and chosen units) as a note card.
+    private func noteBlock() -> CalculationBlock {
+        var b = calc.formulaBlock(formula, inputs: inputs.filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty })
+        b.inputUnits = inputUnits.filter { !$0.value.isEmpty }
+        b.outputUnits = outputUnits.filter { !$0.value.isEmpty }
+        return b
     }
 
     private func unitBinding(_ name: String, in dict: Binding<[String: String]>) -> Binding<String> {
@@ -508,6 +519,9 @@ struct HistoryView: View {
         }
         .contextMenu {
             Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = text(for: r) }
+            InsertIntoNotebookMenu(block: { calc.block(for: r) }) {
+                Label("Insert into Notebook", systemImage: "note.text.badge.plus")
+            }
             Button("Delete", systemImage: "trash", role: .destructive) { calc.deleteHistory([r.id]) }
         }
     }
@@ -607,7 +621,7 @@ struct BasisSettingsView: View {
                     Button("Export App (.ipa)…", systemImage: "app.badge") { showExportApp = true }
                 }
                 Section {
-                    LabeledContent("Version", value: "Basis 2.0 (Stage 4)")
+                    LabeledContent("Version", value: "Basis 2.0 (Stage 5)")
                 } footer: {
                     Text("Everything is stored on this iPad. Notes live in Files › On My iPad › Basis.")
                 }

@@ -678,6 +678,10 @@ final class CanvasViewController: UIViewController {
 
     func editSelectedText() {
         guard case let .text(t)? = selectedElements.first, let pid = selection.pageID else { return }
+        if t.isCalculation {
+            beginTextEditing(t, pageID: pid, isNew: false)
+            return
+        }
         clearSelection()
         editor.selectTool(.text)
         beginTextEditing(t, pageID: pid, isNew: false)
@@ -741,6 +745,42 @@ final class CanvasViewController: UIViewController {
         select([element], pageID: pid)
     }
 
+    // MARK: Calculations
+
+    /// Places a calculation card at the middle of the visible part of the page.
+    func insertCalculation(_ block: CalculationBlock, text: String) {
+        let pid = currentPageID
+        guard let page = document.page(pid) else { return }
+        var color = editor.settings.text.color
+        if page.background.isDark && !color.isLight { color = .white }
+        var card = TextElement.calculationCard(block, text: text, at: visibleCenter(in: pid),
+                                               style: TextElement.calculationStyle(color: color),
+                                               maxWidth: page.size.width - 60)
+        // Keep the whole card on the page.
+        let pad = TextElement.cardPadding
+        let half = CGSize(width: card.box.size.width / 2 + pad.width + 8, height: card.box.size.height / 2 + pad.height + 8)
+        card.box.center.x = card.box.center.x.clamped(half.width, max(half.width, page.size.width - half.width))
+        card.box.center.y = card.box.center.y.clamped(half.height, max(half.height, page.size.height - half.height))
+        let element = CanvasElement.text(card)
+        history.perform(ElementsEdit.add([element], to: page, name: "Insert Calculation"))
+        showPending([element], pageID: pid)
+        editor.selectTool(.lasso)
+        select([element], pageID: pid)
+    }
+
+    /// Replaces a card with its edited version (one undo step).
+    func updateCalculation(_ old: TextElement, pageID: UUID, block: CalculationBlock, text: String) {
+        guard let page = document.page(pageID) else { return }
+        // Use the current version in case it was moved since the sheet opened.
+        var current = old
+        if case let .text(t)? = page.element(old.id) { current = t }
+        let updated = TextElement.calculationCard(block, text: text, existing: current, style: current.style,
+                                                  maxWidth: page.size.width - 60)
+        clearSelection()
+        history.perform(ElementsEdit.update([(.text(current), .text(updated))], page: page, name: "Edit Calculation"))
+        showPending([.text(updated)], pageID: pageID)
+    }
+
     // MARK: Export
 
     func exportPDF() -> URL? {
@@ -802,6 +842,11 @@ extension CanvasViewController: ToolHost {
     var isEditingText: Bool { textEditing.isEditing }
 
     func beginTextEditing(_ element: TextElement, pageID: UUID, isNew: Bool) {
+        // Calculation cards are edited in their own sheet, not as raw text.
+        if let block = element.calculation, !isNew {
+            editor.calculationRequest = CalculationEditRequest(block: block, element: element, pageID: pageID)
+            return
+        }
         textEditing.begin(element, pageID: pageID, isNew: isNew, in: view)
         editor.isEditingText = true
         if editor.settings.text != element.style {

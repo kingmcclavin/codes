@@ -33,7 +33,7 @@ enum CanvasElement: Identifiable {
         case let .stroke(s): return s.style.isHighlighter ? "Highlight" : "Ink"
         case let .shape(s): return s.displayName
         case .image: return "Image"
-        case .text: return "Text"
+        case let .text(t): return t.isCalculation ? "Calculation" : "Text"
         }
     }
 

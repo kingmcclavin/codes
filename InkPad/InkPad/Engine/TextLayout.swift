@@ -53,6 +53,27 @@ enum TextLayout {
         return CGSize(width: width, height: max(ceil(size.height), ceil(style.fontSize * 1.25)))
     }
 
+    /// Card behind a calculation: faint fill, hairline outline and an
+    /// accent bar on the left. `rect` is the text rect in box space.
+    private static func drawCalculationCard(_ rect: CGRect, color: RGBAColor, in ctx: CGContext) {
+        let p = TextElement.cardPadding
+        let card = rect.insetBy(dx: -p.width, dy: -p.height)
+        let path = CGPath(roundedRect: card, cornerWidth: 8, cornerHeight: 8, transform: nil)
+        ctx.saveGState()
+        ctx.addPath(path)
+        ctx.setFillColor(color.cgColor.copy(alpha: 0.05) ?? color.cgColor)
+        ctx.fillPath()
+        ctx.addPath(path)
+        ctx.setStrokeColor(color.cgColor.copy(alpha: 0.22) ?? color.cgColor)
+        ctx.setLineWidth(0.75)
+        ctx.strokePath()
+        ctx.addPath(path)
+        ctx.clip()
+        ctx.setFillColor(CGColor(srgbRed: 0.18, green: 0.48, blue: 0.96, alpha: 0.9))
+        ctx.fill(CGRect(x: card.minX, y: card.minY, width: 3.5, height: card.height))
+        ctx.restoreGState()
+    }
+
     /// Draws the element into a y-down context in page coordinates.
     static func draw(_ element: TextElement, in ctx: CGContext) {
         let box = element.box
@@ -60,6 +81,7 @@ enum TextLayout {
         let setter = CTFramesetterCreateWithAttributedString(attr)
         ctx.saveGState()
         ctx.concatenate(box.transform)
+        if element.calculation != nil { drawCalculationCard(box.localRect, color: element.style.color, in: ctx) }
         // Flip to CoreText's y-up space about the box center (the box is
         // symmetric around the origin, so the rect maps onto itself).
         ctx.scaleBy(x: 1, y: -1)

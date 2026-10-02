@@ -353,8 +353,17 @@ struct TextElement: Identifiable, Codable {
     var style: TextStyle
     /// `size.width` is the wrapping width; height is derived from layout.
     var box: BoxGeometry
+    /// Set when this text is a live calculation card (see `CalculationBlock`).
+    var calculation: CalculationBlock? = nil
 
-    var bounds: CGRect { box.boundingRect.expanded(by: 1) }
+    var isCalculation: Bool { calculation != nil }
+
+    var bounds: CGRect {
+        guard calculation != nil else { return box.boundingRect.expanded(by: 1) }
+        let p = TextElement.cardPadding
+        return BoxGeometry(center: box.center, size: CGSize(width: box.size.width + 2 * p.width + 4, height: box.size.height + 2 * p.height + 4),
+                           rotation: box.rotation).boundingRect.expanded(by: 2)
+    }
 
     func transformed(by t: CGAffineTransform) -> TextElement {
         var e = self
