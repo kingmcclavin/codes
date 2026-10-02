@@ -135,7 +135,7 @@ struct PaperSize: Identifiable, Hashable {
 }
 
 enum PageTemplate: String, Codable, CaseIterable, Identifiable {
-    case blank, ruled, grid, dotted, engineering
+    case blank, ruled, grid, dotted, engineering, isometric, cornell, lab
 
     var id: String { rawValue }
 
@@ -146,6 +146,9 @@ enum PageTemplate: String, Codable, CaseIterable, Identifiable {
         case .grid: return "Grid"
         case .dotted: return "Dotted"
         case .engineering: return "Engineering"
+        case .isometric: return "Isometric"
+        case .cornell: return "Cornell Notes"
+        case .lab: return "Lab Notebook"
         }
     }
 
@@ -156,6 +159,9 @@ enum PageTemplate: String, Codable, CaseIterable, Identifiable {
         case .grid: return "grid"
         case .dotted: return "circle.grid.3x3"
         case .engineering: return "square.grid.4x3.fill"
+        case .isometric: return "triangle"
+        case .cornell: return "rectangle.split.2x1"
+        case .lab: return "testtube.2"
         }
     }
 
@@ -168,6 +174,9 @@ enum PageTemplate: String, Codable, CaseIterable, Identifiable {
         case .grid: return 18
         case .dotted: return 18
         case .engineering: return 72
+        case .isometric: return 24
+        case .cornell: return 24
+        case .lab: return 18
         }
     }
 }
@@ -186,6 +195,11 @@ struct PageBackground: Codable, Hashable {
     var spacing: CGFloat
     /// Imported PDF page shown as the page background, if any.
     var pdf: PDFPageSource?
+    /// Page metadata kept with the background so it persists and undoes
+    /// with page settings: the title of a section that starts on this page.
+    var section: String?
+    /// Grows the page downwards while you write near the bottom ("infinite" page).
+    var autoExtends: Bool?
 
     init(color: RGBAColor = .white, template: PageTemplate = .blank, spacing: CGFloat? = nil, pdf: PDFPageSource? = nil) {
         self.color = color

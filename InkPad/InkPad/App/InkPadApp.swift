@@ -99,6 +99,8 @@ struct RootView: View {
             HistoryView()
         case .settings:
             BasisSettingsView()
+        case .search:
+            SearchView()
         }
     }
 

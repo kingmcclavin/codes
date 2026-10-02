@@ -94,6 +94,61 @@ final class EditorModel: ObservableObject {
     private func refreshHistoryState() {
         canUndo = history.canUndo
         canRedo = history.canRedo
+        extendPagesIfNeeded()
+    }
+
+    private var extending = false
+
+    /// Endless pages: grow a page when content gets close to its bottom edge.
+    /// Not an undo step (shrinking back would hide nothing useful).
+    private func extendPagesIfNeeded() {
+        guard !extending else { return }
+        extending = true
+        defer { extending = false }
+        for page in document.pages where page.background.autoExtends == true {
+            let size = page.size
+            guard size.height < 14_400 else { continue }
+            let bottom = page.allElements.reduce(CGFloat(0)) { max($0, $1.bounds.maxY) }
+            if bottom > size.height - 300 {
+                let height = min(14_400, max(size.height + 800, bottom + 600))
+                document.setPageSettings(page.id, size: CGSize(width: size.width, height: height), background: page.background)
+            }
+        }
+    }
+
+    // MARK: Sections
+
+    struct SectionInfo: Identifiable, Equatable {
+        var title: String
+        var start: Int
+        var id: Int { start }
+    }
+
+    /// Sections in page order (a section runs until the next one starts).
+    var sections: [SectionInfo] {
+        document.pages.enumerated().compactMap { i, p in
+            guard let t = p.background.section, !t.isEmpty else { return nil }
+            return SectionInfo(title: t, start: i)
+        }
+    }
+
+    func section(containing index: Int) -> SectionInfo? {
+        sections.last { $0.start <= index }
+    }
+
+    /// Starts (or renames, or with nil removes) a section at a page.
+    func setSection(_ title: String?, at index: Int) {
+        guard document.pages.indices.contains(index) else { return }
+        let page = document.pages[index]
+        var bg = page.background
+        let t = title?.trimmingCharacters(in: .whitespaces)
+        bg.section = (t?.isEmpty ?? true) ? nil : t
+        guard bg != page.background else { return }
+        history.perform(PageSettingsCommand(name: bg.section == nil ? "Remove Section" : "Section", changes: [
+            (pageID: page.id, before: PageSettingsCommand.Settings(size: page.size, background: page.background),
+             after: PageSettingsCommand.Settings(size: page.size, background: bg)),
+        ]))
+        objectWillChange.send()
     }
 
     /// Writes everything to disk synchronously (backgrounding / closing).
@@ -217,6 +272,7 @@ final class EditorModel: ObservableObject {
         let ref = document.pages[index.clamped(0, document.pages.count - 1)]
         var background = ref.background
         background.pdf = nil   // a new page after a PDF page is blank paper
+        background.section = nil
         return PageData(size: ref.size, background: background)
     }
 
@@ -248,6 +304,7 @@ final class EditorModel: ObservableObject {
         var data = document.pages[index].pageData()
         data.id = UUID()
         data.elements = data.elements.map { $0.withNewID() }
+        data.background.section = nil
         history.perform(InsertPageCommand(name: "Duplicate Page", page: data, index: index + 1))
         pageCount = document.pages.count
     }
@@ -273,6 +330,7 @@ final class EditorModel: ObservableObject {
         let targets = toAllPages ? document.pages : [document.pages[currentPageIndex.clamped(0, document.pages.count - 1)]]
         let changes = targets.map { p -> (pageID: UUID, before: PageSettingsCommand.Settings, after: PageSettingsCommand.Settings) in
             var after = PageSettingsCommand.Settings(size: size, background: background)
+            after.background.section = p.background.section
             if let pdf = p.background.pdf {
                 // Imported PDF pages keep their content and size.
                 after.size = p.size

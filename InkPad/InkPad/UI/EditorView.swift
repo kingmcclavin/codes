@@ -270,16 +270,38 @@ struct ZoomControl: View {
 struct PageIndicator: View {
     @ObservedObject var editor: EditorModel
 
+    private func pageLabel(_ section: String?) -> some View {
+        HStack(spacing: 4) {
+            if let section {
+                Text(section).lineLimit(1).frame(maxWidth: 160)
+                Text("·").foregroundStyle(.secondary)
+            }
+            Text("\(editor.currentPageIndex + 1) / \(editor.pageCount)").monospacedDigit()
+        }
+        .font(.footnote.weight(.medium))
+        .padding(.horizontal, 6)
+        .frame(minWidth: 54, minHeight: 30)
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             Button { editor.goToPage(max(0, editor.currentPageIndex - 1)) } label: {
                 Image(systemName: "chevron.up").frame(width: 32, height: 30)
             }
             .disabled(editor.currentPageIndex == 0)
-            Button { editor.showPageManager = true } label: {
-                Text("\(editor.currentPageIndex + 1) / \(editor.pageCount)")
-                    .font(.footnote.monospacedDigit().weight(.medium))
-                    .frame(minWidth: 54, minHeight: 30)
+            let sections = editor.sections
+            if sections.isEmpty {
+                Button { editor.showPageManager = true } label: { pageLabel(nil) }
+            } else {
+                Menu {
+                    ForEach(sections) { s in
+                        Button("\(s.title) (p. \(s.start + 1))", systemImage: "bookmark") { editor.goToPage(s.start) }
+                    }
+                    Divider()
+                    Button("All Pages…", systemImage: "square.stack") { editor.showPageManager = true }
+                } label: {
+                    pageLabel(editor.section(containing: editor.currentPageIndex)?.title)
+                }
             }
             Button { editor.goToPage(min(editor.pageCount - 1, editor.currentPageIndex + 1)) } label: {
                 Image(systemName: "chevron.down").frame(width: 32, height: 30)

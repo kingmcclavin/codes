@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 // MARK: - Library
 
@@ -634,6 +635,8 @@ struct BasisSettingsView: View {
     @State private var showAppearance = false
     @State private var showExportApp = false
     @State private var shareURL: URL?
+    @State private var importing = false
+    @State private var importMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -648,13 +651,14 @@ struct BasisSettingsView: View {
                     Button("Accent Color…", systemImage: "paintpalette") { showAppearance = true }
                 }
                 Section("Data") {
-                    Button("Export Formulas, Variables & History…", systemImage: "square.and.arrow.up") {
+                    Button("Export Formulas, Variables, Tables & History…", systemImage: "square.and.arrow.up") {
                         shareURL = calc.exportData()
                     }
+                    Button("Import Calculator Data…", systemImage: "square.and.arrow.down") { importing = true }
                     Button("Export App (.ipa)…", systemImage: "app.badge") { showExportApp = true }
                 }
                 Section {
-                    LabeledContent("Version", value: "Basis 2.0 (Stage 7)")
+                    LabeledContent("Version", value: "Basis 2.0")
                 } footer: {
                     Text("Everything is stored on this iPad. Notes live in Files › On My iPad › Basis.")
                 }
@@ -662,6 +666,21 @@ struct BasisSettingsView: View {
             .navigationTitle("Settings")
             .sheet(isPresented: $showAppearance) { AppearanceSettingsView() }
             .sheet(isPresented: $showExportApp) { ExportView() }
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
+                guard case let .success(url) = result else { return }
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                do {
+                    importMessage = try calc.importData(Data(contentsOf: url))
+                } catch {
+                    importMessage = error.localizedDescription
+                }
+            }
+            .alert("Import", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(importMessage ?? "")
+            }
             .sheet(item: Binding(get: { shareURL.map(SharedFile.init) }, set: { shareURL = $0?.url })) { f in
                 ShareSheet(items: [f.url])
             }

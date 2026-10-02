@@ -35,6 +35,8 @@ struct PageFormat: Equatable {
     var customColor = RGBAColor(r: 0.98, g: 0.95, b: 0.86)
     var template: PageTemplate = .blank
     var spacing: Double = Double(PageTemplate.blank.defaultSpacing)
+    /// The page grows downwards while you write near its bottom edge.
+    var autoExtends = false
 
     init() {}
 
@@ -56,6 +58,7 @@ struct PageFormat: Equatable {
         else { backgroundChoice = .custom; customColor = background.color }
         template = background.template
         spacing = Double(background.spacing)
+        autoExtends = background.autoExtends ?? false
     }
 
     var size: CGSize {
@@ -66,7 +69,9 @@ struct PageFormat: Equatable {
     }
 
     var background: PageBackground {
-        PageBackground(color: backgroundChoice.color ?? customColor, template: template, spacing: CGFloat(spacing))
+        var bg = PageBackground(color: backgroundChoice.color ?? customColor, template: template, spacing: CGFloat(spacing))
+        bg.autoExtends = autoExtends ? true : nil
+        return bg
     }
 
     var isSquare: Bool {
@@ -200,6 +205,13 @@ struct PageFormatEditor: View {
                                        : "Spacing: \(Int(format.spacing)) pt (\(String(format: "%.1f", format.spacing / 72 * 25.4)) mm)")
                         .font(.subheadline)
                     Slider(value: $format.spacing, in: isEngineering ? 36...144 : 8...48, step: isEngineering ? 9 : 1)
+                }
+            }
+
+            Toggle(isOn: $format.autoExtends) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Endless Page")
+                    Text("The page grows longer as you write near the bottom.").font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

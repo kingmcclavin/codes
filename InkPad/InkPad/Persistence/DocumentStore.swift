@@ -112,6 +112,45 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
         summaries = result.sorted { $0.modifiedAt > $1.modifiedAt }
     }
 
+    // MARK: Search
+
+    struct SearchablePage: Sendable {
+        var documentID: UUID
+        var title: String
+        var pageIndex: Int
+        var section: String?
+        /// Typed text and calculation cards on the page.
+        var text: String
+    }
+
+    /// Reads the text of every page from disk (safe off the main thread).
+    /// Handwriting isn't searchable – only typed text and calculations.
+    func searchablePages() -> [SearchablePage] {
+        let fm = FileManager.default
+        let urls = (try? fm.contentsOfDirectory(at: rootURL, includingPropertiesForKeys: nil)) ?? []
+        var result: [SearchablePage] = []
+        let decoder = Self.decoder()
+        for pkg in urls where pkg.pathExtension == "inkpad" {
+            guard let data = try? Data(contentsOf: Self.manifestURL(pkg)),
+                  let m = try? decoder.decode(DocumentManifest.self, from: data) else { continue }
+            var section: String?
+            for (i, pid) in m.pageIDs.enumerated() {
+                guard let pageData = try? Data(contentsOf: Self.pageURL(pkg, pid)),
+                      let page = try? decoder.decode(PageData.self, from: pageData) else { continue }
+                if let s = page.background.section, !s.isEmpty { section = s }
+                let texts = page.elements.compactMap { e -> String? in
+                    if case let .text(t) = e { return t.text }
+                    return nil
+                }
+                let pageText = ([page.background.section].compactMap { $0 } + texts).joined(separator: "\n")
+                if !pageText.isEmpty {
+                    result.append(SearchablePage(documentID: m.id, title: m.title, pageIndex: i, section: section, text: pageText))
+                }
+            }
+        }
+        return result
+    }
+
     func exists(_ id: UUID) -> Bool {
         FileManager.default.fileExists(atPath: Self.manifestURL(packageURL(id)).path)
     }

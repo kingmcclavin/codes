@@ -5,6 +5,8 @@ struct PageManagerView: View {
     @ObservedObject var editor: EditorModel
     @Environment(\.dismiss) private var dismiss
     @State private var revision = 0
+    @State private var sectionPage: Int?
+    @State private var sectionTitle = ""
 
     var body: some View {
         NavigationStack {
@@ -14,23 +16,39 @@ struct PageManagerView: View {
                         editor.goToPage(index)
                         dismiss()
                     } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: page.background.template.symbol)
-                                .frame(width: 28)
-                                .foregroundStyle(.tint)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Page \(index + 1)").foregroundStyle(.primary)
-                                Text("\(PaperSize.describe(page.size)) · \(page.background.template.displayName) · \(page.count) item\(page.count == 1 ? "" : "s")")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let title = page.background.section, !title.isEmpty {
+                                Label(title, systemImage: "bookmark.fill")
+                                    .font(.headline)
+                                    .foregroundStyle(.tint)
                             }
-                            Spacer()
-                            if index == editor.currentPageIndex {
-                                Image(systemName: "checkmark").foregroundStyle(.tint)
+                            HStack(spacing: 12) {
+                                Image(systemName: page.background.template.symbol)
+                                    .frame(width: 28)
+                                    .foregroundStyle(.tint)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Page \(index + 1)").foregroundStyle(.primary)
+                                    Text("\(PaperSize.describe(page.size)) · \(page.background.template.displayName) · \(page.count) item\(page.count == 1 ? "" : "s")")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if index == editor.currentPageIndex {
+                                    Image(systemName: "checkmark").foregroundStyle(.tint)
+                                }
                             }
                         }
                     }
                     .contextMenu {
+                        Button(page.background.section == nil ? "Start Section Here…" : "Rename Section…", systemImage: "bookmark") {
+                            sectionTitle = page.background.section ?? ""
+                            sectionPage = index
+                        }
+                        if page.background.section != nil {
+                            Button("Remove Section Break", systemImage: "bookmark.slash") {
+                                editor.setSection(nil, at: index); revision += 1
+                            }
+                        }
                         Button("Insert Page After", systemImage: "plus") { editor.addPage(after: index); revision += 1 }
                         Button("Duplicate", systemImage: "plus.square.on.square") { editor.duplicatePage(at: index); revision += 1 }
                         Button("Delete", systemImage: "trash", role: .destructive) { editor.deletePage(at: index); revision += 1 }
@@ -53,6 +71,16 @@ struct PageManagerView: View {
                 }
             }
             .id(revision)
+            .alert("Section Title", isPresented: Binding(get: { sectionPage != nil }, set: { if !$0 { sectionPage = nil } })) {
+                TextField("e.g. Chapter 3 — Thermodynamics", text: $sectionTitle)
+                Button("Cancel", role: .cancel) {}
+                Button("Save") {
+                    if let i = sectionPage { editor.setSection(sectionTitle, at: i) }
+                    revision += 1
+                }
+            } message: {
+                Text("A section starts on this page and runs until the next section.")
+            }
             .environment(\.editMode, .constant(.active))
             .navigationTitle("Pages")
             .navigationBarTitleDisplayMode(.inline)

@@ -149,6 +149,65 @@ struct PageRenderer {
                 y += spacing
             }
             ctx.fillPath()
+        case .isometric:
+            // Lines at ±30° and verticals: an equilateral triangle grid.
+            let dx = spacing * sqrt(3) / 2
+            vLines(step: dx)
+            let slope = tan(CGFloat.pi / 6)
+            let span = rect.width * slope
+            for sign in [CGFloat(1), -1] {
+                // Lines y = sign·slope·x + c, with c on a lattice of `spacing`.
+                let cs = [rect.minY - sign * slope * rect.minX, rect.minY - sign * slope * rect.maxX,
+                          rect.maxY - sign * slope * rect.minX, rect.maxY - sign * slope * rect.maxX]
+                var c = floor((cs.min()! - span) / spacing) * spacing
+                let cMax = cs.max()! + span
+                while c <= cMax {
+                    ctx.move(to: CGPoint(x: rect.minX, y: sign * slope * rect.minX + c))
+                    ctx.addLine(to: CGPoint(x: rect.maxX, y: sign * slope * rect.maxX + c))
+                    c += spacing
+                }
+            }
+            ctx.strokePath()
+        case .cornell:
+            // Title band, cue column, note lines and a summary box.
+            let top = min(110, pageSize.height * 0.12)
+            let summary = min(170, pageSize.height * 0.2)
+            let cue = pageSize.width * 0.3
+            let noteBottom = pageSize.height - summary
+            ctx.saveGState()
+            ctx.clip(to: CGRect(x: cue, y: top, width: pageSize.width - cue, height: noteBottom - top).intersection(rect))
+            hLines(step: spacing, from: top + spacing)
+            ctx.strokePath()
+            ctx.restoreGState()
+            ctx.setStrokeColor(bg.marginColor.cgColor)
+            ctx.setLineWidth(1)
+            ctx.move(to: CGPoint(x: 0, y: top)); ctx.addLine(to: CGPoint(x: pageSize.width, y: top))
+            ctx.move(to: CGPoint(x: cue, y: top)); ctx.addLine(to: CGPoint(x: cue, y: noteBottom))
+            ctx.move(to: CGPoint(x: 0, y: noteBottom)); ctx.addLine(to: CGPoint(x: pageSize.width, y: noteBottom))
+            ctx.strokePath()
+        case .lab:
+            // Header with fields, then a fine grid with a heavier line every 5 squares.
+            let header = min(96, pageSize.height * 0.1)
+            ctx.setStrokeColor(bg.marginColor.cgColor)
+            ctx.setLineWidth(1)
+            ctx.move(to: CGPoint(x: 0, y: header)); ctx.addLine(to: CGPoint(x: pageSize.width, y: header))
+            for f in [0.34, 0.67] {
+                ctx.move(to: CGPoint(x: pageSize.width * f, y: header * 0.25))
+                ctx.addLine(to: CGPoint(x: pageSize.width * f, y: header))
+            }
+            ctx.strokePath()
+            ctx.saveGState()
+            ctx.clip(to: CGRect(x: 0, y: header, width: pageSize.width, height: pageSize.height - header).intersection(rect))
+            ctx.setStrokeColor(bg.lineColor.cgColor)
+            ctx.setLineWidth(0.35)
+            hLines(step: spacing, from: header)
+            vLines(step: spacing)
+            ctx.strokePath()
+            ctx.setLineWidth(0.8)
+            hLines(step: spacing * 5, from: header)
+            vLines(step: spacing * 5)
+            ctx.strokePath()
+            ctx.restoreGState()
         case .engineering:
             let minor = spacing / 5
             ctx.setLineWidth(0.35)

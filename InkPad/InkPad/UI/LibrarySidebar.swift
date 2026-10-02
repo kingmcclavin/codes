@@ -4,7 +4,7 @@ import SwiftUI
 enum SidebarItem: Hashable {
     case allDocuments
     case folder(UUID)
-    case calculator, formulas, tools, data, history, settings
+    case calculator, formulas, tools, data, history, settings, search
 
     var isNotes: Bool {
         switch self {
@@ -46,6 +46,7 @@ struct LibrarySidebar: View {
     var body: some View {
         List(selection: $selection) {
             Section {
+                Label("Search", systemImage: "magnifyingglass").tag(SidebarItem.search)
                 Label("Calculator", systemImage: "plus.forwardslash.minus").tag(SidebarItem.calculator)
                 Label("Formulas", systemImage: "function").tag(SidebarItem.formulas)
                 Label("Tools", systemImage: "wrench.and.screwdriver").tag(SidebarItem.tools)

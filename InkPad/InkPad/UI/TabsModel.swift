@@ -63,6 +63,23 @@ final class TabsModel: ObservableObject {
 
     func showLibrary() { activate(nil) }
 
+    /// Opens a document and scrolls to a page once it has loaded.
+    func open(_ id: UUID, page: Int) {
+        open(id)
+        scroll(id, to: page, attempts: 30)
+    }
+
+    private func scroll(_ id: UUID, to page: Int, attempts: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self, self.activeID == id else { return }
+            if let editor = self.editors[id], editor.canvas != nil {
+                editor.goToPage(min(page, max(editor.pageCount - 1, 0)))
+            } else if attempts > 0 {
+                self.scroll(id, to: page, attempts: attempts - 1)
+            }
+        }
+    }
+
     func close(_ id: UUID) {
         guard let index = tabs.firstIndex(of: id) else { return }
         editors[id]?.flush()

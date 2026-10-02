@@ -253,6 +253,60 @@ final class CalculatorStore: ObservableObject {
         return (try? decoder.decode(Envelope<T>.self, from: data))?.items
     }
 
+    enum ImportError: LocalizedError {
+        case unreadable
+        var errorDescription: String? { "This file isn't a Basis calculator export." }
+    }
+
+    /// Merges an export made by `exportData()` (here or on another iPad).
+    /// Items with the same id (formulas, tables, history) or name
+    /// (variables) are replaced; everything else is added.
+    @discardableResult
+    func importData(_ data: Data) throws -> String {
+        struct Import: Decodable {
+            var formulas: [Formula]?
+            var variables: [CalcVariable]?
+            var history: [CalculationRecord]?
+            var tables: [DataTable]?
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let imported = try? decoder.decode(Import.self, from: data),
+              imported.formulas != nil || imported.variables != nil || imported.history != nil || imported.tables != nil else {
+            throw ImportError.unreadable
+        }
+        var counts: [String] = []
+        if let list = imported.formulas?.filter({ !$0.isBuiltIn }), !list.isEmpty {
+            for f in list {
+                if let i = userFormulas.firstIndex(where: { $0.id == f.id }) { userFormulas[i] = f } else { userFormulas.append(f) }
+            }
+            save(userFormulas, "formulas.json")
+            counts.append("\(list.count) formula\(list.count == 1 ? "" : "s")")
+        }
+        if let list = imported.variables, !list.isEmpty {
+            for v in list {
+                if let i = variables.firstIndex(where: { $0.name == v.name }) { variables[i] = v } else { variables.append(v) }
+            }
+            save(variables, "variables.json")
+            counts.append("\(list.count) variable\(list.count == 1 ? "" : "s")")
+        }
+        if let list = imported.tables, !list.isEmpty {
+            for t in list {
+                if let i = tables.firstIndex(where: { $0.id == t.id }) { tables[i] = t } else { tables.append(t) }
+            }
+            save(tables, "tables.json")
+            counts.append("\(list.count) table\(list.count == 1 ? "" : "s")")
+        }
+        if let list = imported.history, !list.isEmpty {
+            let known = Set(history.map(\.id))
+            let added = list.filter { !known.contains($0.id) }
+            history = Array((history + added).sorted { $0.date > $1.date }.prefix(Self.maxHistory))
+            save(history, "history.json")
+            counts.append("\(added.count) history entr\(added.count == 1 ? "y" : "ies")")
+        }
+        return counts.isEmpty ? "Nothing new to import." : "Imported " + counts.joined(separator: ", ") + "."
+    }
+
     /// JSON export of formulas, variables and history.
     func exportData() -> URL? {
         struct Export: Codable {
