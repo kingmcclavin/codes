@@ -5,6 +5,7 @@ struct InkPadApp: App {
     @StateObject private var store = DocumentStore.shared
     @StateObject private var preferences = AppPreferences.shared
     @StateObject private var tabs = TabsModel(store: .shared)
+    @StateObject private var calculator = CalculatorStore.shared
 
     var body: some Scene {
         WindowGroup {
@@ -12,6 +13,7 @@ struct InkPadApp: App {
                 .environmentObject(store)
                 .environmentObject(preferences)
                 .environmentObject(tabs)
+                .environmentObject(calculator)
         }
     }
 }
@@ -64,14 +66,37 @@ struct RootView: View {
         }
     }
 
+    /// The Basis workspace: sidebar (sections + notebook folders) and the
+    /// selected section.
     private var library: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             LibrarySidebar(selection: $sidebarSelection)
         } detail: {
+            detail
+                .environment(\.basisNavigate, { item in sidebarSelection = item })
+        }
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch sidebarSelection ?? .allDocuments {
+        case .allDocuments, .folder:
             NavigationStack {
                 LibraryView(folderID: sidebarSelection?.folderID, navigate: navigate)
                     .id(sidebarSelection)
             }
+        case .calculator:
+            NavigationStack { CalculatorView() }
+        case .formulas:
+            FormulaLibraryView()
+        case .tools:
+            ToolsView()
+        case .data:
+            NavigationStack { DataPlaceholderView() }
+        case .history:
+            HistoryView()
+        case .settings:
+            BasisSettingsView()
         }
     }
 

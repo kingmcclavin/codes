@@ -50,7 +50,7 @@ enum ExportBranding {
     }
 
     static var displayName: String {
-        get { UserDefaults.standard.string(forKey: "exportDisplayName") ?? "InkPad" }
+        get { UserDefaults.standard.string(forKey: "exportDisplayName") ?? "Basis" }
         set { UserDefaults.standard.set(newValue, forKey: "exportDisplayName") }
     }
 }
@@ -96,7 +96,7 @@ struct ExportView: View
                 }
 
                 Section("Home Screen Name") {
-                    TextField("InkPad", text: $displayName)
+                    TextField("Basis", text: $displayName)
                         .onChange(of: displayName) { _, v in ExportBranding.displayName = v }
                 }
 
@@ -151,7 +151,7 @@ struct ExportView: View
 
     private var fileName: String {
         let name = displayName.trimmingCharacters(in: .whitespaces)
-        return name.isEmpty ? "InkPad" : name
+        return name.isEmpty ? "Basis" : name
     }
 
     private var iconPreview: some View {

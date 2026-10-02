@@ -56,7 +56,7 @@ jobs:
         run: |
           cd build/InkPad.swiftpm
           status=0
-          xcodebuild build -scheme InkPad -destination 'generic/platform=iOS' \
+          xcodebuild build -scheme Basis -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             > ../swiftpm.log 2>&1 || status=$?
           grep -E "error:|BUILD (SUCCEEDED|FAILED)" ../swiftpm.log | sort -u || true

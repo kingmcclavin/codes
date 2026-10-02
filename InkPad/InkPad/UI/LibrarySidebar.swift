@@ -1,9 +1,17 @@
 import SwiftUI
 
-/// What the library sidebar has selected.
+/// What the Basis sidebar has selected.
 enum SidebarItem: Hashable {
     case allDocuments
     case folder(UUID)
+    case calculator, formulas, tools, data, history, settings
+
+    var isNotes: Bool {
+        switch self {
+        case .allDocuments, .folder: return true
+        default: return false
+        }
+    }
 
     var folderID: UUID? {
         if case let .folder(id) = self { return id }
@@ -38,7 +46,15 @@ struct LibrarySidebar: View {
     var body: some View {
         List(selection: $selection) {
             Section {
-                Label("All Documents", systemImage: "tray.full")
+                Label("Calculator", systemImage: "plus.forwardslash.minus").tag(SidebarItem.calculator)
+                Label("Formulas", systemImage: "function").tag(SidebarItem.formulas)
+                Label("Tools", systemImage: "wrench.and.screwdriver").tag(SidebarItem.tools)
+                Label("Data", systemImage: "tablecells").tag(SidebarItem.data)
+                Label("History", systemImage: "clock.arrow.circlepath").tag(SidebarItem.history)
+            }
+
+            Section("Notes") {
+                Label("All Notes", systemImage: "tray.full")
                     .badge(store.documents(in: nil).count)
                     .tag(SidebarItem.allDocuments)
                     .dropDestination(for: String.self) { items, _ in drop(items, into: nil) }
@@ -85,12 +101,11 @@ struct LibrarySidebar: View {
             }
         }
         .listStyle(.sidebar)
-        .navigationTitle("InkPad")
+        .navigationTitle("Basis")
         .toolbar {
             ToolbarItem(placement: .bottomBar) {
-                Menu {
-                    Button("Appearance…", systemImage: "paintpalette") { showAppearance = true }
-                    Button("Export App (.ipa)…", systemImage: "app.badge") { showExport = true }
+                Button {
+                    selection = .settings
                 } label: {
                     Label("Settings", systemImage: "gearshape")
                         .labelStyle(.titleAndIcon)

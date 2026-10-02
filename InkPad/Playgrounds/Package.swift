@@ -13,7 +13,7 @@ let package = Package(
     ],
     products: [
         .iOSApplication(
-            name: "InkPad",
+            name: "Basis",
             targets: ["AppModule"],
             bundleIdentifier: "com.example.inkpad.playgrounds",
             displayVersion: "1.0",
