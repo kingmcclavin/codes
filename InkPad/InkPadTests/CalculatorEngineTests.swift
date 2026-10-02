@@ -238,10 +238,7 @@ final class FormulaTests: XCTestCase {
         try store.evaluate("v = 10")
         XCTAssertEqual(try store.evaluate("0.5*m*v^2").value, 250)
         store.save(Formula(name: "Mine", expression: "y = 2x"))
-        // Writes are asynchronous; wait for them.
-        let exp = expectation(description: "saved")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { exp.fulfill() }
-        wait(for: [exp], timeout: 2)
+        store.flush()   // writes are asynchronous
         let reopened = CalculatorStore(directory: dir)
         XCTAssertEqual(reopened.variables.map(\.name), ["m", "v"])
         XCTAssertEqual(reopened.userFormulas.map(\.name), ["Mine"])

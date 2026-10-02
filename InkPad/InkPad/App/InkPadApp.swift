@@ -24,6 +24,7 @@ struct RootView: View {
     @EnvironmentObject private var store: DocumentStore
     @EnvironmentObject private var tabs: TabsModel
     @EnvironmentObject private var preferences: AppPreferences
+    @EnvironmentObject private var calculator: CalculatorStore
     @State private var sidebarSelection: SidebarItem? = .allDocuments
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var didRestore = false
@@ -63,6 +64,7 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
             tabs.flushAll()
+            calculator.flush()
         }
     }
 

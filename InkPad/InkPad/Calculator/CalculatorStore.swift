@@ -153,6 +153,11 @@ final class CalculatorStore: ObservableObject {
 
     // MARK: Persistence (versioned)
 
+    /// Blocks until all pending writes are on disk (app backgrounding, tests).
+    func flush() {
+        ioQueue.sync {}
+    }
+
     private struct Envelope<T: Codable>: Codable {
         var version: Int
         var items: T
