@@ -95,31 +95,59 @@ struct FunctionChart: View {
 
     private func color(_ slot: Int) -> Color { forPaper ? ChartPalette.paperColor(slot) : ChartPalette.color(slot) }
 
-    var body: some View {
-        let visible = data.curves.filter { !$0.segments.isEmpty }
-        Chart {
-            if xDomain.contains(0) { RuleMark(x: .value("x", 0)).foregroundStyle(.secondary.opacity(0.6)).lineStyle(StrokeStyle(lineWidth: 1)) }
-            if data.yDomain.contains(0) { RuleMark(y: .value("y", 0)).foregroundStyle(.secondary.opacity(0.6)).lineStyle(StrokeStyle(lineWidth: 1)) }
-            ForEach(visible) { curve in
-                ForEach(Array(curve.segments.enumerated()), id: \.offset) { index, segment in
-                    ForEach(segment, id: \.self) { p in
-                        LineMark(x: .value("x", p.x), y: .value("y", clamp(p.y)),
-                                 series: .value("curve", "\(curve.id)-\(index)"))
-                            .foregroundStyle(color(curve.id))
-                            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                            .interpolationMethod(.linear)
-                    }
+    private struct PlotPoint: Identifiable {
+        var id: Int
+        var x: Double
+        var y: Double
+        var series: String
+        var slot: Int
+    }
+
+    /// All curve points flattened; each segment is its own series so gaps stay open.
+    private var plotPoints: [PlotPoint] {
+        var out: [PlotPoint] = []
+        for curve in data.curves {
+            for (index, segment) in curve.segments.enumerated() {
+                for p in segment {
+                    out.append(PlotPoint(id: out.count, x: p.x, y: clamp(p.y), series: "\(curve.id)-\(index)", slot: curve.id))
                 }
             }
+        }
+        return out
+    }
+
+    private var tracePoints: [PlotPoint] {
+        guard let trace else { return [] }
+        return data.curves.compactMap { curve in
+            guard let y = value(of: curve, at: trace), data.yDomain.contains(y) else { return nil }
+            return PlotPoint(id: curve.id, x: trace, y: y, series: "trace", slot: curve.id)
+        }
+    }
+
+    var body: some View {
+        let points = plotPoints
+        let traced = tracePoints
+        let axis = Color.secondary.opacity(0.6)
+        return Chart {
+            if xDomain.contains(0) {
+                RuleMark(x: .value("x", 0)).foregroundStyle(axis).lineStyle(SwiftUI.StrokeStyle(lineWidth: 1))
+            }
+            if data.yDomain.contains(0) {
+                RuleMark(y: .value("y", 0)).foregroundStyle(axis).lineStyle(SwiftUI.StrokeStyle(lineWidth: 1))
+            }
+            ForEach(points) { p in
+                LineMark(x: .value("x", p.x), y: .value("y", p.y), series: .value("curve", p.series))
+                    .foregroundStyle(color(p.slot))
+                    .lineStyle(SwiftUI.StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            }
             if let trace {
-                RuleMark(x: .value("trace", trace)).foregroundStyle(.secondary).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                ForEach(visible) { curve in
-                    if let y = value(of: curve, at: trace), data.yDomain.contains(y) {
-                        PointMark(x: .value("x", trace), y: .value("y", y))
-                            .foregroundStyle(color(curve.id))
-                            .symbolSize(70)
-                    }
-                }
+                RuleMark(x: .value("trace", trace)).foregroundStyle(Color.secondary)
+                    .lineStyle(SwiftUI.StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            }
+            ForEach(traced) { p in
+                PointMark(x: .value("x", p.x), y: .value("y", p.y))
+                    .foregroundStyle(color(p.slot))
+                    .symbolSize(70)
             }
         }
         .chartXScale(domain: xDomain)

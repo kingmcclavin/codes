@@ -718,49 +718,73 @@ struct DataChart: View {
 
     private func color(_ slot: Int) -> Color { forPaper ? ChartPalette.paperColor(slot) : ChartPalette.color(slot) }
 
+    /// Points along the trend line over the first series' x range.
+    private var fitPoints: [FunctionSampler.Point] {
+        guard let fit, let first = series.first, let lo = first.points.map(\.x).min(),
+              let hi = first.points.map(\.x).max(), hi > lo else { return [] }
+        return (0...80).compactMap { i -> FunctionSampler.Point? in
+            let x = lo + (hi - lo) * Double(i) / 80
+            let y = fit.predict(x)
+            return y.isFinite ? FunctionSampler.Point(x: x, y: y) : nil
+        }
+    }
+
+    private var selectedPoint: FunctionSampler.Point? {
+        guard let selectedX, let s = series.first else { return nil }
+        return nearest(selectedX, in: s.points)
+    }
+
     var body: some View {
-        Chart {
+        let trend = fitPoints
+        let trendColor = color(series.first?.slot ?? 0).opacity(0.7)
+        return Chart {
             ForEach(series) { s in
-                ForEach(Array(s.points.enumerated()), id: \.offset) { _, p in
-                    if style != .points {
-                        LineMark(x: .value("x", p.x), y: .value("y", p.y), series: .value("series", s.id.uuidString))
-                            .foregroundStyle(color(s.slot))
-                            .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                    }
-                    if style != .lines {
-                        PointMark(x: .value("x", p.x), y: .value("y", p.y))
-                            .foregroundStyle(color(s.slot))
-                            .symbolSize(64)
-                    }
-                }
+                seriesMarks(s)
             }
-            if let fit, let first = series.first, let lo = first.points.map(\.x).min(), let hi = first.points.map(\.x).max(), hi > lo {
-                ForEach(0..<81, id: \.self) { i in
-                    let x = lo + (hi - lo) * Double(i) / 80
-                    let y = fit.predict(x)
-                    if y.isFinite {
-                        LineMark(x: .value("x", x), y: .value("y", y), series: .value("series", "fit"))
-                            .foregroundStyle(color(first.slot).opacity(0.7))
-                            .lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 4]))
-                    }
-                }
+            ForEach(Array(trend.enumerated()), id: \.offset) { _, p in
+                LineMark(x: .value("x", p.x), y: .value("y", p.y), series: .value("series", "fit"))
+                    .foregroundStyle(trendColor)
+                    .lineStyle(SwiftUI.StrokeStyle(lineWidth: 2, dash: [6, 4]))
             }
-            if let selectedX, let s = series.first, let p = nearest(selectedX, in: s.points) {
-                RuleMark(x: .value("x", p.x))
-                    .foregroundStyle(.secondary)
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                    .annotation(position: .top, alignment: .center, spacing: 4) {
-                        Text("(\(NumberFormatting.format(p.x, digits: 5)), \(NumberFormatting.format(p.y, digits: 5)))")
-                            .font(.caption.monospaced())
-                            .padding(.horizontal, 6).padding(.vertical, 3)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
-                    }
+            if let p = selectedPoint {
+                selectionMark(p)
             }
         }
         .chartXAxisLabel(xLabel, alignment: .center)
         .chartXSelection(value: $selectedX)
         .chartLegend(.hidden)
         .chartPlotStyle { $0.clipped() }
+    }
+
+    @ChartContentBuilder
+    private func seriesMarks(_ s: Series) -> some ChartContent {
+        let c = color(s.slot)
+        if style != .points {
+            ForEach(Array(s.points.enumerated()), id: \.offset) { _, p in
+                LineMark(x: .value("x", p.x), y: .value("y", p.y), series: .value("series", s.id.uuidString))
+                    .foregroundStyle(c)
+                    .lineStyle(SwiftUI.StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            }
+        }
+        if style != .lines {
+            ForEach(Array(s.points.enumerated()), id: \.offset) { _, p in
+                PointMark(x: .value("x", p.x), y: .value("y", p.y))
+                    .foregroundStyle(c)
+                    .symbolSize(64)
+            }
+        }
+    }
+
+    private func selectionMark(_ p: FunctionSampler.Point) -> some ChartContent {
+        RuleMark(x: .value("x", p.x))
+            .foregroundStyle(.secondary)
+            .lineStyle(SwiftUI.StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            .annotation(position: .top, alignment: .center, spacing: 4) {
+                Text("(\(NumberFormatting.format(p.x, digits: 5)), \(NumberFormatting.format(p.y, digits: 5)))")
+                    .font(.caption.monospaced())
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+            }
     }
 
     private func nearest(_ x: Double, in points: [FunctionSampler.Point]) -> FunctionSampler.Point? {
