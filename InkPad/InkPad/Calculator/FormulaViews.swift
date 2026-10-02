@@ -103,6 +103,7 @@ struct FormulaRunView: View {
     @State private var loaded = false
     @State private var editing: Formula?
     @State private var recorded = false
+    @State private var solving = false
     /// Display units chosen per input/output ("" = the declared unit).
     @State private var inputUnits: [String: String] = [:]
     @State private var outputUnits: [String: String] = [:]
@@ -202,12 +203,15 @@ struct FormulaRunView: View {
                 InsertIntoNotebookMenu(block: noteBlock) {
                     Label("Insert into Notebook", systemImage: "note.text.badge.plus")
                 }
+                Button("Solve for…", systemImage: "arrow.uturn.left.square") { solving = true }
+                    .disabled(inputNames.isEmpty)
                 Button(formula.isBuiltIn ? "Duplicate & Edit" : "Edit", systemImage: "pencil") {
                     editing = formula.isBuiltIn ? calc.duplicate(formula) : formula
                 }
             }
         }
         .sheet(item: $editing) { f in FormulaEditorView(formula: f, isNew: false) }
+        .sheet(isPresented: $solving) { FormulaSolveView(formula: formula, initialInputs: inputs) }
         .onAppear {
             guard !loaded else { return }
             loaded = true
@@ -569,6 +573,18 @@ struct ToolsView: View {
                              summary: "Plot up to eight functions of x, trace values and add graphs to your notes.")
                     }
                     .buttonStyle(.plain)
+                    toolLink(icon: "equal.square", title: "Equation Solver",
+                             summary: "Find every solution of an equation like x³ − 2x = 5 in a range.") { EquationSolverView() }
+                    toolLink(icon: "square.grid.3x3", title: "Matrices",
+                             summary: "Add, multiply, invert, determinants, rank and linear systems A·x = B.") { MatrixCalculatorView() }
+                    toolLink(icon: "arrow.up.right.and.arrow.down.left", title: "Vectors",
+                             summary: "Magnitude, dot and cross products, angles and projections in 3D.") { VectorCalculatorView() }
+                    toolLink(icon: "number", title: "Number Bases",
+                             summary: "Binary, octal, decimal and hex with two's complement.") { NumberBaseView() }
+                    toolLink(icon: "square.on.square.dashed", title: "Section Properties",
+                             summary: "Area, centroid, moments of inertia and section moduli of common shapes.") { SectionPropertiesView() }
+                    toolLink(icon: "ruler", title: "Beam Calculator",
+                             summary: "Reactions, shear, moment and deflection diagrams for simple beams.") { BeamCalculatorView() }
                     ForEach(featured, id: \.id) { item in
                         if let f = formula(item.id) {
                             NavigationLink(value: f.id) {
@@ -589,6 +605,16 @@ struct ToolsView: View {
 }
 
 extension ToolsView {
+    fileprivate func toolLink<Destination: View>(icon: String, title: String, summary: String,
+                                                 @ViewBuilder destination: @escaping () -> Destination) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            card(icon: icon, title: title, summary: summary)
+        }
+        .buttonStyle(.plain)
+    }
+
     fileprivate func card(icon: String, title: String, summary: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: icon).font(.title2).foregroundStyle(.tint)
@@ -628,7 +654,7 @@ struct BasisSettingsView: View {
                     Button("Export App (.ipa)…", systemImage: "app.badge") { showExportApp = true }
                 }
                 Section {
-                    LabeledContent("Version", value: "Basis 2.0 (Stage 6)")
+                    LabeledContent("Version", value: "Basis 2.0 (Stage 7)")
                 } footer: {
                     Text("Everything is stored on this iPad. Notes live in Files › On My iPad › Basis.")
                 }
