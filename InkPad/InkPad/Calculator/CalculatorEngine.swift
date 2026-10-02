@@ -195,7 +195,13 @@ struct CalculatorEngine {
     func inputs(of formula: Formula) -> [String] {
         var result: [String] = []
         collectInputs(formula, visiting: [], into: &result)
-        return result
+        // Declared variables first, in their declared order (a, b, c).
+        let declared = formula.variables.map(\.name)
+        return result.enumerated().sorted { l, r in
+            let li = declared.firstIndex(of: l.element) ?? declared.count + l.offset
+            let ri = declared.firstIndex(of: r.element) ?? declared.count + r.offset
+            return li < ri
+        }.map(\.element)
     }
 
     private func collectInputs(_ formula: Formula, visiting: Set<UUID>, into result: inout [String]) {

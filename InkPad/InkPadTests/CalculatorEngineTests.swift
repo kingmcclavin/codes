@@ -148,7 +148,7 @@ final class FormulaTests: XCTestCase {
 
     func testQuadraticFormula() {
         let q = builtIn("Quadratic Formula")
-        XCTAssertEqual(engine.inputs(of: q), ["b", "a", "c"])
+        XCTAssertEqual(engine.inputs(of: q), ["a", "b", "c"])
         let r = engine.evaluate(q, inputs: ["a": 2, "b": 5, "c": -3])
         XCTAssertTrue(r.isSuccess)
         XCTAssertEqual(r.outputs.map(\.name), ["x₁", "x₂"])
@@ -205,7 +205,7 @@ final class FormulaTests: XCTestCase {
         // The quadratic's `c` must not be computed by a user formula that outputs `c`.
         let hyp = Formula(name: "Hyp", expression: "c = √(a² + b²)")
         let engine = CalculatorEngine(formulas: [hyp] + BuiltInFormulas.all)
-        XCTAssertEqual(engine.inputs(of: builtIn("Quadratic Formula")), ["b", "a", "c"])
+        XCTAssertEqual(engine.inputs(of: builtIn("Quadratic Formula")), ["a", "b", "c"])
     }
 
     func testMultiLineFormulaUsesEarlierResults() {
