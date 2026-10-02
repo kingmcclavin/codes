@@ -69,6 +69,21 @@ struct EditorView: View {
                 editor.commitCalculation(request, block: block, text: text)
             }
         }
+        .alert("Calculate", isPresented: Binding(get: { editor.notice != nil }, set: { if !$0 { editor.notice = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(editor.notice ?? "")
+        }
+        .overlay(alignment: .top) {
+            if editor.isRecognizing {
+                Label("Reading handwriting…", systemImage: "text.viewfinder")
+                    .font(.callout.weight(.medium))
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.top, 110)
+                    .transition(.opacity)
+            }
+        }
         .onAppear(perform: takePendingCalculation)
         .onChange(of: calc.pendingInsertion) { _, _ in takePendingCalculation() }
         .onDisappear { editor.flush() }

@@ -26,7 +26,10 @@ enum BackgroundChoice: String, CaseIterable, Identifiable {
 /// Editable page size + background description used by "New Document" and "Page Settings".
 struct PageFormat: Equatable {
     /// nil means custom size.
-    var paperID: String? = PaperSize.letter.id
+    var paperID: String? = PaperSize.letter.id {
+        // A whiteboard is only useful if it can grow.
+        didSet { if paperID == PaperSize.whiteboard.id, oldValue != paperID { autoExtends = true } }
+    }
     var orientation: PageOrientation = .portrait
     var customWidth: Double = 8.5
     var customHeight: Double = 11
@@ -211,7 +214,8 @@ struct PageFormatEditor: View {
             Toggle(isOn: $format.autoExtends) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Endless Page")
-                    Text("The page grows longer as you write near the bottom.").font(.caption).foregroundStyle(.secondary)
+                    Text("The page grows as you write near its bottom or right edge — great with Whiteboard.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

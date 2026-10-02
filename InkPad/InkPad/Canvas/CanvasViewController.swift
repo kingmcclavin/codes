@@ -748,14 +748,18 @@ final class CanvasViewController: UIViewController {
     // MARK: Calculations
 
     /// Places a calculation card at the middle of the visible part of the page.
-    func insertCalculation(_ block: CalculationBlock, text: String) {
-        let pid = currentPageID
+    func insertCalculation(_ block: CalculationBlock, text: String, at placement: CardPlacement? = nil) {
+        let pid = placement?.pageID ?? currentPageID
         guard let page = document.page(pid) else { return }
         var color = editor.settings.text.color
         if page.background.isDark && !color.isLight { color = .white }
         var card = TextElement.calculationCard(block, text: text, at: visibleCenter(in: pid),
                                                style: TextElement.calculationStyle(color: color),
                                                maxWidth: page.size.width - 60)
+        if let placement {
+            card.box.center = CGPoint(x: placement.topLeft.x + card.box.size.width / 2 + TextElement.cardPadding.width,
+                                      y: placement.topLeft.y + card.box.size.height / 2 + TextElement.cardPadding.height)
+        }
         // Keep the whole card on the page.
         let pad = TextElement.cardPadding
         let half = CGSize(width: card.box.size.width / 2 + pad.width + 8, height: card.box.size.height / 2 + pad.height + 8)
@@ -779,6 +783,36 @@ final class CanvasViewController: UIViewController {
         clearSelection()
         history.perform(ElementsEdit.update([(.text(current), .text(updated))], page: page, name: "Edit Calculation"))
         showPending([.text(updated)], pageID: pageID)
+    }
+
+    /// Reads the selected handwriting as math and offers it as a calculation
+    /// card placed beside the ink.
+    func calculateSelectedHandwriting() {
+        guard let pid = selection.pageID else { return }
+        let elements = selectedElements
+        let bounds = elements.reduce(CGRect.null) { $0.union($1.bounds) }
+        guard let image = MathRecognizer.image(of: elements, renderer: renderer) else {
+            editor.notice = MathRecognizer.RecognitionError.nothingToRead.localizedDescription
+            return
+        }
+        editor.isRecognizing = true
+        let engine = CalculatorStore.shared.engine
+        MathRecognizer.recognizeLines(in: image) { result in
+            let expression = (try? result.get()).flatMap { MathRecognizer.expression(from: $0, engine: engine) }
+            let failure = (try? result.get()) == nil ? MathRecognizer.RecognitionError.notRecognized.localizedDescription : nil
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.editor.isRecognizing = false
+                guard let expression else {
+                    self.editor.notice = failure ?? MathRecognizer.RecognitionError.notRecognized.localizedDescription
+                    return
+                }
+                self.clearSelection()
+                self.editor.calculationRequest = CalculationEditRequest(
+                    block: .expression(expression),
+                    placement: CardPlacement(pageID: pid, topLeft: CGPoint(x: bounds.maxX + 16, y: bounds.minY)))
+            }
+        }
     }
 
     // MARK: Export
@@ -1079,6 +1113,11 @@ extension CanvasViewController: UIEditMenuInteractionDelegate {
             items.append(UIAction(title: "Style…", image: UIImage(systemName: "slider.horizontal.3")) { [weak self] _ in
                 self?.editor.showSelectionInspector = true
             })
+            if elements.contains(where: \.isStroke) {
+                items.append(UIAction(title: "Calculate", image: UIImage(systemName: "function")) { [weak self] _ in
+                    self?.calculateSelectedHandwriting()
+                })
+            }
             if elements.count == 1, case .text = elements[0] {
                 items.append(UIAction(title: "Edit Text", image: UIImage(systemName: "character.cursor.ibeam")) { [weak self] _ in
                     self?.editSelectedText()

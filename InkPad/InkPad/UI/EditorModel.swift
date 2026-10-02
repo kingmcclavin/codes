@@ -24,6 +24,13 @@ struct CalculationEditRequest: Identifiable {
     var block: CalculationBlock
     var element: TextElement?
     var pageID: UUID?
+    /// Where a new card goes (its top-left corner); nil = middle of the screen.
+    var placement: CardPlacement?
+}
+
+struct CardPlacement {
+    var pageID: UUID
+    var topLeft: CGPoint
 }
 
 /// Bridges the document/engine and the SwiftUI interface.
@@ -61,6 +68,9 @@ final class EditorModel: ObservableObject {
     @Published var showPDFImporter = false
     @Published var importError: String?
     @Published var calculationRequest: CalculationEditRequest?
+    /// Short message shown in an alert (e.g. handwriting not recognized).
+    @Published var notice: String?
+    @Published var isRecognizing = false
 
     private var previousTool: ToolKind = .pen
     private var observers: [NSObjectProtocol] = []
@@ -98,6 +108,7 @@ final class EditorModel: ObservableObject {
     }
 
     private var extending = false
+    static let maxPageLength: CGFloat = 14_400
 
     /// Endless pages: grow a page when content gets close to its bottom edge.
     /// Not an undo step (shrinking back would hide nothing useful).
@@ -107,11 +118,19 @@ final class EditorModel: ObservableObject {
         defer { extending = false }
         for page in document.pages where page.background.autoExtends == true {
             let size = page.size
-            guard size.height < 14_400 else { continue }
-            let bottom = page.allElements.reduce(CGFloat(0)) { max($0, $1.bounds.maxY) }
-            if bottom > size.height - 300 {
-                let height = min(14_400, max(size.height + 800, bottom + 600))
-                document.setPageSettings(page.id, size: CGSize(width: size.width, height: height), background: page.background)
+            let content = page.allElements.reduce(CGRect.null) { $0.union($1.bounds) }
+            guard !content.isNull else { continue }
+            var grown = size
+            // Down, like an endless scroll…
+            if content.maxY > size.height - 300, size.height < Self.maxPageLength {
+                grown.height = min(Self.maxPageLength, max(size.height + 800, content.maxY + 600))
+            }
+            // …and to the right, like a whiteboard.
+            if content.maxX > size.width - 200, size.width < Self.maxPageLength {
+                grown.width = min(Self.maxPageLength, max(size.width + 600, content.maxX + 400))
+            }
+            if grown != size {
+                document.setPageSettings(page.id, size: grown, background: page.background)
             }
         }
     }
@@ -361,7 +380,7 @@ final class EditorModel: ObservableObject {
         if let element = request.element, let pageID = request.pageID {
             canvas?.updateCalculation(element, pageID: pageID, block: block, text: text)
         } else {
-            canvas?.insertCalculation(block, text: text)
+            canvas?.insertCalculation(block, text: text, at: request.placement)
         }
     }
 

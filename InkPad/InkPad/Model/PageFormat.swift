@@ -103,9 +103,11 @@ struct PaperSize: Identifiable, Hashable {
     static let standard4x3 = PaperSize(id: "4x3", name: "Standard 4:3", width: 768, height: 1024, category: .screen)
     /// Tall scrolling page (fits an 11-inch iPad's width at about 180%).
     static let longScroll = PaperSize(id: "long-455x2500", name: "Long Scroll", width: 455, height: 2500, category: .other)
+    /// Large square canvas; with Endless Page on it grows right and down.
+    static let whiteboard = PaperSize(id: "whiteboard", name: "Whiteboard", width: 2000, height: 2000, category: .other)
 
     static let all: [PaperSize] = [
-        .letter, .legal, .tabloid, .a3, .a4, .a5, .square, .longScroll,
+        .letter, .legal, .tabloid, .a3, .a4, .a5, .square, .longScroll, .whiteboard,
         .ipadPro13, .ipadPro11, .ipadAir, .ipadMini, .widescreen, .standard4x3,
     ]
 

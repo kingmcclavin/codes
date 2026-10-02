@@ -142,3 +142,63 @@ final class PolishTests: XCTestCase {
         XCTAssertThrowsError(try target.importData(Data("nonsense".utf8)))
     }
 }
+
+final class HandwritingMathTests: XCTestCase {
+    func testNormalizeCommonMisreadings() {
+        XCTAssertEqual(MathRecognizer.normalize("2 x 3"), "2 × 3")
+        XCTAssertEqual(MathRecognizer.normalize("12X4="), "12×4")
+        XCTAssertEqual(MathRecognizer.normalize("1O + 5 = ?"), "10 + 5")
+        XCTAssertEqual(MathRecognizer.normalize("l2 — 4"), "12 - 4")
+        XCTAssertEqual(MathRecognizer.normalize("8 ÷ 2"), "8 / 2")
+        XCTAssertEqual(MathRecognizer.normalize("2+3=5"), "2+3")
+        XCTAssertEqual(MathRecognizer.normalize("m = 5"), "m = 5")      // assignment kept
+        XCTAssertEqual(MathRecognizer.normalize("2x + 1"), "2x + 1")    // x as a variable
+        XCTAssertEqual(MathRecognizer.normalize("cos(0)"), "cos(0)")
+        XCTAssertEqual(MathRecognizer.normalize("log(100)"), "log(100)")
+    }
+
+    func testPicksAReadingTheCalculatorUnderstands() {
+        let engine = CalculatorEngine()
+        let lines = [["2 +", "2 + 3", "2+3"], ["5 x 4 ="]]
+        XCTAssertEqual(MathRecognizer.expression(from: lines, engine: engine), "2 + 3\n5 × 4")
+        XCTAssertNil(MathRecognizer.expression(from: [], engine: engine))
+        // Normalized readings evaluate.
+        XCTAssertEqual(try engine.evaluateLine("5 × 4").value, 20)
+    }
+
+    func testRendersSelectedInk() {
+        let ink = CanvasElement.stroke(Stroke(points: [InkPoint(location: CGPoint(x: 10, y: 10)), InkPoint(location: CGPoint(x: 60, y: 40))],
+                                              style: PenPreset.ballpoint.style))
+        let image = MathRecognizer.image(of: [ink], renderer: PageRenderer(assetsURL: FileManager.default.temporaryDirectory))
+        XCTAssertNotNil(image)
+        XCTAssertNil(MathRecognizer.image(of: [], renderer: PageRenderer(assetsURL: FileManager.default.temporaryDirectory)))
+    }
+}
+
+@MainActor
+final class WhiteboardTests: XCTestCase {
+    func testWhiteboardGrowsRight() {
+        var bg = PageBackground(template: .grid)
+        bg.autoExtends = true
+        let size = PaperSize.whiteboard.size(for: .portrait)
+        let doc = DocumentModel(id: UUID(), title: "Board", createdAt: Date(), modifiedAt: Date(),
+                                pages: [PageData(size: size, background: bg)], toolSettings: ToolSettings(), viewState: ViewState(),
+                                assetsURL: FileManager.default.temporaryDirectory)
+        let editor = EditorModel(document: doc, store: DocumentStore(rootURL: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)))
+        let page = doc.pages[0]
+        let ink = CanvasElement.stroke(Stroke(points: [InkPoint(location: CGPoint(x: size.width - 50, y: 100)),
+                                                       InkPoint(location: CGPoint(x: size.width - 20, y: 120))],
+                                              style: PenPreset.ballpoint.style))
+        editor.history.perform(ElementsEdit.add([ink], to: page, name: "Ink"))
+        XCTAssertGreaterThan(page.size.width, size.width)
+        XCTAssertEqual(page.size.height, size.height)   // content is near the top
+    }
+
+    func testChoosingWhiteboardTurnsOnEndlessPage() {
+        var format = PageFormat()
+        XCTAssertFalse(format.autoExtends)
+        format.paperID = PaperSize.whiteboard.id
+        XCTAssertTrue(format.autoExtends)
+        XCTAssertEqual(format.background.autoExtends, true)
+    }
+}
