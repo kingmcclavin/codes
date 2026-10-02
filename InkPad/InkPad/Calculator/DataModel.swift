@@ -318,7 +318,8 @@ struct Statistics: Equatable {
         median = Self.quantile(v, 0.5)
         q1 = Self.quantile(v, 0.25)
         q3 = Self.quantile(v, 0.75)
-        let ss = v.reduce(0) { $0 + ($1 - mean) * ($1 - mean) }
+        let m = sum / Double(count)
+        let ss = v.reduce(0) { $0 + ($1 - m) * ($1 - m) }
         populationStdDev = (ss / Double(count)).squareRoot()
         stdDev = count > 1 ? (ss / Double(count - 1)).squareRoot() : 0
     }
