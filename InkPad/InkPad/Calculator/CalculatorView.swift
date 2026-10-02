@@ -57,6 +57,11 @@ struct CalculatorView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 120)
+                NavigationLink {
+                    UnitConverterView()
+                } label: {
+                    Label("Unit Converter", systemImage: "arrow.left.arrow.right")
+                }
                 Button("Save as Formula", systemImage: "square.and.arrow.down") { saveAsFormula() }
                     .disabled(calc.draftExpression.trimmingCharacters(in: .whitespaces).isEmpty)
             }

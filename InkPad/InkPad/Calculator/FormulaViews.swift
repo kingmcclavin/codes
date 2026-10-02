@@ -103,6 +103,9 @@ struct FormulaRunView: View {
     @State private var loaded = false
     @State private var editing: Formula?
     @State private var recorded = false
+    /// Display units chosen per input/output ("" = the declared unit).
+    @State private var inputUnits: [String: String] = [:]
+    @State private var outputUnits: [String: String] = [:]
 
     private var engine: CalculatorEngine { calc.engine }
     private var inputNames: [String] { engine.inputs(of: formula) }
@@ -113,7 +116,14 @@ struct FormulaRunView: View {
         for name in inputNames {
             let text = (inputs[name] ?? "").trimmingCharacters(in: .whitespaces)
             guard !text.isEmpty else { continue }
-            do { values[name] = try engine.evaluate(expression: text, values: [:]) } catch {
+            do {
+                var v = try engine.evaluate(expression: text, values: [:])
+                // Convert from the unit picked in the form to the formula's unit.
+                if let chosen = inputUnits[name], !chosen.isEmpty {
+                    v = try UnitLibrary.convert(v, from: chosen, to: declaredUnit(name))
+                }
+                values[name] = v
+            } catch {
                 errors[name] = error.localizedDescription
             }
         }
@@ -146,8 +156,8 @@ struct FormulaRunView: View {
                 }
                 ForEach(inputNames, id: \.self) { name in
                     InputRow(name: name, variable: formula.variable(name) ?? dependencyVariable(name),
-                             text: binding(for: name), placeholder: placeholder(for: name),
-                             error: parsedInputs.errors[name])
+                             text: binding(for: name), unit: unitBinding(name, in: $inputUnits),
+                             placeholder: placeholder(for: name), error: parsedInputs.errors[name])
                 }
             }
 
@@ -160,8 +170,9 @@ struct FormulaRunView: View {
                             Text(o.name).font(.title3.monospaced().weight(.semibold))
                             Text("=").foregroundStyle(.secondary)
                             if let v = o.value {
-                                Text(NumberFormatting.format(v)).font(.title3.monospaced()).textSelection(.enabled)
-                                if !o.unit.isEmpty { Text(o.unit).foregroundStyle(.secondary) }
+                                Text(NumberFormatting.format(displayValue(v, of: o)))
+                                    .font(.title3.monospaced()).textSelection(.enabled)
+                                if !o.unit.isEmpty { UnitMenu(declared: o.unit, selection: unitBinding(o.name, in: $outputUnits)) }
                             } else if let e = o.error {
                                 Text(e.localizedDescription).font(.callout).foregroundStyle(.orange)
                             }
@@ -180,6 +191,8 @@ struct FormulaRunView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(!result.isSuccess || result.outputs.isEmpty)
             }
+
+            UnitCheckSection(formula: formula, engine: engine)
         }
         .navigationTitle(formula.name)
         .toolbar {
@@ -198,6 +211,25 @@ struct FormulaRunView: View {
             inputs = initialInputs
         }
         .onChange(of: inputs) { _, _ in recorded = false }
+    }
+
+    private func unitBinding(_ name: String, in dict: Binding<[String: String]>) -> Binding<String> {
+        Binding(get: { dict.wrappedValue[name] ?? "" }, set: { dict.wrappedValue[name] = $0 })
+    }
+
+    private func declaredUnit(_ name: String) -> String {
+        (formula.variable(name) ?? dependencyVariable(name))?.unit ?? ""
+    }
+
+    /// An output value in the unit picked for it.
+    private func displayValue(_ v: Double, of o: FormulaOutput) -> Double {
+        guard let chosen = outputUnits[o.name], !chosen.isEmpty else { return v }
+        return (try? UnitLibrary.convert(v, from: o.unit, to: chosen)) ?? v
+    }
+
+    private func displayUnit(_ o: FormulaOutput) -> String {
+        if let chosen = outputUnits[o.name], !chosen.isEmpty { return chosen }
+        return o.unit
     }
 
     private func binding(for name: String) -> Binding<String> {
@@ -220,8 +252,8 @@ struct FormulaRunView: View {
 
     private var resultText: String {
         var lines = [formula.name]
-        lines += inputNames.compactMap { n in parsedInputs.values[n].map { "\(n) = \(NumberFormatting.format($0)) \(formula.unit(of: n))".trimmingCharacters(in: .whitespaces) } }
-        lines += result.outputs.compactMap { o in o.value.map { "\(o.name) = \(NumberFormatting.format($0)) \(o.unit)".trimmingCharacters(in: .whitespaces) } }
+        lines += inputNames.compactMap { n in parsedInputs.values[n].map { "\(n) = \(NumberFormatting.format($0)) \(declaredUnit(n))".trimmingCharacters(in: .whitespaces) } }
+        lines += result.outputs.compactMap { o in o.value.map { "\(o.name) = \(NumberFormatting.format(displayValue($0, of: o))) \(displayUnit(o))".trimmingCharacters(in: .whitespaces) } }
         return lines.joined(separator: "\n")
     }
 }
@@ -230,6 +262,7 @@ private struct InputRow: View {
     let name: String
     let variable: FormulaVariable?
     @Binding var text: String
+    @Binding var unit: String
     let placeholder: String
     let error: String?
 
@@ -245,8 +278,8 @@ private struct InputRow: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color(uiColor: .tertiarySystemFill)))
-                if let unit = variable?.unit, !unit.isEmpty {
-                    Text(unit).foregroundStyle(.secondary).frame(minWidth: 40, alignment: .leading)
+                if let declared = variable?.unit, !declared.isEmpty {
+                    UnitMenu(declared: declared, selection: $unit).frame(minWidth: 40, alignment: .leading)
                 }
             }
             if let label = variable?.label, !label.isEmpty {
@@ -333,6 +366,9 @@ struct FormulaEditorView: View {
                         }
                     }
                 }
+                if validation == nil, !formula.lines.isEmpty {
+                    UnitCheckSection(formula: formula, engine: engine)
+                }
             }
             .navigationTitle(isNew ? "New Formula" : "Edit Formula")
             .navigationBarTitleDisplayMode(.inline)
@@ -379,6 +415,7 @@ private struct VariableMetadataRow: View {
             TextField("meaning", text: $variable.label)
             TextField("unit", text: $variable.unit)
                 .frame(width: 80)
+                .foregroundStyle(UnitLibrary.parse(variable.unit) == nil ? Color.red : Color.primary)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             if showsDefault {
@@ -504,17 +541,17 @@ struct ToolsView: View {
         NavigationStack {
             ScrollView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 14)], spacing: 14) {
+                    NavigationLink {
+                        UnitConverterView()
+                    } label: {
+                        card(icon: "arrow.left.arrow.right", title: "Unit Converter",
+                             summary: "Length, force, energy, pressure, temperature and more — including compound units.")
+                    }
+                    .buttonStyle(.plain)
                     ForEach(featured, id: \.id) { item in
                         if let f = formula(item.id) {
                             NavigationLink(value: f.id) {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Image(systemName: item.icon).font(.title2).foregroundStyle(.tint)
-                                    Text(f.name).font(.headline).foregroundStyle(.primary)
-                                    Text(f.summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                                }
-                                .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
-                                .padding(14)
-                                .background(RoundedRectangle(cornerRadius: 14).fill(Color(uiColor: .secondarySystemBackground)))
+                                card(icon: item.icon, title: f.name, summary: f.summary)
                             }
                             .buttonStyle(.plain)
                         }
@@ -527,6 +564,19 @@ struct ToolsView: View {
                 if let f = calc.formula(id: id) { FormulaRunView(formula: f) }
             }
         }
+    }
+}
+
+extension ToolsView {
+    fileprivate func card(icon: String, title: String, summary: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon).font(.title2).foregroundStyle(.tint)
+            Text(title).font(.headline).foregroundStyle(.primary)
+            Text(summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color(uiColor: .secondarySystemBackground)))
     }
 }
 
@@ -557,7 +607,7 @@ struct BasisSettingsView: View {
                     Button("Export App (.ipa)…", systemImage: "app.badge") { showExportApp = true }
                 }
                 Section {
-                    LabeledContent("Version", value: "Basis 2.0 (Stage 3)")
+                    LabeledContent("Version", value: "Basis 2.0 (Stage 4)")
                 } footer: {
                     Text("Everything is stored on this iPad. Notes live in Files › On My iPad › Basis.")
                 }
