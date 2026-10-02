@@ -40,6 +40,8 @@ struct LibrarySidebar: View {
     @Binding var selection: SidebarItem?
     @EnvironmentObject private var store: DocumentStore
     @EnvironmentObject private var tabs: TabsModel
+    @AppStorage("proToolsEnabled") private var proTools = false
+    @AppStorage("toolboxExpanded") private var toolboxExpanded = true
     @State private var showExport = false
     @State private var showAppearance = false
 
@@ -48,10 +50,17 @@ struct LibrarySidebar: View {
             Section {
                 Label("Search", systemImage: "magnifyingglass").tag(SidebarItem.search)
                 Label("Calculator", systemImage: "plus.forwardslash.minus").tag(SidebarItem.calculator)
-                Label("Formulas", systemImage: "function").tag(SidebarItem.formulas)
-                Label("Tools", systemImage: "wrench.and.screwdriver").tag(SidebarItem.tools)
-                Label("Data", systemImage: "tablecells").tag(SidebarItem.data)
-                Label("History", systemImage: "clock.arrow.circlepath").tag(SidebarItem.history)
+            }
+
+            if proTools {
+                Section(isExpanded: $toolboxExpanded) {
+                    Label("Formulas", systemImage: "function").tag(SidebarItem.formulas)
+                    Label("Engineering Tools", systemImage: "wrench.and.screwdriver").tag(SidebarItem.tools)
+                    Label("Data & Graphs", systemImage: "chart.xyaxis.line").tag(SidebarItem.data)
+                    Label("History", systemImage: "clock.arrow.circlepath").tag(SidebarItem.history)
+                } header: {
+                    Label("Toolbox", systemImage: "shippingbox")
+                }
             }
 
             Section("Notes") {

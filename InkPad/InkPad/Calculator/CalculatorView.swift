@@ -13,58 +13,62 @@ extension EnvironmentValues {
     }
 }
 
-/// Modern scientific calculator: expression line with live result, tape,
-/// scientific keypad, variables panel, constants and functions.
+/// The calculator screen: a friendly keypad, the tape of recent answers,
+/// and extras (variables, constants, save as formula) in one menu.
 struct CalculatorView: View {
     @EnvironmentObject private var calc: CalculatorStore
-    @State private var error: String?
-    @State private var showConstants = false
-    @State private var showFunctions = false
+    @State private var showVariables = false
     @State private var newFormula: Formula?
-    @FocusState private var inputFocused: Bool
 
     var body: some View {
         GeometryReader { geo in
-            if geo.size.width > 820 {
+            if geo.size.width > 760 {
                 HStack(spacing: 0) {
-                    VStack(spacing: 0) {
-                        tape
-                        Divider()
-                        inputArea
-                        keypad.padding(12)
-                    }
+                    tape
                     Divider()
-                    VariablesPanel()
-                        .frame(width: 320)
+                    CalculatorPad()
+                        .frame(width: min(460, geo.size.width * 0.5))
+                        .padding(20)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
                 }
             } else {
                 VStack(spacing: 0) {
                     tape
-                    Divider()
-                    inputArea
-                    keypad.padding(10)
-                    Divider()
-                    VariablesPanel()
-                        .frame(height: 220)
+                    CalculatorPad()
+                        .padding(16)
                 }
             }
         }
         .navigationTitle("Calculator")
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Picker("Angle", selection: $calc.angleMode) {
-                    ForEach(AngleMode.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 120)
-                NavigationLink {
-                    UnitConverterView()
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button("Variables…", systemImage: "x.squareroot") { showVariables = true }
+                    Button("Save as Formula…", systemImage: "square.and.arrow.down") { saveAsFormula() }
+                        .disabled(saveableExpression == nil)
+                    NavigationLink {
+                        UnitConverterView()
+                    } label: {
+                        Label("Unit Converter", systemImage: "arrow.left.arrow.right")
+                    }
+                    Divider()
+                    Button("Clear Tape", systemImage: "trash", role: .destructive) {
+                        calc.deleteHistory(Set(calc.history.filter { $0.formulaID == nil }.map(\.id)))
+                    }
+                    .disabled(calculatorHistory.isEmpty)
                 } label: {
-                    Label("Unit Converter", systemImage: "arrow.left.arrow.right")
+                    Label("More", systemImage: "ellipsis.circle")
                 }
-                Button("Save as Formula", systemImage: "square.and.arrow.down") { saveAsFormula() }
-                    .disabled(calc.draftExpression.trimmingCharacters(in: .whitespaces).isEmpty)
             }
+        }
+        .sheet(isPresented: $showVariables) {
+            NavigationStack {
+                VariablesPanel()
+                    .navigationTitle("Variables")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showVariables = false } } }
+            }
+            .presentationDetents([.medium, .large])
         }
         .sheet(item: $newFormula) { f in
             FormulaEditorView(formula: f, isNew: true)
@@ -80,27 +84,31 @@ struct CalculatorView: View {
     private var tape: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .trailing, spacing: 10) {
+                LazyVStack(alignment: .trailing, spacing: 14) {
                     if calculatorHistory.isEmpty {
-                        Text("Type an expression like 2 + 3·4, sin(30°) or m = 5, then press =.\nVariables you define can be reused anywhere.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 40)
+                        VStack(spacing: 10) {
+                            Image(systemName: "plus.forwardslash.minus").font(.largeTitle).foregroundStyle(.tertiary)
+                            Text("Your answers will appear here.")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Text("Tip: type m = 5 to save a variable you can reuse.")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 60)
                     }
                     ForEach(calculatorHistory) { r in
                         Button {
                             calc.draftExpression = r.expression
                         } label: {
                             VStack(alignment: .trailing, spacing: 2) {
-                                Text(r.expression)
-                                    .font(.system(.body, design: .monospaced))
+                                Text(MathText.pretty(r.expression))
+                                    .font(.system(.callout, design: .rounded))
                                     .foregroundStyle(.secondary)
-                                Text("= " + (r.results.first.map { NumberFormatting.format($0.value) } ?? ""))
-                                    .font(.system(.title3, design: .monospaced).weight(.semibold))
+                                Text(r.results.first.map { NumberFormatting.format($0.value) } ?? "")
+                                    .font(.system(.title2, design: .rounded).weight(.medium))
                                     .foregroundStyle(.primary)
-                                    .textSelection(.enabled)
                             }
                             .frame(maxWidth: .infinity, alignment: .trailing)
                         }
@@ -109,15 +117,16 @@ struct CalculatorView: View {
                             Button("Copy Result", systemImage: "doc.on.doc") {
                                 UIPasteboard.general.string = r.results.first.map { NumberFormatting.plain($0.value) }
                             }
-                            Button("Use Expression", systemImage: "arrow.down.doc") { calc.draftExpression = r.expression }
+                            Button("Use Again", systemImage: "arrow.down.doc") { calc.draftExpression = r.expression }
                             InsertIntoNotebookMenu(block: { calc.expressionBlock(r.expression) }) {
                                 Label("Insert into Notebook", systemImage: "note.text.badge.plus")
                             }
+                            Button("Delete", systemImage: "trash", role: .destructive) { calc.deleteHistory([r.id]) }
                         }
                         .id(r.id)
                     }
                 }
-                .padding(16)
+                .padding(20)
             }
             .onChange(of: calc.history.first?.id) { _, _ in
                 if let last = calculatorHistory.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
@@ -126,171 +135,19 @@ struct CalculatorView: View {
                 if let last = calculatorHistory.last { proxy.scrollTo(last.id, anchor: .bottom) }
             }
         }
-        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: Input
-
-    private var preview: (text: String, isError: Bool)? {
+    private var saveableExpression: String? {
         let t = calc.draftExpression.trimmingCharacters(in: .whitespaces)
-        guard !t.isEmpty else { return nil }
-        do {
-            let r = try calc.engine.evaluateLine(t)
-            return ((r.target.map { "\($0) = " } ?? "= ") + NumberFormatting.format(r.value), false)
-        } catch let e as CalcError {
-            // Unfinished input is normal while typing; only show missing names and domain errors.
-            switch e {
-            case .missingVariable, .domain, .divisionByZero, .circularDependency, .unknownFunction, .argumentCount:
-                return (e.localizedDescription, true)
-            default:
-                return nil
-            }
-        } catch {
-            return nil
-        }
-    }
-
-    private var inputArea: some View {
-        VStack(alignment: .trailing, spacing: 6) {
-            TextField("Expression", text: $calc.draftExpression, axis: .vertical)
-                .font(.system(size: 26, weight: .regular, design: .monospaced))
-                .multilineTextAlignment(.trailing)
-                .lineLimit(1...4)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.numbersAndPunctuation)
-                .focused($inputFocused)
-                .onSubmit(evaluate)
-            HStack {
-                if let error {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                } else if let p = preview {
-                    Text(p.text)
-                        .font(.system(.callout, design: .monospaced))
-                        .foregroundStyle(p.isError ? Color.orange : Color.secondary)
-                }
-                Spacer()
-                Text(calc.angleMode.label)
-                    .font(.caption.monospaced().weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color(uiColor: .secondarySystemBackground))
-        .onChange(of: calc.draftExpression) { _, _ in error = nil }
-    }
-
-    private func evaluate() {
-        let t = calc.draftExpression.trimmingCharacters(in: .whitespaces)
-        guard !t.isEmpty else { return }
-        do {
-            try calc.evaluate(t)
-            calc.draftExpression = ""
-            error = nil
-        } catch {
-            self.error = error.localizedDescription
-        }
+        if !t.isEmpty { return t }
+        return calculatorHistory.last?.expression
     }
 
     private func saveAsFormula() {
-        let t = calc.draftExpression.trimmingCharacters(in: .whitespaces)
+        guard let t = saveableExpression else { return }
         let expression = CalculatorEngine.splitAssignment(t) == nil ? "result = \(t)" : t
         newFormula = Formula(name: "New Formula", expression: expression)
-    }
-
-    // MARK: Keypad
-
-    private func insert(_ s: String) {
-        calc.draftExpression += s
-        error = nil
-    }
-
-    private var keypad: some View {
-        let rows: [[(String, KeyStyle, () -> Void)]] = [
-            [("x²", .function, { insert("²") }), ("xʸ", .function, { insert("^") }), ("√", .function, { insert("√(") }),
-             ("(", .function, { insert("(") }), (")", .function, { insert(")") }), ("⌫", .clear, backspace), ("AC", .clear, { calc.draftExpression = "" })],
-            [("sin", .function, { insert("sin(") }), ("cos", .function, { insert("cos(") }), ("tan", .function, { insert("tan(") }),
-             ("7", .digit, { insert("7") }), ("8", .digit, { insert("8") }), ("9", .digit, { insert("9") }), ("÷", .op, { insert("÷") })],
-            [("sin⁻¹", .function, { insert("asin(") }), ("cos⁻¹", .function, { insert("acos(") }), ("tan⁻¹", .function, { insert("atan(") }),
-             ("4", .digit, { insert("4") }), ("5", .digit, { insert("5") }), ("6", .digit, { insert("6") }), ("×", .op, { insert("×") })],
-            [("log", .function, { insert("log(") }), ("ln", .function, { insert("ln(") }), ("eˣ", .function, { insert("exp(") }),
-             ("1", .digit, { insert("1") }), ("2", .digit, { insert("2") }), ("3", .digit, { insert("3") }), ("−", .op, { insert("-") })],
-            [("π", .function, { insert("π") }), ("e", .function, { insert("e") }), ("|x|", .function, { insert("abs(") }),
-             ("0", .digit, { insert("0") }), (".", .digit, { insert(".") }), ("EE", .digit, { insert("E") }), ("+", .op, { insert("+") })],
-            [("ans", .function, { insert("ans") }), ("°", .function, { insert("°") }), ("n!", .function, { insert("!") }),
-             ("x=", .function, { insert(" = ") }), (",", .digit, { insert(", ") }), ("f(x)", .function, { showFunctions = true }), ("=", .equals, evaluate)],
-        ]
-        return Grid(horizontalSpacing: 8, verticalSpacing: 8) {
-            ForEach(rows.indices, id: \.self) { r in
-                GridRow {
-                    ForEach(rows[r].indices, id: \.self) { c in
-                        let key = rows[r][c]
-                        KeyButton(title: key.0, style: key.1, action: key.2)
-                            .popover(isPresented: key.0 == "f(x)" ? $showFunctions : .constant(false)) {
-                                FunctionPicker { insert($0); showFunctions = false }
-                            }
-                    }
-                }
-            }
-            GridRow {
-                Button { showConstants = true } label: {
-                    Label("Constants", systemImage: "atom").frame(maxWidth: .infinity, minHeight: 34)
-                }
-                .buttonStyle(.bordered)
-                .gridCellColumns(7)
-                .popover(isPresented: $showConstants) {
-                    ConstantsPicker { insert($0); showConstants = false }
-                }
-            }
-        }
-        .frame(maxWidth: 640)
-    }
-
-    private func backspace() {
-        guard !calc.draftExpression.isEmpty else { return }
-        calc.draftExpression.removeLast()
-    }
-}
-
-enum KeyStyle { case digit, op, function, clear, equals }
-
-private struct KeyButton: View {
-    let title: String
-    let style: KeyStyle
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(style == .digit ? .title2.weight(.medium) : .body.weight(.medium))
-                .frame(maxWidth: .infinity, minHeight: 50)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(background))
-                .foregroundStyle(foreground)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-    }
-
-    private var background: Color {
-        switch style {
-        case .digit: return Color(uiColor: .secondarySystemBackground)
-        case .op: return Color.appAccent.opacity(0.18)
-        case .function: return Color(uiColor: .tertiarySystemFill)
-        case .clear: return Color.red.opacity(0.14)
-        case .equals: return Color.appAccent
-        }
-    }
-
-    private var foreground: Color {
-        switch style {
-        case .equals: return .white
-        case .op: return Color.appAccent
-        case .clear: return .red
-        default: return .primary
-        }
     }
 }
 

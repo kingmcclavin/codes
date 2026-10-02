@@ -28,6 +28,7 @@ struct RootView: View {
     @State private var sidebarSelection: SidebarItem? = .allDocuments
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var didRestore = false
+    @AppStorage("proToolsEnabled") private var proTools = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -59,6 +60,12 @@ struct RootView: View {
         }
         .onChange(of: store.folders) { _, folders in
             if let id = sidebarSelection?.folderID, !folders.contains(where: { $0.id == id }) {
+                sidebarSelection = .allDocuments
+            }
+        }
+        .onChange(of: proTools) { _, enabled in
+            // Leaving a Toolbox screen when Pro Tools are switched off.
+            if !enabled, [.formulas, .tools, .data, .history].contains(sidebarSelection) {
                 sidebarSelection = .allDocuments
             }
         }

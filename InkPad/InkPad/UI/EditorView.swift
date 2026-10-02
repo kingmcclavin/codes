@@ -9,10 +9,15 @@ struct EditorView: View {
     @EnvironmentObject private var calc: CalculatorStore
     @State private var renaming = false
     @State private var renameText = ""
+    @AppStorage("floatingCalculatorVisible") private var showCalculator = false
+    /// Top-left of the floating calculator, as a fraction of the canvas size.
+    @AppStorage("floatingCalculatorX") private var calcX = 0.62
+    @AppStorage("floatingCalculatorY") private var calcY = 0.08
+    @State private var calcDrag: CGSize = .zero
 
     var body: some View {
         VStack(spacing: 0) {
-            EditorToolbar(editor: editor, onClose: close, onRename: {
+            EditorToolbar(editor: editor, showCalculator: $showCalculator, onClose: close, onRename: {
                 renameText = editor.title
                 renaming = true
             })
@@ -29,6 +34,7 @@ struct EditorView: View {
                     PageIndicator(editor: editor)
                         .padding(.bottom, 14)
                 }
+                .overlay { floatingCalculator }
         }
         .background(Color(uiColor: .systemBackground))
         .sheet(isPresented: $editor.showPageManager) { PageManagerView(editor: editor) }
@@ -69,6 +75,40 @@ struct EditorView: View {
         .persistentSystemOverlays(.hidden)
     }
 
+    // MARK: Floating calculator
+
+    private let calculatorWidth: CGFloat = 300
+
+    @ViewBuilder
+    private var floatingCalculator: some View {
+        if showCalculator {
+            GeometryReader { geo in
+                let maxX = max(0, geo.size.width - calculatorWidth)
+                let origin = CGPoint(x: (calcX * geo.size.width + calcDrag.width).clamped(0, maxX),
+                                     y: (calcY * geo.size.height + calcDrag.height).clamped(0, max(0, geo.size.height - 60)))
+                FloatingCalculator(onInsert: insertCalculation, onClose: { withAnimation(.snappy) { showCalculator = false } })
+                    .frame(width: calculatorWidth)
+                    .gesture(
+                        DragGesture(minimumDistance: 4, coordinateSpace: .global)
+                            .onChanged { calcDrag = $0.translation }
+                            .onEnded { value in
+                                let x = (calcX * geo.size.width + value.translation.width).clamped(0, maxX)
+                                let y = (calcY * geo.size.height + value.translation.height).clamped(0, max(0, geo.size.height - 60))
+                                calcX = geo.size.width > 0 ? x / geo.size.width : 0
+                                calcY = geo.size.height > 0 ? y / geo.size.height : 0
+                                calcDrag = .zero
+                            })
+                    .offset(x: origin.x, y: origin.y)
+                    .transition(.scale(scale: 0.9, anchor: .topTrailing).combined(with: .opacity))
+            }
+        }
+    }
+
+    private func insertCalculation(_ expression: String) {
+        let block = calc.expressionBlock(expression)
+        editor.canvas?.insertCalculation(block, text: calc.renderedText(block))
+    }
+
     /// A calculation sent here from the calculator or a formula.
     private func takePendingCalculation() {
         guard let item = calc.pendingInsertion else { return }
@@ -107,6 +147,7 @@ private struct ShareItem: Identifiable {
 
 struct EditorToolbar: View {
     @ObservedObject var editor: EditorModel
+    @Binding var showCalculator: Bool
     let onClose: () -> Void
     let onRename: () -> Void
 
@@ -143,10 +184,16 @@ struct EditorToolbar: View {
                     Image(systemName: "photo").frame(width: 40, height: 36)
                 }
                 .accessibilityLabel("Insert Image")
-                Button { editor.newCalculation() } label: {
-                    Image(systemName: "function").frame(width: 40, height: 36)
+                Button {
+                    withAnimation(.snappy) { showCalculator.toggle() }
+                } label: {
+                    Image(systemName: "plus.forwardslash.minus")
+                        .frame(width: 40, height: 36)
+                        .background(RoundedRectangle(cornerRadius: 9).fill(showCalculator ? Color.appAccent.opacity(0.16) : .clear))
+                        .foregroundStyle(showCalculator ? Color.appAccent : Color.primary)
                 }
-                .accessibilityLabel("Insert Calculation")
+                .accessibilityLabel(showCalculator ? "Hide Calculator" : "Show Calculator")
+                .keyboardShortcut("k", modifiers: .command)
             }
             .fixedSize()
 
@@ -214,6 +261,7 @@ struct EditorMoreMenu: View {
     var body: some View {
         Menu {
             Button("Add Page", systemImage: "plus.rectangle.portrait") { editor.addPage() }
+            Button("Insert Calculation Card…", systemImage: "function") { editor.newCalculation() }
             Button("Import PDF…", systemImage: "doc.richtext") { editor.showPDFImporter = true }
             Button("Export PDF", systemImage: "square.and.arrow.up") { editor.exportPDF() }
             Divider()

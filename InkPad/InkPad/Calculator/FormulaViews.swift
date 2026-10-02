@@ -546,61 +546,45 @@ struct HistoryView: View {
 struct ToolsView: View {
     @EnvironmentObject private var calc: CalculatorStore
 
-    private let featured: [(id: Int, icon: String)] = [
-        (1, "x.squareroot"), (60, "bolt"), (20, "figure.run"), (23, "arrow.right.circle"), (26, "bolt.fill"),
-        (27, "arrow.up.right"), (2, "triangle"), (24, "scalemass"), (40, "square.stack.3d.down.right"), (43, "gearshape.2"),
-        (45, "ruler"), (63, "point.3.connected.trianglepath.dotted"),
-    ]
-
-    private func formula(_ n: Int) -> Formula? {
-        BuiltInFormulas.all.first { $0.id.uuidString.hasSuffix(String(format: "%012ld", n)) }
-    }
+    private let columns = [GridItem(.adaptive(minimum: 220), spacing: 14)]
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 14)], spacing: 14) {
-                    NavigationLink {
-                        UnitConverterView()
-                    } label: {
-                        card(icon: "arrow.left.arrow.right", title: "Unit Converter",
-                             summary: "Length, force, energy, pressure, temperature and more — including compound units.")
+                VStack(alignment: .leading, spacing: 26) {
+                    group("Everyday") {
+                        toolLink(icon: "arrow.left.arrow.right", title: "Unit Converter",
+                                 summary: "Length, force, energy, pressure, temperature and more.") { UnitConverterView() }
+                        toolLink(icon: "function", title: "Function Grapher",
+                                 summary: "Plot functions of x and trace values.") { FunctionGraphView() }
+                        toolLink(icon: "equal.square", title: "Equation Solver",
+                                 summary: "Find every solution of an equation.") { EquationSolverView() }
                     }
-                    .buttonStyle(.plain)
-                    NavigationLink {
-                        FunctionGraphView()
-                    } label: {
-                        card(icon: "function", title: "Function Grapher",
-                             summary: "Plot up to eight functions of x, trace values and add graphs to your notes.")
+                    group("Math") {
+                        toolLink(icon: "square.grid.3x3", title: "Matrices",
+                                 summary: "Determinants, inverses and linear systems.") { MatrixCalculatorView() }
+                        toolLink(icon: "arrow.up.right.and.arrow.down.left", title: "Vectors",
+                                 summary: "Dot and cross products, angles, projections.") { VectorCalculatorView() }
+                        toolLink(icon: "number", title: "Number Bases",
+                                 summary: "Binary, octal, decimal and hex.") { NumberBaseView() }
                     }
-                    .buttonStyle(.plain)
-                    toolLink(icon: "equal.square", title: "Equation Solver",
-                             summary: "Find every solution of an equation like x³ − 2x = 5 in a range.") { EquationSolverView() }
-                    toolLink(icon: "square.grid.3x3", title: "Matrices",
-                             summary: "Add, multiply, invert, determinants, rank and linear systems A·x = B.") { MatrixCalculatorView() }
-                    toolLink(icon: "arrow.up.right.and.arrow.down.left", title: "Vectors",
-                             summary: "Magnitude, dot and cross products, angles and projections in 3D.") { VectorCalculatorView() }
-                    toolLink(icon: "number", title: "Number Bases",
-                             summary: "Binary, octal, decimal and hex with two's complement.") { NumberBaseView() }
-                    toolLink(icon: "square.on.square.dashed", title: "Section Properties",
-                             summary: "Area, centroid, moments of inertia and section moduli of common shapes.") { SectionPropertiesView() }
-                    toolLink(icon: "ruler", title: "Beam Calculator",
-                             summary: "Reactions, shear, moment and deflection diagrams for simple beams.") { BeamCalculatorView() }
-                    ForEach(featured, id: \.id) { item in
-                        if let f = formula(item.id) {
-                            NavigationLink(value: f.id) {
-                                card(icon: item.icon, title: f.name, summary: f.summary)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                    group("Engineering") {
+                        toolLink(icon: "square.on.square.dashed", title: "Section Properties",
+                                 summary: "Area, centroid and moments of inertia.") { SectionPropertiesView() }
+                        toolLink(icon: "ruler", title: "Beam Calculator",
+                                 summary: "Reactions, shear, moment and deflection.") { BeamCalculatorView() }
                     }
                 }
-                .padding(18)
+                .padding(20)
             }
-            .navigationTitle("Tools")
-            .navigationDestination(for: UUID.self) { id in
-                if let f = calc.formula(id: id) { FormulaRunView(formula: f) }
-            }
+            .navigationTitle("Engineering Tools")
+        }
+    }
+
+    private func group<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.title3.weight(.semibold))
+            LazyVGrid(columns: columns, spacing: 14) { content() }
         }
     }
 }
@@ -622,7 +606,7 @@ extension ToolsView {
             Text(title).font(.headline).foregroundStyle(.primary)
             Text(summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
         }
-        .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 14).fill(Color(uiColor: .secondarySystemBackground)))
     }
@@ -636,6 +620,7 @@ struct BasisSettingsView: View {
     @State private var showExportApp = false
     @State private var shareURL: URL?
     @State private var importing = false
+    @AppStorage("proToolsEnabled") private var proTools = false
     @State private var importMessage: String?
 
     var body: some View {
@@ -646,6 +631,13 @@ struct BasisSettingsView: View {
                         Text("Degrees").tag(AngleMode.degrees)
                         Text("Radians").tag(AngleMode.radians)
                     }
+                }
+                Section {
+                    Toggle(isOn: $proTools) {
+                        Label("Pro Tools", systemImage: "shippingbox")
+                    }
+                } footer: {
+                    Text("Shows the Toolbox in the sidebar: formula library, engineering tools, data tables and graphs, and history. Turn off for a simpler app — nothing is deleted.")
                 }
                 Section("Appearance") {
                     Button("Accent Color…", systemImage: "paintpalette") { showAppearance = true }
