@@ -35,7 +35,9 @@ struct UnitDimension: Hashable {
     var description: String {
         if isDimensionless { return "dimensionless" }
         func part(_ positive: Bool) -> String {
-            zip(UnitDimension.symbols, exponents).compactMap { sym, e in
+            // Conventional order: kg·m²/s², not m²·kg/s².
+            [1, 0, 2, 3, 4, 5].compactMap { i -> String? in
+                let sym = UnitDimension.symbols[i], e = exponents[i]
                 guard positive ? e > 0 : e < 0 else { return nil }
                 let p = abs(e)
                 return p == 1 ? sym : sym + NumberFormatting.superscript(p)
