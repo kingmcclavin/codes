@@ -98,20 +98,25 @@ struct StatTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                if let tag { SourceTag(text: tag) }
-            }
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             Text(value)
                 .font(.system(.title, design: .rounded).weight(.semibold))
                 .monospacedDigit()
                 .contentTransition(.numericText())
-            if let caption {
-                Text(caption)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if caption != nil || tag != nil {
+                HStack(spacing: 6) {
+                    if let tag { SourceTag(text: tag) }
+                    if let caption {
+                        Text(caption)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

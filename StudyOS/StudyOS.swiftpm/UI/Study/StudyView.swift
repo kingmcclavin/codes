@@ -57,7 +57,7 @@ struct StudyView: View {
                 HStack {
                     Text("Course").foregroundStyle(.secondary)
                     Spacer()
-                    CoursePicker(title: "Course", courses: store.db.currentCourses, selection: $courseID)
+                    CoursePicker(title: "Course", courses: store.db.currentCourses, selection: $courseID, noneTitle: "No Course")
                         .labelsHidden()
                 }
                 HStack {
@@ -199,7 +199,7 @@ private struct FinishSessionSheet: View {
                 if let timer = store.db.activeTimer {
                     Section {
                         LabeledContent("Duration", value: DurationFormat.short(timer.elapsed(at: Date())))
-                        CoursePicker(title: "Course", courses: store.db.currentCourses, selection: $courseID)
+                        CoursePicker(title: "Course", courses: store.db.currentCourses, selection: $courseID, noneTitle: "No Course")
                         TextField("Topic", text: $topic)
                     }
                     Section("Notes") {

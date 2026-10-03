@@ -20,10 +20,11 @@ struct CoursePicker: View {
     let title: String
     let courses: [Course]
     @Binding var selection: UUID?
+    var noneTitle = "None"
 
     var body: some View {
         Picker(title, selection: $selection) {
-            Text("None").tag(UUID?.none)
+            Text(noneTitle).tag(UUID?.none)
             ForEach(courses) { course in
                 Text(course.code.isEmpty ? course.name : "\(course.code) · \(course.name)")
                     .tag(UUID?.some(course.id))

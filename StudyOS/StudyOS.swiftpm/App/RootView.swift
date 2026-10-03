@@ -15,6 +15,8 @@ struct RootView: View {
             // A fresh navigation stack for each section.
             .id(navigation.section ?? .dashboard)
         }
+        // Keep the sidebar beside the content (not over it) in portrait too.
+        .navigationSplitViewStyle(.balanced)
         .alert("Data Recovered", isPresented: Binding(
             get: { store.startupMessage != nil },
             set: { if !$0 { store.startupMessage = nil } }
