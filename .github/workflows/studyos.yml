@@ -65,6 +65,8 @@ jobs:
   # proving it starts and renders (not just compiles).
   simulator-smoke-test:
     runs-on: macos-15
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Build for iPad simulator
@@ -109,3 +111,13 @@ jobs:
         with:
           name: StudyOS-screenshots
           path: screenshots
+      - name: Publish screenshots to the studyos-screenshots branch
+        if: github.event_name != 'pull_request'
+        run: |
+          cd screenshots
+          git init -q -b studyos-screenshots
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "StudyOS screenshots for ${GITHUB_SHA}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" studyos-screenshots
