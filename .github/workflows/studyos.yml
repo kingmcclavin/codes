@@ -1,0 +1,62 @@
+# Builds StudyOS in the cloud so no Mac is needed:
+#  - runs the logic tests (models, persistence, grade/GPA/study calculations)
+#  - compiles the full Swift Playgrounds app package for iPad
+#  - packages an UNSIGNED .ipa as a downloadable artifact for sideloading
+#    (sideloading tools such as AltStore or SideStore sign it with your Apple ID)
+name: StudyOS
+
+on:
+  push:
+    paths:
+      - "StudyOS/**"
+      - ".github/workflows/studyos.yml"
+  pull_request:
+    paths:
+      - "StudyOS/**"
+      - ".github/workflows/studyos.yml"
+  workflow_dispatch:
+
+jobs:
+  logic-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Run logic tests
+        run: StudyOS/Tests/run-logic-tests.sh
+
+  build-ipa:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Xcode
+        run: xcodebuild -version
+      - name: List schemes
+        working-directory: StudyOS/StudyOS.swiftpm
+        run: xcodebuild -list
+      - name: Build app (unsigned)
+        working-directory: StudyOS/StudyOS.swiftpm
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -scheme StudyOS \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | tee "$RUNNER_TEMP/build.log" | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/build.log"
+      - name: Package .ipa
+        run: |
+          app="$(find "$RUNNER_TEMP/DerivedData/Build/Products" -maxdepth 2 -name 'StudyOS.app' -type d | head -1)"
+          test -n "$app" || { echo "StudyOS.app not found"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$app" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/StudyOS-unsigned.ipa" Payload)
+          ls -lh "$GITHUB_WORKSPACE/StudyOS-unsigned.ipa"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StudyOS-unsigned-ipa
+          path: StudyOS-unsigned.ipa
+          if-no-files-found: error
