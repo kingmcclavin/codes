@@ -9,7 +9,7 @@ import Foundation
 final class AutosaveController {
     private let document: DocumentModel
     private let packageURL: URL
-    private let queue = DispatchQueue(label: "InkPad.autosave", qos: .utility)
+    private let queue = DispatchQueue(label: "Basis.autosave", qos: .utility)
     private var scheduled: DispatchWorkItem?
     private let delay: TimeInterval
 

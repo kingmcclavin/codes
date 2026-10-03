@@ -1,13 +1,13 @@
 // swift-tools-version: 5.9
 
 // Swift Playgrounds (iPad) app package. `scripts/make-swiftpm.sh` copies the
-// app sources next to this manifest to produce InkPad.swiftpm.
+// app sources next to this manifest to produce Basis.swiftpm.
 
 import AppleProductTypes
 import PackageDescription
 
 let package = Package(
-    name: "InkPad",
+    name: "Basis",
     platforms: [
         .iOS("17.0"),
     ],

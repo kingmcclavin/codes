@@ -1,5 +1,5 @@
 import XCTest
-@testable import InkPad
+@testable import Basis
 
 final class DataTests: XCTestCase {
     private let engine = CalculatorEngine(angleMode: .radians)

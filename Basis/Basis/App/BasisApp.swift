@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct InkPadApp: App {
+struct BasisApp: App {
     @StateObject private var store = DocumentStore.shared
     @StateObject private var preferences = AppPreferences.shared
     @StateObject private var tabs = TabsModel(store: .shared)

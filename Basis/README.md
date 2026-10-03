@@ -1,4 +1,4 @@
-# InkPad
+# Basis
 
 A focused, native iPad note-taking and handwriting app built around one thing:
 a fast, precise, vector "digital paper" canvas for Apple Pencil. It's aimed at
@@ -13,12 +13,12 @@ Requirements: Xcode 15 or later, iPadOS 17 SDK, and [XcodeGen](https://github.co
 
 ```sh
 brew install xcodegen
-cd InkPad
+cd Basis
 xcodegen generate
-open InkPad.xcodeproj
+open Basis.xcodeproj
 ```
 
-Choose the **InkPad** scheme, pick your signing team in *Signing & Capabilities*,
+Choose the **Basis** scheme, pick your signing team in *Signing & Capabilities*,
 and run it on an iPad. Apple Pencil needs a real device; in the simulator you can
 turn on **… › Draw with Finger**. Run the unit tests with ⌘U.
 
@@ -45,7 +45,7 @@ turn on **… › Draw with Finger**. Run the unit tests with ⌘U.
 ## Architecture
 
 ```
-InkPad/
+Basis/
 ├─ Model/        Value types: Stroke, ShapeElement, ImageElement, TextElement,
 │                CanvasElement, page formats, tool settings (all Codable)
 ├─ Engine/       PageStore + SpatialGrid, DocumentModel, commands & History,
@@ -156,7 +156,7 @@ A document is a folder in the app's Documents directory, which you can see in
 the Files app:
 
 ```
-InkPad Documents/<uuid>.inkpad/
+Basis Documents/<uuid>.basis/
   manifest.json      title, page order, tool settings, view state
   pages/<uuid>.json  one file per page; only changed pages are rewritten
   assets/            inserted images

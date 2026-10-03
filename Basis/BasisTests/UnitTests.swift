@@ -1,5 +1,5 @@
 import XCTest
-@testable import InkPad
+@testable import Basis
 
 final class UnitTests: XCTestCase {
     private func assertConvert(_ v: Double, _ from: String, _ to: String, _ expected: Double, accuracy: Double = 1e-9,

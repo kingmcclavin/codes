@@ -1,6 +1,6 @@
 import CoreGraphics
 import XCTest
-@testable import InkPad
+@testable import Basis
 
 final class ScribbleDetectorTests: XCTestCase {
     private let detector = ScribbleDetector()

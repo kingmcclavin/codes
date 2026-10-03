@@ -1,17 +1,17 @@
-name: InkPad
+name: Basis
 
 on:
   push:
     paths:
-      - "InkPad/**"
-      - ".github/workflows/inkpad.yml"
+      - "Basis/**"
+      - ".github/workflows/basis.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: inkpad-${{ github.ref }}
+  group: basis-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
     runs-on: macos-latest
     defaults:
       run:
-        working-directory: InkPad
+        working-directory: Basis
     steps:
       - uses: actions/checkout@v4
 
@@ -36,27 +36,27 @@ jobs:
           mkdir -p build
           status=0
           xcodebuild build \
-            -project InkPad.xcodeproj -scheme InkPad -configuration Release \
+            -project Basis.xcodeproj -scheme Basis -configuration Release \
             -destination 'generic/platform=iOS' -derivedDataPath build/dd \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             > build/xcodebuild.log 2>&1 || status=$?
           grep -E "error:|BUILD (SUCCEEDED|FAILED)" build/xcodebuild.log | sort -u || true
           test $status -eq 0
-          test -d build/dd/Build/Products/Release-iphoneos/InkPad.app
+          test -d build/dd/Build/Products/Release-iphoneos/Basis.app
           mkdir -p build/ipa/Payload
-          cp -R build/dd/Build/Products/Release-iphoneos/InkPad.app build/ipa/Payload/
-          (cd build/ipa && zip -qry ../InkPad.ipa Payload)
+          cp -R build/dd/Build/Products/Release-iphoneos/Basis.app build/ipa/Payload/
+          (cd build/ipa && zip -qry ../Basis.ipa Payload)
 
       - name: Package Swift Playgrounds app
         run: |
           scripts/make-swiftpm.sh build
-          (cd build && zip -qry InkPad.swiftpm.zip InkPad.swiftpm)
+          (cd build && zip -qry Basis.swiftpm.zip Basis.swiftpm)
 
       - name: Check Swift Playgrounds package builds
         run: |
-          cd build/InkPad.swiftpm
+          cd build/Basis.swiftpm
           status=0
-          xcodebuild build -scheme InkPad -destination 'generic/platform=iOS' \
+          xcodebuild build -scheme Basis -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             > ../swiftpm.log 2>&1 || status=$?
           grep -E "error:|BUILD (SUCCEEDED|FAILED)" ../swiftpm.log | sort -u || true
@@ -65,29 +65,29 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: InkPad
+          name: Basis
           path: |
-            InkPad/build/InkPad.ipa
-            InkPad/build/InkPad.swiftpm.zip
+            Basis/build/Basis.ipa
+            Basis/build/Basis.swiftpm.zip
 
       - name: Publish "latest" release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest build/InkPad.ipa build/InkPad.swiftpm.zip \
-            --prerelease --target "$GITHUB_SHA" --title "InkPad (latest build)" \
+          gh release create latest build/Basis.ipa build/Basis.swiftpm.zip \
+            --prerelease --target "$GITHUB_SHA" --title "Basis (latest build)" \
             --notes "Built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}.
 
-          - InkPad.ipa: unsigned; install with Sideloadly/AltStore using your Apple ID.
-          - InkPad.swiftpm.zip: unzip in Files on your iPad and open with Swift Playgrounds."
+          - Basis.ipa: unsigned; install with Sideloadly/AltStore using your Apple ID.
+          - Basis.swiftpm.zip: unzip in Files on your iPad and open with Swift Playgrounds."
 
       - name: Unit tests
         if: always()
         run: |
           SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPad')))")
           status=0
-          xcodebuild test -project InkPad.xcodeproj -scheme InkPad -destination "id=$SIM" \
+          xcodebuild test -project Basis.xcodeproj -scheme Basis -destination "id=$SIM" \
             CODE_SIGNING_ALLOWED=NO > build/test.log 2>&1 || status=$?
           grep -E "error:|XCTAssert|Test Case.*failed|Executed|TEST (SUCCEEDED|FAILED)" build/test.log || true
           test $status -eq 0

@@ -1,6 +1,6 @@
 import UIKit
 import XCTest
-@testable import InkPad
+@testable import Basis
 
 final class PDFImportTests: XCTestCase {
     private var dir: URL!

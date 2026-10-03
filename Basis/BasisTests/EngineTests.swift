@@ -1,6 +1,6 @@
 import CoreGraphics
 import XCTest
-@testable import InkPad
+@testable import Basis
 
 @MainActor
 final class HistoryTests: XCTestCase {

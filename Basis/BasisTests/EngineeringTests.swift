@@ -1,5 +1,5 @@
 import XCTest
-@testable import InkPad
+@testable import Basis
 
 private func pw(_ x: Double, _ n: Double) -> Double { Foundation.pow(x, n) }
 

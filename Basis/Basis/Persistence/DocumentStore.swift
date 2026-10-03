@@ -39,17 +39,17 @@ enum DocumentStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingManifest: return "The document could not be found."
-        case let .unsupportedVersion(v): return "This document was created by a newer version of InkPad (format \(v))."
+        case let .unsupportedVersion(v): return "This document was created by a newer version of Basis (format \(v))."
         }
     }
 }
 
 /// On-disk layout (inside the app's Documents folder, visible in Files):
 /// ```
-/// InkPad Documents/
+/// Basis Documents/
 ///   folders.json         library folder tree (documents reference their folder
 ///                        by id in their manifest)
-///   <uuid>.inkpad/
+///   <uuid>.basis/
 ///     manifest.json        title, page order, tool settings, view state
 ///     pages/<uuid>.json    one file per page (only dirty pages are rewritten)
 ///     assets/<name>        inserted images
@@ -63,14 +63,48 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
 
     init(rootURL: URL? = nil) {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        self.rootURL = rootURL ?? docs.appendingPathComponent("InkPad Documents", isDirectory: true)
-        try? FileManager.default.createDirectory(at: self.rootURL, withIntermediateDirectories: true)
+        let root = rootURL ?? docs.appendingPathComponent("Basis Documents", isDirectory: true)
+        self.rootURL = root
+        if rootURL == nil {
+            Self.migrateLegacyFolder(docs.appendingPathComponent("InkPad Documents", isDirectory: true), to: root)
+        }
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        Self.migrateLegacyPackages(in: root)
+    }
+
+    static let packageExtension = "basis"
+    private static let legacyPackageExtension = "inkpad"
+
+    /// The app used to be called InkPad: move its "InkPad Documents" folder to
+    /// "Basis Documents" (merging if both exist).
+    static func migrateLegacyFolder(_ legacy: URL, to root: URL) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: legacy.path) else { return }
+        if !fm.fileExists(atPath: root.path) {
+            try? fm.moveItem(at: legacy, to: root)
+            return
+        }
+        for item in (try? fm.contentsOfDirectory(at: legacy, includingPropertiesForKeys: nil)) ?? [] {
+            let target = root.appendingPathComponent(item.lastPathComponent)
+            if !fm.fileExists(atPath: target.path) { try? fm.moveItem(at: item, to: target) }
+        }
+        if ((try? fm.contentsOfDirectory(atPath: legacy.path)) ?? []).isEmpty { try? fm.removeItem(at: legacy) }
+    }
+
+    /// Renames notebook packages from `<id>.inkpad` to `<id>.basis`.
+    static func migrateLegacyPackages(in root: URL) {
+        let fm = FileManager.default
+        for url in (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+        where url.pathExtension == legacyPackageExtension {
+            let target = url.deletingPathExtension().appendingPathExtension(packageExtension)
+            if !fm.fileExists(atPath: target.path) { try? fm.moveItem(at: url, to: target) }
+        }
     }
 
     // MARK: Paths
 
     func packageURL(_ id: UUID) -> URL {
-        rootURL.appendingPathComponent("\(id.uuidString).inkpad", isDirectory: true)
+        rootURL.appendingPathComponent("\(id.uuidString).\(Self.packageExtension)", isDirectory: true)
     }
 
     static func manifestURL(_ pkg: URL) -> URL { pkg.appendingPathComponent("manifest.json") }
@@ -101,7 +135,7 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
         let fm = FileManager.default
         let urls = (try? fm.contentsOfDirectory(at: rootURL, includingPropertiesForKeys: nil)) ?? []
         var result: [DocumentSummary] = []
-        for url in urls where url.pathExtension == "inkpad" {
+        for url in urls where url.pathExtension == Self.packageExtension {
             guard let data = try? Data(contentsOf: Self.manifestURL(url)),
                   let m = try? Self.decoder().decode(DocumentManifest.self, from: data) else { continue }
             result.append(DocumentSummary(id: m.id, title: m.title, createdAt: m.createdAt, modifiedAt: m.modifiedAt,
@@ -130,7 +164,7 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
         let urls = (try? fm.contentsOfDirectory(at: rootURL, includingPropertiesForKeys: nil)) ?? []
         var result: [SearchablePage] = []
         let decoder = Self.decoder()
-        for pkg in urls where pkg.pathExtension == "inkpad" {
+        for pkg in urls where pkg.pathExtension == Self.packageExtension {
             guard let data = try? Data(contentsOf: Self.manifestURL(pkg)),
                   let m = try? decoder.decode(DocumentManifest.self, from: data) else { continue }
             var section: String?

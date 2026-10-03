@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 /// works); a rendered PNG is included for other apps.
 @MainActor
 enum Clipboard {
-    static let typeIdentifier = "com.inkpad.elements"
+    static let typeIdentifier = "com.basis.elements"
 
     private struct Payload: Codable {
         var elements: [CanvasElement]

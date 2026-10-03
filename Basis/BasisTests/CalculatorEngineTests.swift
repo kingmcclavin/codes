@@ -1,5 +1,5 @@
 import XCTest
-@testable import InkPad
+@testable import Basis
 
 final class ExpressionTests: XCTestCase {
     private func eval(_ s: String, _ mode: AngleMode = .radians, vars: [CalcVariable] = []) throws -> Double {

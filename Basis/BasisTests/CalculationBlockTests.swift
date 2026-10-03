@@ -1,5 +1,5 @@
 import XCTest
-@testable import InkPad
+@testable import Basis
 
 final class CalculationBlockTests: XCTestCase {
     private func engine(for block: CalculationBlock, variables: [CalcVariable] = []) -> CalculatorEngine {

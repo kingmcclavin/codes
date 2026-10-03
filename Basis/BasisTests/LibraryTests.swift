@@ -1,6 +1,6 @@
 import CoreGraphics
 import XCTest
-@testable import InkPad
+@testable import Basis
 
 final class LibraryTests: XCTestCase {
     private var root: URL!
@@ -97,5 +97,40 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(summary.color, LibraryPalette.colors[4])
         XCTAssertEqual(summary.folderID, folder.id)
         XCTAssertEqual(store.folder(folder.id)?.icon, "atom")
+    }
+}
+
+final class RenameMigrationTests: XCTestCase {
+    func testOldInkPadFolderAndPackagesAreMoved() throws {
+        let fm = FileManager.default
+        let docs = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? fm.removeItem(at: docs) }
+        let legacy = docs.appendingPathComponent("InkPad Documents")
+        let id = UUID()
+        try fm.createDirectory(at: legacy.appendingPathComponent("\(id.uuidString).inkpad"), withIntermediateDirectories: true)
+        try Data("[]".utf8).write(to: legacy.appendingPathComponent("folders.json"))
+
+        let root = docs.appendingPathComponent("Basis Documents")
+        DocumentStore.migrateLegacyFolder(legacy, to: root)
+        DocumentStore.migrateLegacyPackages(in: root)
+
+        XCTAssertFalse(fm.fileExists(atPath: legacy.path))
+        XCTAssertTrue(fm.fileExists(atPath: root.appendingPathComponent("folders.json").path))
+        XCTAssertTrue(fm.fileExists(atPath: root.appendingPathComponent("\(id.uuidString).basis").path))
+        XCTAssertFalse(fm.fileExists(atPath: root.appendingPathComponent("\(id.uuidString).inkpad").path))
+    }
+
+    func testMergeWhenBothFoldersExist() throws {
+        let fm = FileManager.default
+        let docs = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? fm.removeItem(at: docs) }
+        let legacy = docs.appendingPathComponent("InkPad Documents")
+        let root = docs.appendingPathComponent("Basis Documents")
+        try fm.createDirectory(at: legacy.appendingPathComponent("a.inkpad"), withIntermediateDirectories: true)
+        try fm.createDirectory(at: root.appendingPathComponent("b.basis"), withIntermediateDirectories: true)
+        DocumentStore.migrateLegacyFolder(legacy, to: root)
+        DocumentStore.migrateLegacyPackages(in: root)
+        XCTAssertTrue(fm.fileExists(atPath: root.appendingPathComponent("a.basis").path))
+        XCTAssertTrue(fm.fileExists(atPath: root.appendingPathComponent("b.basis").path))
     }
 }
