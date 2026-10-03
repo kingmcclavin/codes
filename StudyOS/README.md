@@ -29,7 +29,9 @@ Every push that changes `StudyOS/` runs the **StudyOS** GitHub Actions workflow
 
 - runs the logic tests,
 - compiles the full app for iPad, and
-- uploads **`StudyOS-unsigned.ipa`** as a downloadable artifact on the run's page.
+- uploads **`StudyOS-unsigned.ipa`** as a downloadable artifact on the run's page, and
+- launches the app in an iPad simulator, checks it stays running in every section, and
+  saves screenshots (light and dark) to the `studyos-screenshots` branch.
 
 To run it yourself, go to the repository's **Actions → StudyOS → Run workflow**. This
 works from Safari on iPad. The `.ipa` is unsigned: sideloading tools such as
