@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The minimal start page: paste a URL, open it.
+/// The minimal start page: enter a streaming site, open it ad-free.
 struct StartView: View {
     let onOpen: (URL) -> Void
 
@@ -16,16 +16,16 @@ struct StartView: View {
                 Text("FOCUSVIEW")
                     .font(.system(size: 44, weight: .heavy, design: .rounded))
                     .tracking(6)
-                Text("Watch without the distractions.")
+                Text("Streams without the ads and popups.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
 
             VStack(spacing: 12) {
                 HStack(spacing: 12) {
-                    Image(systemName: "play.rectangle")
+                    Image(systemName: "shield.lefthalf.filled")
                         .foregroundStyle(.secondary)
-                    TextField("Paste video URL", text: $input)
+                    TextField("Enter a streaming site or link", text: $input)
                         .keyboardType(.URL)
                         .textContentType(.URL)
                         .textInputAutocapitalization(.never)

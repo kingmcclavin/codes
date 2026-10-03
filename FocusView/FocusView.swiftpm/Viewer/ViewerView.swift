@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The locked-down viewer: a slim control bar above a single web view.
+/// The browser screen: a slim control bar above a single ad-blocked web view.
 struct ViewerView: View {
     let onClose: () -> Void
 
@@ -27,21 +27,28 @@ struct ViewerView: View {
         }
         .overlay(alignment: .bottom) {
             if let toast = browser.toast {
-                BlockedToast(text: toast.text)
+                BlockedToast(text: toast.text, onOpen: openAction(for: toast))
                     .padding(.bottom, 32)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: browser.toast)
         .task(id: browser.toast) {
-            guard browser.toast != nil else { return }
-            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard let toast = browser.toast else { return }
+            // Leave a little longer to tap "Open" when the toast offers it.
+            let seconds: UInt64 = toast.overrideURL == nil ? 2 : 4
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
             if !Task.isCancelled {
                 browser.toast = nil
             }
         }
-        .onAppear(perform: browser.loadInitialPageIfNeeded)
+        .task { await browser.start() }
         .background(Color(uiColor: .systemBackground))
+    }
+
+    private func openAction(for toast: ToastMessage) -> (() -> Void)? {
+        guard let url = toast.overrideURL else { return nil }
+        return { browser.openBlocked(url) }
     }
 }
 
