@@ -60,3 +60,52 @@ jobs:
           name: StudyOS-unsigned-ipa
           path: StudyOS-unsigned.ipa
           if-no-files-found: error
+
+  # Launches the app in an iPad simulator and screenshots each section,
+  # proving it starts and renders (not just compiles).
+  simulator-smoke-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build for iPad simulator
+        working-directory: StudyOS/StudyOS.swiftpm
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -scheme StudyOS \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            -derivedDataPath "$RUNNER_TEMP/SimData" \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee "$RUNNER_TEMP/sim-build.log" | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/sim-build.log"
+      - name: Launch and screenshot
+        run: |
+          app="$(find "$RUNNER_TEMP/SimData/Build/Products" -maxdepth 2 -name 'StudyOS.app' -type d | head -1)"
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Info.plist")"
+          device="$(xcrun simctl list devices available | grep -E 'iPad Pro 13-inch|iPad Air 13-inch|iPad Pro|iPad Air' | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')"
+          echo "App: $app  Bundle: $bundle_id  Device: $device"
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device" -b
+          xcrun simctl ui "$device" appearance light
+          xcrun simctl install "$device" "$app"
+          mkdir -p screenshots
+          for section in dashboard courses assignments grades study more; do
+            xcrun simctl terminate "$device" "$bundle_id" 2>/dev/null || true
+            xcrun simctl launch "$device" "$bundle_id" -StudyOSSampleData YES -StudyOSSection "$section"
+            sleep 6
+            # The app must still be running (no crash on launch or render).
+            xcrun simctl spawn "$device" launchctl list | grep -q "$bundle_id" || { echo "StudyOS is not running after opening $section"; exit 1; }
+            xcrun simctl io "$device" screenshot "screenshots/$section.png"
+          done
+          xcrun simctl ui "$device" appearance dark
+          xcrun simctl terminate "$device" "$bundle_id" || true
+          xcrun simctl launch "$device" "$bundle_id" -StudyOSSection dashboard
+          sleep 6
+          xcrun simctl io "$device" screenshot "screenshots/dashboard-dark.png"
+          ls -la screenshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: StudyOS-screenshots
+          path: screenshots

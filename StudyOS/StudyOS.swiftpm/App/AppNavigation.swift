@@ -38,9 +38,16 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 /// Cross-section navigation, e.g. a Dashboard quick action opening Study.
 @MainActor
 final class AppNavigation: ObservableObject {
-    @Published var section: AppSection? = .dashboard
+    @Published var section: AppSection?
     /// Course to pre-select the next time the Study timer setup appears.
     @Published var pendingStudyCourseID: UUID?
+
+    init() {
+        // Launch argument `-StudyOSSection grades` opens a section directly
+        // (used by automated screenshot runs; normal launches open the Dashboard).
+        let requested = UserDefaults.standard.string(forKey: "StudyOSSection").flatMap(AppSection.init(rawValue:))
+        section = requested ?? .dashboard
+    }
 
     func startStudying(courseID: UUID?) {
         pendingStudyCourseID = courseID
