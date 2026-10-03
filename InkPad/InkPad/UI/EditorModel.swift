@@ -130,7 +130,7 @@ final class EditorModel: ObservableObject {
                 grown.width = min(Self.maxPageLength, max(size.width + 600, content.maxX + 400))
             }
             if grown != size {
-                document.setPageSettings(page.id, size: grown, background: page.background)
+                document.growPage(page.id, to: grown)
             }
         }
     }

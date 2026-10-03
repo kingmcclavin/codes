@@ -54,6 +54,8 @@ protocol ToolHost: AnyObject {
     /// page layer has re-rendered them, so ink never flickers.
     func showPending(_ elements: [CanvasElement], pageID: UUID)
 
+    /// A pen stroke was added (used for live handwritten math).
+    func inkCommitted(_ stroke: Stroke, pageID: UUID)
     func beginTextEditing(_ element: TextElement, pageID: UUID, isNew: Bool)
     func endTextEditing()
     var isEditingText: Bool { get }

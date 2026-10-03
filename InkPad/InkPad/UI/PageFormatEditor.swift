@@ -27,8 +27,10 @@ enum BackgroundChoice: String, CaseIterable, Identifiable {
 struct PageFormat: Equatable {
     /// nil means custom size.
     var paperID: String? = PaperSize.letter.id {
-        // A whiteboard is only useful if it can grow.
-        didSet { if paperID == PaperSize.whiteboard.id, oldValue != paperID { autoExtends = true } }
+        // Whiteboards and long scrolls are meant to keep growing.
+        didSet {
+            if paperID == PaperSize.whiteboard.id || paperID == PaperSize.longScroll.id, oldValue != paperID { autoExtends = true }
+        }
     }
     var orientation: PageOrientation = .portrait
     var customWidth: Double = 8.5

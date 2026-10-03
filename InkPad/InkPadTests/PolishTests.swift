@@ -202,3 +202,38 @@ final class WhiteboardTests: XCTestCase {
         XCTAssertEqual(format.background.autoExtends, true)
     }
 }
+
+final class AutoMathTests: XCTestCase {
+    func testQuestionsEndingInEquals() {
+        XCTAssertEqual(AutoMathController.question(from: ["6+8="]), "6+8")
+        XCTAssertEqual(AutoMathController.question(from: ["4 + 5 = ?"]), "4 + 5")
+        XCTAssertEqual(AutoMathController.question(from: ["12 x 3 ="]), "12 × 3")
+        XCTAssertEqual(AutoMathController.question(from: ["6+8", "6+8="]), "6+8")   // later candidate
+        XCTAssertNil(AutoMathController.question(from: ["6+8"]))          // no "=" yet
+        XCTAssertNil(AutoMathController.question(from: ["x ="]))          // nothing to compute
+        XCTAssertNil(AutoMathController.question(from: ["2+3=5"]))        // already answered
+        XCTAssertNil(AutoMathController.question(from: []))
+    }
+
+    private func stroke(_ x: CGFloat, _ y: CGFloat, w: CGFloat = 20, h: CGFloat = 30) -> Stroke {
+        Stroke(points: [InkPoint(location: CGPoint(x: x, y: y)), InkPoint(location: CGPoint(x: x + w, y: y + h))],
+               style: PenPreset.ballpoint.style)
+    }
+
+    func testLineGrouping() {
+        // "6 + 8 =" on one line, "4 + 5" on the line below, a far-away note.
+        let six = stroke(100, 100), plus = stroke(135, 108, w: 18, h: 16), eight = stroke(165, 100)
+        let eq = stroke(200, 112, w: 18, h: 6)
+        let below = [stroke(100, 160), stroke(135, 168, w: 18, h: 16)]
+        let far = stroke(600, 100)
+        let line = AutoMathController.line(containing: eq, in: [six, plus, eight, eq, far] + below)
+        XCTAssertEqual(Set(line.map(\.id)), Set([six, plus, eight, eq].map(\.id)))
+        XCTAssertEqual(line.first?.id, six.id)   // left to right
+    }
+
+    func testLongScrollTurnsOnEndlessPage() {
+        var format = PageFormat()
+        format.paperID = PaperSize.longScroll.id
+        XCTAssertTrue(format.autoExtends)
+    }
+}

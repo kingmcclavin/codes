@@ -8,6 +8,8 @@ enum DocumentChange {
     case pageSettings(pageID: UUID)
     /// Pages were added, removed or reordered.
     case pageStructure
+    /// An endless page got bigger; only the new area needs drawing.
+    case pageGrew(pageID: UUID, oldSize: CGSize)
     /// Title or other metadata.
     case metadata
 }
@@ -150,6 +152,15 @@ final class DocumentModel {
         pages.insert(p, at: to.clamped(0, pages.count))
         touch(page: nil)
         notify(.pageStructure)
+    }
+
+    /// Enlarges a page (endless pages) without redrawing what's already there.
+    func growPage(_ pageID: UUID, to size: CGSize) {
+        guard let page = page(pageID), size != page.size else { return }
+        let old = page.size
+        page.size = size
+        touch(page: pageID)
+        notify(.pageGrew(pageID: pageID, oldSize: old))
     }
 
     func setPageSettings(_ pageID: UUID, size: CGSize, background: PageBackground) {

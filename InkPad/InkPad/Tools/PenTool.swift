@@ -232,6 +232,7 @@ final class PenTool: CanvasTool {
         let element = CanvasElement.stroke(stroke)
         host.history.perform(ElementsEdit.add([element], to: page, name: mode == .highlighter ? "Highlight" : "Ink"))
         host.showPending([element], pageID: pageID)
+        if mode == .pen { host.inkCommitted(stroke, pageID: pageID) }
     }
 
     private func addShape(_ shape: ShapeElement, page: PageStore) {

@@ -272,6 +272,7 @@ struct ToolButton: View {
 
 struct EditorMoreMenu: View {
     @ObservedObject var editor: EditorModel
+    @AppStorage(AutoMathController.defaultsKey) private var autoSolveMath = true
 
     var body: some View {
         Menu {
@@ -280,6 +281,7 @@ struct EditorMoreMenu: View {
             Button("Import PDF…", systemImage: "doc.richtext") { editor.showPDFImporter = true }
             Button("Export PDF", systemImage: "square.and.arrow.up") { editor.exportPDF() }
             Divider()
+            Toggle(isOn: $autoSolveMath) { Label("Solve Handwritten Math", systemImage: "equal.circle") }
             Toggle(isOn: $editor.settings.scribbleToErase) { Label("Scribble to Erase", systemImage: "scribble") }
             Picker(selection: $editor.settings.scribbleMode) {
                 ForEach(ScribbleEraseMode.allCases) { Text($0.displayName).tag($0) }

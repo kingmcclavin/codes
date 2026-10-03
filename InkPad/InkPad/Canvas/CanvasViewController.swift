@@ -30,6 +30,9 @@ final class CanvasViewController: UIViewController {
     private let selectionDrag = UIPanGestureRecognizer()
     private var editMenu: UIEditMenuInteraction!
     private var textEditing: TextEditingController!
+    private var autoMath: AutoMathController!
+    /// Last page height we extended to while scrolling (avoids repeats).
+    private var extendingByScroll = false
 
     private var tools: [ToolKind: CanvasTool] = [:]
     private var activeKind: ToolKind = .pen
@@ -142,6 +145,7 @@ final class CanvasViewController: UIViewController {
         view.addInteraction(editMenu)
 
         textEditing = TextEditingController(host: self)
+        autoMath = AutoMathController(host: self)
 
         document.addObserver(self)
         rebuildPages()
@@ -207,7 +211,7 @@ final class CanvasViewController: UIViewController {
         if editor.pageCount != document.pages.count { editor.pageCount = document.pages.count }
     }
 
-    private func layoutPages() {
+    private func layoutPages(invalidateResized: Bool = true) {
         let size = contentSize
         var y = pageMargin
         for page in document.pages {
@@ -216,7 +220,7 @@ final class CanvasViewController: UIViewController {
             if v.frame != frame {
                 let resized = v.frame.size != frame.size
                 v.frame = frame
-                if resized { v.invalidateAll() }
+                if resized && invalidateResized { v.invalidateAll() }
             }
             y += page.size.height + pageGap
         }
@@ -875,6 +879,10 @@ extension CanvasViewController: ToolHost {
 
     var isEditingText: Bool { textEditing.isEditing }
 
+    func inkCommitted(_ stroke: Stroke, pageID: UUID) {
+        autoMath.strokeCommitted(stroke, pageID: pageID)
+    }
+
     func beginTextEditing(_ element: TextElement, pageID: UUID, isNew: Bool) {
         // Calculation cards are edited in their own sheet, not as raw text.
         if let block = element.calculation, !isNew {
@@ -980,6 +988,7 @@ extension CanvasViewController: UIScrollViewDelegate {
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         lockHorizontalScrollIfPageFits()
+        extendEndlessPageIfNeeded()
         updatePullToAddPage()
         updateCurrentPage()
         overlayNeedsReposition()
@@ -1005,9 +1014,40 @@ extension CanvasViewController: UIScrollViewDelegate {
         updatePullToAddPage()
     }
 
+    /// Endless pages keep going: scrolling near the bottom (or right edge)
+    /// of one makes it longer, so there's always room below.
+    private func extendEndlessPageIfNeeded() {
+        guard !extendingByScroll, !scrollView.isZooming else { return }
+        let visible = visibleContentRect
+        for page in document.pages where page.background.autoExtends == true {
+            guard let v = pageViews[page.id] else { continue }
+            let frame = v.frame
+            guard frame.intersects(visible) else { continue }
+            var size = page.size
+            let limit = EditorModel.maxPageLength
+            if visible.maxY > frame.maxY - visible.height * 0.75, size.height < limit {
+                size.height = min(limit, size.height + max(1200, visible.height * 1.5))
+            }
+            guard size != page.size else { continue }
+            extendingByScroll = true
+            // Resize outside the scroll callback so layout doesn't fight the gesture.
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.document.growPage(page.id, to: size)
+                self.extendingByScroll = false
+            }
+            return
+        }
+    }
+
     /// Drives the "Pull to Add Page" indicator from the overscroll past the last page.
     private func updatePullToAddPage() {
         guard let last = document.pages.last, let v = pageViews[last.id] else { return }
+        // An endless last page grows instead of adding pages.
+        if last.background.autoExtends == true {
+            pullToAdd.update(pull: 0, pageBottom: 0, pageFrame: .zero)
+            return
+        }
         let maxOffsetY = max(scrollView.contentSize.height + scrollView.contentInset.bottom - scrollView.bounds.height,
                              -scrollView.contentInset.top)
         let pull = scrollView.contentOffset.y - maxOffsetY
@@ -1061,6 +1101,17 @@ extension CanvasViewController: DocumentObserver {
         case .pageStructure:
             rebuildPages()
             for v in pageViews.values { v.invalidateAll() }
+            updateCurrentPage()
+        case let .pageGrew(pageID, old):
+            layoutPages(invalidateResized: false)
+            guard let v = pageViews[pageID], let page = document.page(pageID) else { break }
+            if [.cornell, .lab].contains(page.background.template) {
+                v.invalidateAll()   // these templates are laid out from the page size
+            } else {
+                let size = page.size
+                if size.height > old.height { v.invalidate(CGRect(x: 0, y: old.height, width: size.width, height: size.height - old.height)) }
+                if size.width > old.width { v.invalidate(CGRect(x: old.width, y: 0, width: size.width - old.width, height: size.height)) }
+            }
             updateCurrentPage()
         case .metadata:
             break
