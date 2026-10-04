@@ -1,0 +1,221 @@
+.calculator {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+.calc-display {
+  border-radius: 12px;
+  border: 1px solid var(--border-2);
+  background:
+    linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 10px 10px,
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 10px 10px,
+    var(--paper);
+  padding: 10px 12px 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+.calc-display-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+}
+.calc-mode {
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border-2);
+}
+.calc-mode.on {
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+.calc-input {
+  width: 100%;
+  margin-top: 10px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 22px;
+  text-align: right;
+  caret-color: var(--accent);
+}
+.calc-preview {
+  min-height: 18px;
+  text-align: right;
+  font-size: 13px;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.calc-const-wrap {
+  position: relative;
+}
+.calc-const-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.calc-const-btn:hover {
+  color: var(--text);
+}
+.calc-const-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+  width: 260px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 9px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  box-shadow: var(--shadow-lg);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.calc-const-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  text-align: left;
+  font-family: var(--font-sans);
+}
+.calc-const-menu button:hover {
+  background: var(--surface-2);
+}
+.calc-const-menu .sym {
+  width: 36px;
+  color: var(--accent);
+  font-size: 12px;
+}
+.calc-const-menu .desc {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.calc-keys {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+.ck {
+  height: 42px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 14px;
+  font-family: var(--font-mono);
+  transition: background var(--t-fast), transform 60ms;
+}
+.ck:hover {
+  background: var(--surface-3);
+}
+.ck:active {
+  transform: scale(0.96);
+}
+.ck-num {
+  background: var(--surface-3);
+  font-size: 16px;
+}
+.ck-num:hover {
+  background: var(--border-2);
+}
+.ck-fn {
+  color: var(--text-2);
+  font-size: 13px;
+}
+.ck-fn.alt {
+  color: var(--accent);
+}
+.ck-op {
+  color: var(--accent);
+  font-size: 17px;
+}
+.ck-mod {
+  color: var(--text-3);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+}
+.ck-mod.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+.ck-eq {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--on-accent);
+  font-size: 18px;
+}
+.ck-eq:hover {
+  background: var(--accent-2);
+}
+@media (pointer: coarse) {
+  .ck {
+    height: 48px;
+  }
+}
+
+.calc-history {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.calc-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.calc-hist-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 7px;
+}
+.calc-hist-row:hover {
+  background: var(--surface-2);
+}
+.calc-hist-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+}
+.calc-hist-main .expr {
+  font-size: 11.5px;
+  color: var(--text-3);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calc-hist-main .res {
+  font-size: 13.5px;
+  color: var(--text);
+}
+.calc-hist-main .res.err {
+  color: var(--danger);
+  font-size: 11.5px;
+}

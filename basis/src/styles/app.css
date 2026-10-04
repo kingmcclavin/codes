@@ -1,0 +1,13 @@
+.app {
+  height: 100%;
+}
+.boot {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  animation: fade-in 400ms 200ms both;
+}
+.boot svg {
+  animation: pulse 900ms infinite alternate;
+}
