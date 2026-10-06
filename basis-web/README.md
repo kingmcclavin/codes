@@ -29,6 +29,7 @@ This folder is a static site with no build step. Import the repository in Vercel
 - Text boxes with fonts, size, bold/italic and alignment
 - Images, PDF import (pages become backgrounds you can write on), PDF and PNG export
 - Templates: blank, ruled, grid, dotted, engineering, isometric, Cornell, lab notebook. Also paper sizes, orientation, paper color and endless pages.
+- Pull up past the last page to add a page
 - Page manager with drag-to-reorder, duplicate and sections. Undo/redo, zoom, open-notebook tabs.
 - Library with nested folders, colors and icons, drag and drop, and search
 

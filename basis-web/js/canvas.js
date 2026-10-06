@@ -17,6 +17,7 @@ import { eraseStroke } from './erase.js';
 import { isScribble, scribbleErase } from './scribble.js';
 import { setElements } from './history.js';
 import { fontCss, maxWidth } from './model.js';
+import { icon } from './icons.js';
 
 const GAP = 28;          // between pages, in page points
 const MIN_ZOOM = 0.2, MAX_ZOOM = 8;
@@ -53,6 +54,7 @@ export class CanvasView {
     this.layout();
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(host);
+    this.buildPullToAdd();
     this.bindInput();
     setImageLoadHandler(() => this.requestRender());
     this.resize();
@@ -126,6 +128,7 @@ export class CanvasView {
     const minY = -Math.max(margin, 24 / z);
     const maxY = Math.max(minY, this.totalH + Math.max(margin, vh * 0.35) - vh);
     this.view.y = clamp(this.view.y, minY, maxY);
+    this.maxY = maxY;
   }
 
   setZoom(z, anchor = { x: this.w / 2, y: this.h / 2 }) {
@@ -459,9 +462,20 @@ export class CanvasView {
     const k = e.deltaMode === 1 ? 16 : 1;
     let dx = e.deltaX * k, dy = e.deltaY * k;
     if (e.shiftKey && !dx) { dx = dy; dy = 0; }
+    // A new wheel/trackpad sequence may pull to add a page only if it starts at the end.
+    const now = performance.now();
+    if (now - (this.lastWheelT || 0) > 250) this.wheelPullOK = this.view.y >= (this.maxY ?? Infinity) - 1;
+    this.lastWheelT = now;
     this.view.x += dx / this.view.zoom;
-    this.view.y += dy / this.view.zoom;
+    const wantY = this.view.y + dy / this.view.zoom;
+    this.view.y = wantY;
     this.clampView();
+    if (this.wheelPullOK && (wantY > this.maxY + 0.01 || this.wheelPull > 0)) {
+      this.wheelPull = Math.max(0, (this.wheelPull || 0) + dy);
+      this.overscroll(this.wheelPull);
+      clearTimeout(this.wheelTimer);
+      this.wheelTimer = setTimeout(() => this.releasePull(), 200);
+    }
     this.viewChanged();
   }
 
@@ -492,13 +506,92 @@ export class CanvasView {
     this.view.x = g.anchor.x - center.x / zoom;
     this.view.y = g.anchor.y - center.y / zoom;
     if (dist(center, g.startCenter) > 4 || pos.length > 1) g.moved = true;
+    const wantY = this.view.y;
     this.clampView();
+    if (pos.length === 1 && wantY > this.maxY + 0.01) this.overscroll((wantY - this.maxY) * zoom);
+    else if (this.pull) this.setPull(0);
     this.viewChanged();
+  }
+
+  // ---------- Pull to add page ----------
+  // Dragging past the end of the last page shows "Pull to Add Page": a ring
+  // fills as you pull; once full it reads "Release to Add Page".
+
+  get pullThreshold() { return Math.min(140, this.h * 0.22); }
+
+  /** Applies a rubber-banded overscroll for `raw` screen pixels of drag past the end. */
+  overscroll(raw) {
+    const d = this.h, shown = (1 - 1 / ((raw * 0.55) / d + 1)) * d;
+    this.view.y = this.maxY + shown / this.view.zoom;
+    this.setPull(shown);
+  }
+
+  buildPullToAdd() {
+    const r = 27, c = 2 * Math.PI * r;
+    this.pullUI = {
+      root: document.createElement('div'),
+      ring: null, label: document.createElement('div'), circ: c,
+    };
+    const root = this.pullUI.root;
+    root.className = 'pull-add';
+    root.setAttribute('aria-hidden', 'true');
+    root.innerHTML = `<div class="pull-ghost"></div><div class="pull-arrow"></div>
+      <div class="pull-ring"><svg viewBox="0 0 60 60" width="60" height="60"><circle class="pull-fill" cx="30" cy="30" r="${r + 1.5}"/>
+      <circle class="pull-track" cx="30" cy="30" r="${r}"/><circle class="pull-progress" cx="30" cy="30" r="${r}" stroke-dasharray="${c}" stroke-dashoffset="${c}" transform="rotate(-90 30 30)"/></svg>
+      <span class="pull-icon"></span></div><div class="pull-label"></div>`;
+    root.querySelector('.pull-arrow').append(icon('arrowUp', 20));
+    root.querySelector('.pull-icon').append(icon('docPlus', 24));
+    this.host.append(root);
+    this.pull = 0;
+    this.pullArmed = false;
+  }
+
+  setPull(p) {
+    this.pull = p;
+    const ui = this.pullUI, root = ui.root;
+    if (p <= 1) { root.classList.remove('show', 'armed'); this.pullArmed = false; return; }
+    const armed = p >= this.pullThreshold;
+    if (armed && !this.pullArmed) navigator.vibrate?.(10);
+    this.pullArmed = armed;
+    root.classList.add('show');
+    root.classList.toggle('armed', armed);
+    root.style.opacity = Math.min(1, p / 40);
+    root.querySelector('.pull-progress').setAttribute('stroke-dashoffset', String(ui.circ * (1 - Math.min(1, p / this.pullThreshold))));
+    root.querySelector('.pull-label').textContent = armed ? 'Release to Add Page' : 'Pull to Add Page';
+    // Lay out inside the strip revealed below the last page.
+    const last = this.doc.pages.length - 1, page = this.doc.pages[last];
+    const tl = this.pageToScreen(last, { x: 0, y: 0 }), br = this.pageToScreen(last, { x: page.w, y: page.h });
+    const left = Math.max(0, tl.x), right = Math.min(this.w, br.x);
+    const cx = (left + right) / 2;
+    const revealTop = Math.min(br.y, this.h - p);
+    const midY = revealTop + (this.h - revealTop) * 0.42;
+    const ring = root.querySelector('.pull-ring');
+    ring.style.transform = `translate(${cx - 30}px, ${midY - 30}px)`;
+    root.querySelector('.pull-arrow').style.transform = `translate(${cx - 10}px, ${midY - 58}px)`;
+    const label = root.querySelector('.pull-label');
+    label.style.transform = `translate(${cx - 120}px, ${midY + 36}px)`;
+    const ghostTop = Math.max(midY + 72, this.h - p * 0.45);
+    const ghost = root.querySelector('.pull-ghost');
+    Object.assign(ghost.style, { left: tl.x + 'px', width: br.x - tl.x + 'px', top: ghostTop + 'px', height: Math.max(br.y - tl.y, 200) + 'px' });
+  }
+
+  /** Finger lifted (or wheel stopped): add a page if armed, otherwise spring back. */
+  releasePull() {
+    this.wheelPull = 0;
+    if (!this.pull) return;
+    const armed = this.pull >= this.pullThreshold;
+    this.setPull(0);
+    if (armed) {
+      this.editor.addPage(this.doc.pages.length - 1, { animate: true });
+    } else {
+      this.animateView({ y: this.maxY });
+    }
   }
 
   endGesture(ptr) {
     const g = this.gesture;
     this.gesture = null;
+    if (this.pull) { this.releasePull(); return; }
     // A finger tap (no movement) acts like a tap of the current tool for lasso/text.
     if (g && !g.moved && g.ids.length === 1 && performance.now() - g.t0 < 350 && ptr?.type === 'touch') {
       this.tap(ptr.last);

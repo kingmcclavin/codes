@@ -586,11 +586,12 @@ export class Editor {
     return makePage({ w: ref.w, h: ref.h }, bg);
   }
 
-  addPage(after = this.canvas.currentPageIndex) {
+  addPage(after = this.canvas.currentPageIndex, { animate = false } = {}) {
     const page = this.blankPageLike(after);
     this.history.perform('Add Page', (pages) => [...pages.slice(0, after + 1), page, ...pages.slice(after + 1)]);
     this.afterHistory();
-    this.canvas.scrollToPage(after + 1);
+    if (animate) this.canvas.animateView({ y: this.canvas.tops[after + 1] - 16 / this.canvas.view.zoom });
+    else this.canvas.scrollToPage(after + 1);
   }
 
   duplicatePage(i) {
