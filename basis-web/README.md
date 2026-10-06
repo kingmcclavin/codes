@@ -14,6 +14,10 @@ python3 -m http.server 8000
 
 Opening the file directly (`file://`) won't work because browsers block ES modules there. Any static host works too (GitHub Pages, Netlify, Cloudflare Pages). Once loaded over HTTPS, it installs as an app: use Add to Home Screen on iPad or Install in Chrome/Edge. A service worker keeps it usable offline.
 
+## Deploy to Vercel
+
+This folder is a static site with no build step. Import the repository in Vercel, set **Framework Preset** to *Other*, and leave the build command and output directory empty. If the app lives in a subfolder, set **Root Directory** to that folder. `vercel.json` keeps the service worker and scripts fresh after each deploy. From the CLI, run `npx vercel` in this folder.
+
 ## What's included
 
 **Notebooks**
