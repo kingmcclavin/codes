@@ -119,8 +119,10 @@ export class CanvasView {
     const vw = this.w / z, vh = this.h / z;
     const margin = 80 / z;
     const halfW = this.maxW / 2;
-    if (this.maxW + 2 * margin <= vw) this.view.x = -vw / 2;
-    else this.view.x = clamp(this.view.x, -halfW - margin, halfW + margin - vw);
+    // Horizontal scrolling only when the page is wider than the screen, and
+    // never past its edges; at "fit" or smaller the page stays centered.
+    if (this.maxW * z <= this.w + 1) this.view.x = -vw / 2;
+    else this.view.x = clamp(this.view.x, -halfW, halfW - vw);
     const minY = -Math.max(margin, 24 / z);
     const maxY = Math.max(minY, this.totalH + Math.max(margin, vh * 0.35) - vh);
     this.view.y = clamp(this.view.y, minY, maxY);
