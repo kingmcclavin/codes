@@ -8,7 +8,7 @@ struct OtherSurfacesSection: View {
         } header: {
             Text("Other ways to use Instagram")
         } footer: {
-            Text("Use \"Open Instagram\" above. Reels are only filtered there.")
+            Text("Reels are only filtered in the Instagram tab of this app.")
         }
     }
 }

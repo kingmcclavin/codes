@@ -8,7 +8,7 @@ struct ReelsGuardApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ControlView()
+            RootView(service: model.service)
                 .environmentObject(model)
                 .environmentObject(screenTime)
                 .onOpenURL { model.handleOpenURL($0) }

@@ -152,6 +152,35 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.reelsguard.shield-action
 
+  # Same app as the Swift Playgrounds build: the filtered Instagram tab and
+  # settings, with no extensions and no entitlements. Easiest to sideload.
+  ReelsGuardLite:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/Sources
+        excludes:
+          - "Platform/**"
+      - path: PlaygroundsSupport/Platform
+    dependencies:
+      - package: ReelsGuardCore
+    info:
+      path: App/Info-Lite.plist
+      properties:
+        CFBundleDisplayName: Reels Guard
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.reelsguard.lite
+        TARGETED_DEVICE_FAMILY: "1,2"
+
 schemes:
   ReelsGuard:
     build:
@@ -163,3 +192,9 @@ schemes:
       config: Debug
       targets:
         - package: ReelsGuardCore/ReelsGuardCoreTests
+  ReelsGuardLite:
+    build:
+      targets:
+        ReelsGuardLite: all
+    run:
+      config: Debug

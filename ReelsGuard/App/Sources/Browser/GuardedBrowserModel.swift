@@ -16,12 +16,10 @@ import WebKit
 @MainActor
 final class GuardedBrowserModel: NSObject, ObservableObject {
     @Published private(set) var blockCopy: BlockScreenCopy?
-    @Published private(set) var canGoBack = false
 
     let webView: WKWebView
     private let service: ReelsGuardService
     private var state = GuardState()
-    private var canGoBackObservation: NSKeyValueObservation?
 
     static let home = URL(string: "https://www.instagram.com/")!
     private static let world = WKContentWorld.world(name: "ReelsGuard")
@@ -54,10 +52,6 @@ final class GuardedBrowserModel: NSObject, ObservableObject {
         )
         webView.navigationDelegate = self
         webView.uiDelegate = self
-        canGoBackObservation = webView.observe(\.canGoBack, options: [.initial, .new]) { [weak self] webView, _ in
-            let value = webView.canGoBack
-            Task { @MainActor in self?.canGoBack = value }
-        }
         webView.load(URLRequest(url: startURL ?? Self.home))
     }
 
@@ -71,8 +65,12 @@ final class GuardedBrowserModel: NSObject, ObservableObject {
         webView.load(URLRequest(url: Self.home))
     }
 
-    func goBack() {
-        if webView.canGoBack { webView.goBack() }
+    /// Opens a Reel from "Shared with me". The fresh state makes it count as
+    /// a shared link, i.e. an intentional entry.
+    func openShared(_ url: URL) {
+        state = GuardState()
+        show(.allow)
+        webView.load(URLRequest(url: url))
     }
 
     // MARK: Policy

@@ -1,41 +1,18 @@
-import ReelsGuardCore
 import SwiftUI
 import WebKit
 
+/// The Instagram tab: instagram.com, edge to edge, with the blocking screen on
+/// top when needed. Swipe from the left edge to go back.
 struct GuardedBrowserView: View {
-    @StateObject private var model: GuardedBrowserModel
-    @Environment(\.dismiss) private var dismiss
-
-    init(service: ReelsGuardService, startURL: URL?) {
-        _model = StateObject(wrappedValue: GuardedBrowserModel(service: service, startURL: startURL))
-    }
+    @ObservedObject var model: GuardedBrowserModel
 
     var body: some View {
-        NavigationStack {
-            WebViewContainer(webView: model.webView)
-                .ignoresSafeArea(edges: .bottom)
-                .overlay {
-                    if let copy = model.blockCopy {
-                        BlockScreenView(copy: copy) { model.backToInstagram() }
-                    }
+        WebViewContainer(webView: model.webView)
+            .overlay {
+                if let copy = model.blockCopy {
+                    BlockScreenView(copy: copy) { model.backToInstagram() }
                 }
-                .navigationTitle("Instagram")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
-                    }
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            model.goBack()
-                        } label: {
-                            Image(systemName: "chevron.backward")
-                        }
-                        .disabled(!model.canGoBack || model.blockCopy != nil)
-                        .accessibilityLabel("Back")
-                    }
-                }
-        }
+            }
     }
 }
 

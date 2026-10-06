@@ -1,0 +1,100 @@
+# Builds Reels Guard on a GitHub-hosted Mac and publishes unsigned .ipa files.
+#
+# Download the .ipa files from the "Reels Guard (latest build)" release, or
+# from this run's artifacts. They are unsigned: a sideloading tool signs them
+# with your Apple ID when it installs them.
+name: Reels Guard iOS
+
+on:
+  push:
+    branches: [main, "claude/reels-guard-ios"]
+    paths:
+      - "ReelsGuard/**"
+      - ".github/workflows/reels-guard-ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reels-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Core and web tests
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ReelsGuard
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift package tests
+        working-directory: ReelsGuard/Packages/ReelsGuardCore
+        run: swift test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Page observer tests
+        working-directory: ReelsGuard/Shared/WebGuard
+        run: npm install --no-audit --no-fund && npm test
+      - name: Generated files are current
+        run: python3 scripts/build-playgrounds-app.py --check
+
+  build:
+    name: Build unsigned .ipa files
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ReelsGuard
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Build
+        run: |
+          set -euo pipefail
+          for scheme in ReelsGuardLite ReelsGuard; do
+            echo "::group::Build $scheme"
+            xcodebuild \
+              -project ReelsGuard.xcodeproj \
+              -scheme "$scheme" \
+              -configuration Release \
+              -sdk iphoneos \
+              -destination 'generic/platform=iOS' \
+              -derivedDataPath build \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+              build
+            echo "::endgroup::"
+          done
+      - name: Package .ipa files
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          package() {
+            rm -rf Payload && mkdir Payload
+            cp -R "build/Build/Products/Release-iphoneos/$1.app" Payload/
+            zip -qry "dist/$2" Payload
+          }
+          package ReelsGuardLite ReelsGuard-Lite-unsigned.ipa
+          package ReelsGuard ReelsGuard-Full-unsigned.ipa
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ReelsGuard-ipa
+          path: ReelsGuard/dist/*.ipa
+      - name: Publish "latest build" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete reels-guard-latest --yes --cleanup-tag || true
+          gh release create reels-guard-latest dist/*.ipa \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Reels Guard (latest build)" \
+            --notes "Unsigned builds from ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}.
+
+          - ReelsGuard-Lite-unsigned.ipa: Instagram tab + Settings. No extensions or entitlements. Recommended for sideloading.
+          - ReelsGuard-Full-unsigned.ipa: also includes the Safari, share and Screen Time extensions. Most sideloading tools with a free Apple ID can't grant Screen Time (Family Controls), so those features may not work."
