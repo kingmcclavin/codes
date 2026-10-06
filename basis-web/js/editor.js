@@ -19,6 +19,7 @@ import { translateT } from './util.js';
 import { calc } from './calc/store.js';
 import { calculatorPad } from './calculator.js';
 import { importPDF, exportPDF, exportPNG } from './pdf.js';
+import { SCRIBBLE_MODES } from './scribble.js';
 
 const TOOL_ICONS = { pen: 'pen', highlighter: 'highlighter', eraser: 'eraser', shapes: 'shapes', lasso: 'lasso', text: 'text' };
 
@@ -294,10 +295,14 @@ export class Editor {
         const settingsBtn = h('button', { class: 'opt-btn', title: 'Pen settings' }, icon('sliders', 18), h('span', {}, `${this.activeInk.width.toFixed(this.activeInk.width < 10 ? 1 : 0)} pt`));
         settingsBtn.addEventListener('click', () => this.showPenSettings(settingsBtn));
         bar.append(presetBtn, sep(), this.colorStrip(isHL ? HIGHLIGHTER_PALETTE : INK_PALETTE), sep(), widthGroup, settingsBtn);
-        if (!isHL) bar.append(sep(), h('span', { class: 'opt-hint' }, st.holdToSnap ? 'Hold at the end of a stroke to snap it to a shape.' : ''));
+        if (!isHL) bar.append(sep(), h('span', { class: 'opt-hint' }, [st.holdToSnap ? 'Hold at the end of a stroke to snap it to a shape.' : '', st.scribbleToErase !== false ? 'Scribble over ink to erase it.' : ''].filter(Boolean).join(' ')));
         break;
       }
       case 'eraser': {
+        const scribbleMode = selectField('scribble-mode', SCRIBBLE_MODES, st.scribbleMode || 'strokes', (v) => { st.scribbleMode = v; this.settingsChanged(); });
+        scribbleMode.classList.add('compact');
+        scribbleMode.setAttribute('aria-label', 'Scribble erases');
+        scribbleMode.disabled = st.scribbleToErase === false;
         bar.append(
           segmented([{ value: 'object', label: 'Stroke' }, { value: 'partial', label: 'Pixel' }], st.eraser.mode, (v) => { st.eraser.mode = v; this.settingsChanged(); }, { label: 'Eraser mode' }),
           sep(),
@@ -305,6 +310,9 @@ export class Editor {
           slider('eraser-size', { min: 8, max: 80, step: 1, value: st.eraser.size, format: (v) => `${v}px`, onInput: (v) => { st.eraser.size = v; this.settingsChanged(); } }).el,
           sep(),
           toggle('hl-only', 'Highlighter only', st.eraser.highlighterOnly, (v) => { st.eraser.highlighterOnly = v; this.settingsChanged(); }),
+          sep(),
+          toggle('scribble-erase', 'Scribble to erase', st.scribbleToErase !== false, (v) => { st.scribbleToErase = v; this.settingsChanged(); scribbleMode.disabled = !v; }),
+          scribbleMode,
         );
         break;
       }
@@ -753,6 +761,10 @@ export class Editor {
       'sep',
       { label: 'Export PDF', icon: 'export', action: () => this.exportPDF() },
       { label: 'Export Page as PNG', icon: 'export', action: () => this.exportPNG() },
+      'sep',
+      { label: 'Scribble to Erase', checked: st.scribbleToErase !== false, action: () => { st.scribbleToErase = st.scribbleToErase === false; this.settingsChanged(); this.renderOptions(); toast(st.scribbleToErase ? 'Scribble quickly over ink with the pen to erase it.' : 'Scribble to erase is off.'); } },
+      { header: 'Scribble erases' },
+      ...SCRIBBLE_MODES.map((m) => ({ label: m.label, checked: (st.scribbleMode || 'strokes') === m.value, action: () => { st.scribbleMode = m.value; this.settingsChanged(); this.renderOptions(); } })),
       'sep',
       { label: 'Hold to Snap Shapes', checked: st.holdToSnap, keepOpen: false, action: () => { st.holdToSnap = !st.holdToSnap; this.settingsChanged(); this.renderOptions(); } },
       { label: 'Draw with Finger', checked: st.fingerDrawing, action: () => { st.fingerDrawing = !st.fingerDrawing; this.canvas.penSeen = false; this.settingsChanged(); toast(st.fingerDrawing ? 'One finger draws; two fingers scroll and zoom.' : 'One finger scrolls; draw with a pen or mouse.'); } },

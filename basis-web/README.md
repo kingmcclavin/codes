@@ -24,6 +24,7 @@ This folder is a static site with no build step. Import the repository in Vercel
 - Pen (fine pen, ballpoint, fountain, marker, pencil) with pressure and tilt from Apple Pencil or any stylus, plus a highlighter that multiplies over ink
 - Hold still at the end of a stroke to snap it into a line, rectangle, ellipse, triangle, polygon or arrow. The Shapes tool snaps every stroke.
 - Stroke eraser and a vector "pixel" eraser that splits strokes. Optional highlighter-only mode.
+- Scribble to erase: scribble quickly over ink with the pen to erase the strokes, whole words, or the scribbled region
 - Lasso: select, move, resize, rotate, recolor, restyle, cut/copy/paste, duplicate, arrange
 - Text boxes with fonts, size, bold/italic and alignment
 - Images, PDF import (pages become backgrounds you can write on), PDF and PNG export
@@ -47,7 +48,7 @@ PDF import and export load pdf.js and jsPDF from cdnjs the first time you use th
 
 ## Not ported
 
-These need iOS-only APIs: handwriting recognition (auto-solving handwritten math, scribble-to-erase), GoodNotes import, and IPA export. The Engineering Tools screen and the data tables from Data & Graphs aren't ported yet. Graphs are.
+These need iOS-only APIs: handwriting recognition (auto-solving handwritten math), GoodNotes import, and IPA export. The Engineering Tools screen and the data tables from Data & Graphs aren't ported yet. Graphs are.
 
 ## Layout
 

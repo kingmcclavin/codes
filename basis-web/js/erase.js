@@ -1,7 +1,7 @@
 // Vector erasing: splits strokes where they are touched instead of painting
 // over them, so erased ink stays editable.
 
-import { boundsOf, expandRect, rectsIntersect, rectContains, distToPolyline, distToSegment, dist, pathLength, uuid } from './util.js';
+import { boundsOf, expandRect, rectsIntersect, rectContains, rectDiagonal, polygonContains, distToPolyline, distToSegment, dist, pathLength, uuid } from './util.js';
 import { elementBounds, STRIDE } from './elements.js';
 import { maxWidth } from './model.js';
 
@@ -12,6 +12,13 @@ export function eraseStroke(stroke, path, radius) {
   if (!rectsIntersect(elementBounds(stroke), pb)) return null;
   const reach = radius + stroke.style.width * 0.5;
   return split(stroke, Math.max(0.5, radius * 0.4), (p) => rectContains(pb, p) && distToPolyline(p, path) <= reach);
+}
+
+/** Erases the parts of `stroke` inside `polygon`. */
+export function eraseStrokeInside(stroke, polygon) {
+  const box = boundsOf(polygon);
+  if (!rectsIntersect(elementBounds(stroke), box)) return null;
+  return split(stroke, Math.max(0.5, rectDiagonal(box) / 200), (p) => rectContains(box, p) && polygonContains(polygon, p));
 }
 
 function split(stroke, spacing, isErased) {

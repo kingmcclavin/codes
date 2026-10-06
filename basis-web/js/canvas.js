@@ -14,6 +14,7 @@ import {
 import { drawBackground, drawElement, drawShape, drawText, fillStrokePath, setImageLoadHandler } from './render.js';
 import { recognize } from './recognizer.js';
 import { eraseStroke } from './erase.js';
+import { isScribble, scribbleErase } from './scribble.js';
 import { setElements } from './history.js';
 import { fontCss, maxWidth } from './model.js';
 
@@ -912,6 +913,16 @@ class InkGesture {
         v.commit('Shape', pageId, (els) => [...els, shape]);
       }
       return;
+    }
+    const st = v.settings;
+    if (this.mode === 'pen' && st.scribbleToErase !== false && this.samples.length >= 12) {
+      const pts = this.samples.map((s) => ({ x: s.x, y: s.y }));
+      if (isScribble(pts, this.samples.map((s) => s.t / 1000), v.view.zoom)) {
+        const tolerance = Math.max(this.style.width / 2, 1.5) + 2 / Math.max(v.view.zoom, 0.01);
+        const page = v.doc.pages.find((p) => p.id === pageId);
+        const result = scribbleErase(pts, page.elements, st.scribbleMode || 'strokes', tolerance);
+        if (result) { v.commit('Scribble Erase', pageId, () => result); return; }
+      }
     }
     const stroke = makeStroke(this.samples, this.style);
     v.commit(this.mode === 'highlighter' ? 'Highlight' : 'Ink', pageId, (els) => [...els, stroke]);
