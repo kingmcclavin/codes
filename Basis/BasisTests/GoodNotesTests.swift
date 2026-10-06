@@ -104,7 +104,7 @@ final class GoodNotesTests: XCTestCase {
             + stroke("S2", rgba: (0, 0, 0, 1), width: 2, erased: true)
             + [string(1, "IMG") + bytesField(2, number(1, 3)),
                bytesField(1, string(1, "IMG") + bytesField(2, bytesField(1, float(1, 50) + float(2, 60)) + bytesField(2, float(1, 200) + float(2, 100)))
-                          + string(4, photo))])
+                             + string(4, photo))])
         // Page A: a highlighter and near-white ("dark mode") ink.
         let notesA = delimited(stroke("H1", rgba: (0, 0.42, 0.83, 0.5), width: 36) + stroke("W1", rgba: (0.99, 0.99, 0.99, 1), width: 1.5))
         return try zip([
