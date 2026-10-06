@@ -642,6 +642,13 @@ struct BasisSettingsView: View {
                 Section("Appearance") {
                     Button("Accent Color…", systemImage: "paintpalette") { showAppearance = true }
                 }
+                Section("Notebooks") {
+                    NavigationLink {
+                        BackupView()
+                    } label: {
+                        Label("Back Up & Restore Notebooks", systemImage: "externaldrive.badge.icloud")
+                    }
+                }
                 Section("Data") {
                     Button("Export Formulas, Variables, Tables & History…", systemImage: "square.and.arrow.up") {
                         shareURL = calc.exportData()

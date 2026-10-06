@@ -112,13 +112,13 @@ final class DocumentStore: ObservableObject, @unchecked Sendable {
     static func assetsURL(_ pkg: URL) -> URL { pkg.appendingPathComponent("assets", isDirectory: true) }
     static func pageURL(_ pkg: URL, _ id: UUID) -> URL { pagesURL(pkg).appendingPathComponent("\(id.uuidString).json") }
 
-    private static func encoder() -> JSONEncoder {
+    static func encoder() -> JSONEncoder {
         let e = JSONEncoder()
         e.dateEncodingStrategy = .iso8601
         return e
     }
 
-    private static func decoder() -> JSONDecoder {
+    static func decoder() -> JSONDecoder {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .iso8601
         return d
