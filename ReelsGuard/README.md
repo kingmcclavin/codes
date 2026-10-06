@@ -16,7 +16,7 @@ app. It uses no private APIs, no code injection and no jailbreak.
 
 | Surface | What happens |
 |---|---|
-| **Open Instagram** (in-app browser) | instagram.com with the full policy: Reels tab and Explore Reels blocked; DM, profile and shared Reels allowed; swiping stops at the first Reel not from someone you follow. |
+| **Instagram tab** (opens on launch) | instagram.com with the full policy: Reels tab and Explore Reels blocked; DM, profile and shared Reels allowed; swiping stops at the first Reel not from someone you follow. |
 | **Safari extension** | Same rules on instagram.com in Safari, same settings. |
 | **Share extension** | In the Instagram app, share a Reel a friend sent you to Reels Guard. It's saved to *Shared with me* and plays on its own. |
 | **Screen Time lock** (optional) | Locks the native Instagram app, so you go through a filtered surface instead. |
@@ -44,7 +44,8 @@ watch a Reel someone sent you, copy its link in Instagram and paste it into
 2. In the **Files** app, open **Downloads** and tap the ZIP to unzip it.
 3. Open the unzipped folder, then `ReelsGuard`, and tap **`ReelsGuard.swiftpm`**.
    It opens in Swift Playgrounds. Requires iPadOS 17+ and a recent Swift Playgrounds.
-4. Tap **Run** (▶). Then tap **Open Instagram** and sign in on instagram.com.
+4. Tap **Run** (▶). The app opens straight into Instagram; sign in on
+   instagram.com. Settings are in the second tab.
 
 The app runs inside Swift Playgrounds. Putting it on your Home Screen or on an
 iPhone means publishing it through App Store Connect / TestFlight (Swift
@@ -53,6 +54,24 @@ Program membership.
 
 The `.swiftpm` folder is generated. When developing, edit the originals and run
 `scripts/build-playgrounds-app.py` (`--check` verifies it's current).
+
+## Get an .ipa (no Mac needed)
+
+Every push to this branch builds the app on a GitHub-hosted Mac
+(`.github/workflows/reels-guard-ios.yml`) and publishes two **unsigned**
+`.ipa` files on the repository's **Releases** page under
+**Reels Guard (latest build)**:
+
+| File | Contents |
+|---|---|
+| `ReelsGuard-Lite-unsigned.ipa` | Instagram tab + Settings, no extensions or entitlements. **Use this one for sideloading.** |
+| `ReelsGuard-Full-unsigned.ipa` | Also has the Safari, share and Screen Time extensions. With a free Apple ID, sideloading tools generally can't grant Screen Time (Family Controls) or App Groups, so those parts may not work. |
+
+An unsigned `.ipa` must be signed when it's installed. Sideloading tools
+(AltStore, SideStore, Sideloadly and similar) do this with your Apple ID.
+With a free Apple ID the app expires after 7 days and must be refreshed. A paid
+developer account lasts a year. Once the workflow is on the default branch, you can also run it by hand from the
+**Actions** tab (**Run workflow**).
 
 ## Build the full version (Mac + Xcode)
 
