@@ -80,21 +80,24 @@ jobs:
           }
           package ReelsGuardLite ReelsGuard-Lite-unsigned.ipa
           package ReelsGuard ReelsGuard-Full-unsigned.ipa
+          # Swift Playgrounds project for iPad: unzip in Files, tap to open.
+          zip -qry dist/ReelsGuard-SwiftPlaygrounds.zip ReelsGuard.swiftpm
           ls -l dist
       - uses: actions/upload-artifact@v4
         with:
           name: ReelsGuard-ipa
-          path: ReelsGuard/dist/*.ipa
+          path: ReelsGuard/dist/*
       - name: Publish "latest build" release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete reels-guard-latest --yes --cleanup-tag || true
-          gh release create reels-guard-latest dist/*.ipa \
+          gh release create reels-guard-latest dist/* \
             --target "$GITHUB_SHA" \
             --prerelease \
             --title "Reels Guard (latest build)" \
             --notes "Unsigned builds from ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}.
 
+          - ReelsGuard-SwiftPlaygrounds.zip: open on iPad in Swift Playgrounds (unzip in Files, tap ReelsGuard.swiftpm).
           - ReelsGuard-Lite-unsigned.ipa: Instagram tab + Settings. No extensions or entitlements. Recommended for sideloading.
           - ReelsGuard-Full-unsigned.ipa: also includes the Safari, share and Screen Time extensions. Most sideloading tools with a free Apple ID can't grant Screen Time (Family Controls), so those features may not work."
