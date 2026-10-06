@@ -138,6 +138,68 @@ export class CanvasView {
 
   zoomBy(f) { this.setZoom(this.view.zoom * f); }
 
+  /** A quick second finger tap near the first one. Not while a finger is drawing or placing text. */
+  isDoubleTap(ptr) {
+    if (ptr.type !== 'touch' || this.pointers.size > 0) return false;
+    const now = performance.now();
+    const isTap = dist(ptr.start, ptr.last) < 10 && now - ptr.t0 < 300;
+    if (!isTap) { this.lastTap = null; return false; }
+    const tool = this.settings.tool;
+    const fingerInks = this.settings.fingerDrawing && !this.penSeen && ['pen', 'highlighter', 'shapes', 'eraser'].includes(tool);
+    if (tool === 'text' || fingerInks) return false;
+    const prev = this.lastTap;
+    if (prev && now - prev.t < 320 && dist(prev.p, ptr.last) < 40) { this.lastTap = null; return true; }
+    this.lastTap = { t: now, p: ptr.last };
+    return false;
+  }
+
+  /** Zoom so the page's edges touch the screen edges; a second time returns to the previous zoom. */
+  toggleFitZoom(anchor) {
+    let i = this.pageAtScreen(anchor, GAP);
+    if (i < 0) i = this.currentPageIndex;
+    const page = this.doc.pages[i];
+    const fit = clamp(this.w / page.w, MIN_ZOOM, MAX_ZOOM);
+    const c = this.screenToContent(anchor);
+    let target;
+    if (Math.abs(this.view.zoom - fit) / fit < 0.02) {
+      target = this.zoomBeforeFit && Math.abs(this.zoomBeforeFit - fit) / fit >= 0.02 ? this.zoomBeforeFit : clamp((this.w - 32) / this.maxW, MIN_ZOOM, MAX_ZOOM);
+      if (Math.abs(target - fit) / fit < 0.02) target = fit * 2;
+      this.animateView({ zoom: target, x: c.x - anchor.x / target, y: c.y - anchor.y / target });
+    } else {
+      this.zoomBeforeFit = this.view.zoom;
+      this.animateView({ zoom: fit, x: -page.w / 2, y: c.y - anchor.y / fit });
+    }
+  }
+
+  fitEdges() {
+    const i = this.currentPageIndex, page = this.doc.pages[i];
+    const z = clamp(this.w / page.w, MIN_ZOOM, MAX_ZOOM);
+    const cy = this.view.y + this.h / 2 / this.view.zoom;
+    this.animateView({ zoom: z, x: -page.w / 2, y: cy - this.h / 2 / z });
+  }
+
+  /** Smoothly moves to a view (clamped), keeping the screen point under the finger steady. */
+  animateView(to) {
+    const from = { ...this.view };
+    const end = { ...this.view, ...to };
+    const saved = this.view;
+    this.view = end; this.clampView(); const target = { ...this.view }; this.view = saved;
+    cancelAnimationFrame(this.animRaf);
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const t0 = performance.now(), dur = reduce ? 0 : 220;
+    const step = (now) => {
+      const k = dur ? Math.min(1, (now - t0) / dur) : 1;
+      const e = 1 - Math.pow(1 - k, 3);
+      // Interpolate the scale geometrically so zooming feels even.
+      this.view.zoom = from.zoom * Math.pow(target.zoom / from.zoom, e);
+      this.view.x = from.x + (target.x - from.x) * e;
+      this.view.y = from.y + (target.y - from.y) * e;
+      this.viewChanged();
+      if (k < 1) this.animRaf = requestAnimationFrame(step);
+    };
+    this.animRaf = requestAnimationFrame(step);
+  }
+
   fitWidth(notify = true) {
     const z = clamp((this.w - 32) / this.maxW, MIN_ZOOM, MAX_ZOOM);
     const cur = this.currentPageIndex ?? 0;
@@ -319,7 +381,7 @@ export class CanvasView {
     this.overlay.focus({ preventScroll: true });
     this.overlay.setPointerCapture?.(e.pointerId);
     const s = this.local(e);
-    this.pointers.set(e.pointerId, { type: e.pointerType, start: s, last: s });
+    this.pointers.set(e.pointerId, { type: e.pointerType, start: s, last: s, t0: performance.now() });
     if (e.pointerType === 'pen') this.penSeen = true;
 
     const touches = [...this.pointers.values()].filter((p) => p.type === 'touch');
@@ -362,6 +424,12 @@ export class CanvasView {
     const ptr = this.pointers.get(e.pointerId);
     this.pointers.delete(e.pointerId);
     if (!ptr) return;
+    if (!cancelled && this.isDoubleTap(ptr)) {
+      this.gesture = null;
+      if (this.interaction?.pointerId === e.pointerId) { const it = this.interaction; this.interaction = null; it.cancel?.(); }
+      this.toggleFitZoom(ptr.last);
+      return;
+    }
     if (this.gesture) {
       if (this.pointers.size === 0) this.endGesture(ptr);
       else this.startGesture();
@@ -458,6 +526,8 @@ export class CanvasView {
       this.clearSelection();
       if (hit.calc) this.editor.editCalculation(this.doc.pages[i].id, hit);
       else this.beginTextEdit(i, hit, false);
+    } else if (e.pointerType !== 'pen' && ['lasso', 'eraser'].includes(this.settings.tool) && !hit) {
+      this.toggleFitZoom(s);
     }
   }
 

@@ -119,7 +119,8 @@ export class Editor {
     this.canvasHost = h('div', { class: 'canvas-host' });
     this.zoomLabel = h('button', { class: 'zoom-label', title: 'Zoom options' }, '100%');
     this.zoomLabel.addEventListener('click', () => menu(this.zoomLabel, [
-      { label: 'Fit to Width', icon: 'fit', action: () => this.canvas.fitWidth() },
+      { label: 'Fit to Screen Edges', icon: 'fit', hint: 'double-tap', action: () => this.canvas.fitEdges() },
+      { label: 'Fit Width with Margin', icon: 'fit', action: () => this.canvas.fitWidth() },
       { label: 'Fit Whole Page', icon: 'pages', action: () => this.canvas.fitPage() },
       'sep',
       ...[50, 100, 150, 200, 400].map((p) => ({ label: `${p}%`, action: () => this.canvas.setZoom(p / 100) })),
