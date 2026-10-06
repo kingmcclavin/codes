@@ -75,34 +75,60 @@ final class ReelsGuardEngineTests: XCTestCase {
         XCTAssertEqual(send(reel("A", by: "brand", .notFollowing), &s), .block(.recommended))
     }
 
+    // MARK: Reels sent to the user play on their own
+
+    func testScrollingPastAReelFromDMsIsBlocked() {
+        var s = Session()
+        s.settings.manualFollows = ["amy"]
+        send(page("https://www.instagram.com/direct/t/1/"), &s)
+        XCTAssertEqual(send(reel("1", by: "stranger"), &s), .allow)                // the Reel a friend sent
+        XCTAssertEqual(send(reel("2", by: "amy", .following), &s), .block(.endOfSentReel)) // even a followed account
+        XCTAssertEqual(send(reel("3", by: nil), &s), .block(.endOfSentReel))
+        XCTAssertEqual(send(reel("1", by: "stranger"), &s), .allow)                // swiping back to it is fine
+    }
+
+    func testScrollingPastASharedLinkIsBlocked() {
+        var s = Session()
+        XCTAssertEqual(send(reel("1", by: nil), &s), .allow)
+        XCTAssertEqual(send(reel("2", by: "amy", .following), &s), .block(.endOfSentReel))
+    }
+
+    func testBackInTheConversationTheNextSentReelIsAllowed() {
+        var s = Session()
+        send(page("https://www.instagram.com/direct/t/1/"), &s)
+        send(reel("1", by: "a"), &s)
+        send(reel("2", by: "b"), &s)
+        send(page("https://www.instagram.com/direct/t/1/"), &s)
+        XCTAssertEqual(send(reel("3", by: "c"), &s), .allow)
+    }
+
     // MARK: No infinite feed
 
     func testSwipeChainStopsAtFirstNonFollowedReel() {
         var s = Session()
         s.settings.manualFollows = ["amy", "ben"]
-        send(page("https://www.instagram.com/direct/t/1/"), &s)
-        XCTAssertEqual(send(reel("1", by: "stranger"), &s), .allow)     // sent in DM
-        XCTAssertEqual(send(reel("2", by: "amy"), &s), .allow)          // followed
-        XCTAssertEqual(send(reel("3", by: "ben"), &s), .allow)          // followed
-        XCTAssertEqual(send(reel("4", by: "influencer", .notFollowing), &s), .block(.notFollowed))
-        XCTAssertEqual(send(reel("5", by: nil), &s), .block(.infiniteScroll))
-        XCTAssertEqual(s.state.chain?.length, 3)
+        send(page("https://www.instagram.com/"), &s)
+        XCTAssertEqual(send(reel("1", by: "amy"), &s), .allow)          // followed, from the feed
+        XCTAssertEqual(send(reel("2", by: "ben"), &s), .allow)          // followed
+        XCTAssertEqual(send(reel("3", by: "influencer", .notFollowing), &s), .block(.notFollowed))
+        XCTAssertEqual(send(reel("4", by: nil), &s), .block(.infiniteScroll))
+        XCTAssertEqual(s.state.chain?.length, 2)
     }
 
     func testUnknownCreatorNeverExtendsTheChain() {
         var s = Session()
-        send(page("https://www.instagram.com/direct/t/1/"), &s)
-        send(reel("1", by: "friend"), &s)
+        send(page("https://www.instagram.com/"), &s)
+        send(reel("1", by: "friend", .following), &s)
         XCTAssertEqual(send(reel("2", by: nil), &s), .block(.infiniteScroll))
         XCTAssertEqual(send(reel("2", by: "who", .unknown), &s), .block(.infiniteScroll))
     }
 
     func testSwipingBackToAllowedReelWorks() {
         var s = Session()
-        send(page("https://www.instagram.com/direct/t/1/"), &s)
-        send(reel("1", by: "friend"), &s)
+        send(page("https://www.instagram.com/"), &s)
+        send(reel("1", by: "friend", .following), &s)
         XCTAssertEqual(send(reel("2", by: "x", .notFollowing), &s), .block(.notFollowed))
-        XCTAssertEqual(send(reel("1", by: "friend"), &s), .allow)
+        XCTAssertEqual(send(reel("1", by: "friend", .following), &s), .allow)
     }
 
     func testSameCreatorFromProfileCanBeSwiped() {
@@ -122,17 +148,11 @@ final class ReelsGuardEngineTests: XCTestCase {
         XCTAssertEqual(send(reel("2", by: "x"), &s), .block(.recommended))
     }
 
-    func testMissingFollowButtonCountsAsFollowingOnlyOutsideStrictMode() {
+    func testMissingFollowButtonIsNotProofOfAFollow() {
         var s = Session()
-        send(page("https://www.instagram.com/direct/t/1/"), &s)
-        send(reel("1", by: "friend"), &s)
-        XCTAssertEqual(send(reel("2", by: "pal", .noFollowButton), &s), .allow)
-
-        var strict = Session()
-        strict.settings.strictMode = true
-        send(page("https://www.instagram.com/direct/t/1/"), &strict)
-        send(reel("1", by: "friend"), &strict)
-        XCTAssertEqual(send(reel("2", by: "pal", .noFollowButton), &strict), .block(.infiniteScroll))
+        send(page("https://www.instagram.com/"), &s)
+        send(reel("1", by: "friend", .following), &s)
+        XCTAssertEqual(send(reel("2", by: "pal", .noFollowButton), &s), .block(.infiniteScroll))
     }
 
     // MARK: Settings
@@ -164,7 +184,8 @@ final class ReelsGuardEngineTests: XCTestCase {
         var s = Session()
         s.settings.learnedFollows = ["pal"]
         s.settings.usePageHints = false
-        send(page("https://www.instagram.com/direct/t/1/"), &s)
+        s.settings.manualFollows = ["friend"]
+        send(page("https://www.instagram.com/"), &s)
         send(reel("1", by: "friend"), &s)
         XCTAssertEqual(send(reel("2", by: "pal"), &s), .allow)
         XCTAssertEqual(send(reel("3", by: "other", .following), &s), .block(.infiniteScroll))

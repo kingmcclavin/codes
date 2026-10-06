@@ -3,23 +3,20 @@ import Foundation
 /// Decides whether the user follows a Reel's creator, using only data that is
 /// already on the device: the user's own list of known follows and the hint
 /// from the page they are looking at. Nothing is fetched from Instagram.
+///
+/// It errs toward "unknown": a missing Follow button is not proof of a follow,
+/// and an unknown creator never extends a Reel chain.
 public struct FollowResolver: Sendable {
     public var knownFollows: Set<String>
     public var usePageHints: Bool
-    public var trustMissingFollowButton: Bool
 
-    public init(knownFollows: Set<String>, usePageHints: Bool, trustMissingFollowButton: Bool) {
+    public init(knownFollows: Set<String>, usePageHints: Bool) {
         self.knownFollows = knownFollows
         self.usePageHints = usePageHints
-        self.trustMissingFollowButton = trustMissingFollowButton
     }
 
     public init(settings: GuardSettings) {
-        self.init(
-            knownFollows: settings.knownFollows,
-            usePageHints: settings.usePageHints,
-            trustMissingFollowButton: EffectivePolicy(settings).trustMissingFollowButton
-        )
+        self.init(knownFollows: settings.knownFollows, usePageHints: settings.usePageHints)
     }
 
     public func resolve(creator: String?, hint: FollowHint) -> FollowState {
@@ -28,8 +25,7 @@ public struct FollowResolver: Sendable {
         switch hint {
         case .following: return .following
         case .notFollowing: return .notFollowing
-        case .noFollowButton: return trustMissingFollowButton && creator != nil ? .following : .unknown
-        case .unknown: return .unknown
+        case .noFollowButton, .unknown: return .unknown
         }
     }
 }

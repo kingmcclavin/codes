@@ -37,7 +37,7 @@ final class ReelsGuardServiceTests: XCTestCase {
         return ReelsGuardService(store: SharedStore(defaults: defaults))
     }
 
-    func testStatelessRoundTripBlocksSwipeToRecommendedReel() {
+    func testStatelessRoundTripBlocksSwipePastSentReel() {
         let service = makeService()
         var r = service.handleStateless(WireRequest(type: .page, url: "https://www.instagram.com/direct/t/1/"))
         XCTAssertEqual(r.decision, "allow")
@@ -47,7 +47,7 @@ final class ReelsGuardServiceTests: XCTestCase {
         r = service.handleStateless(WireRequest(type: .reel, url: "https://www.instagram.com/reel/B/", reelID: "B",
                                                 creator: "brand", followHint: .notFollowing, stateJSON: r.stateJSON))
         XCTAssertEqual(r.decision, "block")
-        XCTAssertEqual(r.block?.message, "This Reel isn't from an account you follow.")
+        XCTAssertEqual(r.block?.title, "That's the Reel you were sent.")
         XCTAssertEqual(r.block?.buttonTitle, "Back to Instagram")
     }
 

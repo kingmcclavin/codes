@@ -70,8 +70,8 @@ There is no API for "does the user follow @x". Reels Guard combines, in order:
    the observer reads the header button. "Following" adds the account and
    "Follow" removes it. On by default, local only, can be cleared.
 3. **On-page hint next to the Reel**: a visible "Follow" button means *not
-   followed*. In normal mode, "creator found but no Follow button" counts as
-   followed. In Strict Mode it doesn't.
+   followed*, and a "Following" label means followed. A missing button proves
+   nothing and counts as unknown.
 
 When none of these can confirm a follow, **the next Reel is blocked** (fail
 closed). The cost is that some followed accounts' Reels will occasionally be
@@ -93,9 +93,22 @@ The engine remembers the last non-Reel page in the tab:
 | anything else | other | allow only if followed |
 
 Once a Reel is allowed, every *different* Reel that follows without leaving
-Reels is a **continuation**, whether it came from a URL change or a different
-`<video>` starting to play. A continuation is allowed only if the creator is
-followed, or is the same creator whose profile the chain started on.
+Reels is a **continuation**. A continuation is detected when any of these happen
+after the user touches or scrolls:
+
+- the URL changes to another Reel,
+- the on-screen player becomes a different `<video>`, or the same one switches
+  source,
+- the Reel scroller moves by more than 60 % of a screen.
+
+A Reel that was **sent to the user** (DM or shared link) plays on its own: any
+continuation after it is blocked, whoever posted the next one. After a Reel
+opened from a profile or the home feed, a continuation is allowed only if the
+creator is followed, or is the same creator whose profile the chain started on.
+
+On DM pages, a Reel may open full screen over the conversation without a URL
+change. The observer recognises it by the size of the playing video alone and
+reads no names or text there.
 
 ## Other known limitations
 

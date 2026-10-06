@@ -85,8 +85,6 @@ public struct EffectivePolicy: Equatable, Sendable {
     public var allowProfile: Bool
     public var strict: Bool
     public var blockExplorePage: Bool
-    /// Treat "creator found, no Follow button shown" as following.
-    public var trustMissingFollowButton: Bool
     public var reelLimit: TimeInterval?
     public var cooldown: TimeInterval
 
@@ -100,13 +98,11 @@ public struct EffectivePolicy: Equatable, Sendable {
             allowSent = true
             allowProfile = s.allowProfileReels
             blockExplorePage = true
-            trustMissingFollowButton = false
         } else {
             allowFollowed = s.allowFollowedReels
             allowSent = s.allowSentReels
             allowProfile = s.allowProfileReels
             blockExplorePage = false
-            trustMissingFollowButton = true
         }
     }
 }

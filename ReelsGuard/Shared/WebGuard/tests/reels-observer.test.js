@@ -87,6 +87,7 @@ test('a swipe to a different video is reported as a new Reel and blocked', async
   // Instagram swaps in the next video without necessarily changing the URL.
   w.document.body.innerHTML = '';
   const next = reelMarkup(w, { creator: 'brand', button: 'Follow', reelId: 'BBB' });
+  w.document.dispatchEvent(new w.Event('touchmove')); // the user swiped
   next.dispatchEvent(new w.Event('play'));
   await sleep(50);
 
@@ -130,4 +131,84 @@ test('direct-message pages are never scraped', async () => {
 test('the copy embedded in the app (ObserverScript.swift) is up to date', () => {
   const swift = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'App', 'Sources', 'Browser', 'ObserverScript.swift'), 'utf8');
   assert.ok(swift.includes(SOURCE.trimEnd()), 'run scripts/build-playgrounds-app.py');
+});
+
+const playing = (video) => Object.defineProperty(video, 'paused', { get: () => false });
+const blockSecondReel = (m) =>
+  m.type === 'reel' && m.reelID !== firstReel.id ? { decision: 'block', block: {} } : { decision: 'allow' };
+const firstReel = { id: null };
+
+test('a Reel opened over a DM thread is allowed, scrolling past it is reported, and nothing is read', async () => {
+  firstReel.id = null;
+  const decide = (m) => {
+    if (m.type === 'reel' && firstReel.id === null) firstReel.id = m.reelID;
+    return blockSecondReel(m);
+  };
+  const { dom, w, sent, events } = makePage('https://www.instagram.com/direct/t/7/', decide);
+  const first = reelMarkup(w, { creator: 'friendname', button: 'Following' });
+  playing(first);
+  first.dispatchEvent(new w.Event('play'));
+  await sleep(50);
+
+  w.document.body.innerHTML = '';
+  const next = reelMarkup(w, { creator: 'brand', button: 'Follow' });
+  playing(next);
+  w.document.dispatchEvent(new w.Event('touchmove'));
+  next.dispatchEvent(new w.Event('play'));
+  await sleep(50);
+
+  const reels = sent.filter((m) => m.type === 'reel');
+  assert.equal(reels.length, 2);
+  assert.notEqual(reels[0].reelID, reels[1].reelID);
+  for (const m of reels) {
+    assert.equal(m.creator, null, 'no names read on DM pages');
+    assert.equal(m.followHint, 'unknown');
+  }
+  assert.equal(events.blocked, 1);
+});
+
+test('the same <video> element switching to a new source after a swipe is a new Reel', async () => {
+  const { w, sent, navigate } = makePage('https://www.instagram.com/direct/t/1/');
+  const video = reelMarkup(w, { creator: 'pal', button: null });
+  video.src = 'blob:https://www.instagram.com/one';
+  navigate('/reel/AAA/');
+  await sleep(450);
+  w.document.dispatchEvent(new w.Event('touchmove'));
+  video.src = 'blob:https://www.instagram.com/two';
+  video.dispatchEvent(new w.Event('play'));
+  await sleep(50);
+  assert.deepEqual(plain(sent.filter((m) => m.type === 'reel').map((m) => m.reelID)), ['AAA', 'video-1']);
+});
+
+test('scrolling the Reel viewer a full screen is a new Reel, even if the video never changes', async () => {
+  const { w, sent, navigate } = makePage('https://www.instagram.com/direct/t/1/');
+  const scroller = w.document.createElement('div');
+  w.document.body.appendChild(scroller);
+  let top = 0;
+  Object.defineProperty(scroller, 'scrollTop', { get: () => top });
+  const video = w.document.createElement('video');
+  scroller.appendChild(video);
+  navigate('/reel/AAA/');
+  await sleep(1800); // no creator link on the page: the first report waits for one, then gives up
+
+  scroller.dispatchEvent(new w.Event('scroll'));   // baseline
+  top = 100;
+  scroller.dispatchEvent(new w.Event('scroll'));   // small drag: same Reel
+  assert.equal(sent.filter((m) => m.type === 'reel').length, 1);
+  top = 700;
+  scroller.dispatchEvent(new w.Event('scroll'));   // a full screen: next Reel
+  await sleep(50);
+  assert.equal(sent.filter((m) => m.type === 'reel').length, 2);
+});
+
+test('Instagram re-rendering the same Reel without any swipe is not a new Reel', async () => {
+  const { w, sent, navigate } = makePage('https://www.instagram.com/direct/t/1/');
+  reelMarkup(w, { creator: 'pal', button: null });
+  navigate('/reel/AAA/');
+  await sleep(450);
+  w.document.body.innerHTML = '';
+  const rerendered = reelMarkup(w, { creator: 'pal', button: null });
+  rerendered.dispatchEvent(new w.Event('play'));
+  await sleep(600);
+  assert.equal(sent.filter((m) => m.type === 'reel').length, 1);
 });

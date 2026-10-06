@@ -28,6 +28,10 @@ public struct BlockScreenCopy: Codable, Equatable, Sendable {
             self.init(title: "That's enough Reels for now.",
                       message: "Instagram tried to keep the Reels going, and this one couldn't be confirmed as coming from someone you follow.",
                       detail: Self.intentionalDetail)
+        case .endOfSentReel:
+            self.init(title: "That's the Reel you were sent.",
+                      message: "Scrolling past it would start Instagram's Reels feed, so it stops here.",
+                      detail: "You can still open other Reels your friends send you.")
         case .recommended:
             self.init(title: "Reels Blocked",
                       message: "This Reel was recommended by Instagram.",

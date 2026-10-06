@@ -35,7 +35,7 @@ struct ControlView: View {
                 } footer: {
                     Text(strict
                          ? "Strict Mode: only Reels from accounts you follow, and Reels sent to you. Profile Reels also need a follow. Explore is blocked."
-                         : "After a Reel you chose, the next one plays only if it's from someone you follow.")
+                         : "A Reel sent to you plays on its own. After a Reel from a profile or someone you follow, the next one plays only if it's from someone you follow.")
                 }
 
                 Section {

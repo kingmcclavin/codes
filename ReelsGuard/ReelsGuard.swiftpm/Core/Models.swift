@@ -124,6 +124,8 @@ public enum BlockReason: Codable, Equatable, Sendable {
     case notFollowed
     /// The next Reel couldn't be confirmed as coming from a followed account.
     case infiniteScroll
+    /// Swiped past a Reel that was sent to the user. Sent Reels play on their own.
+    case endOfSentReel
     /// The user switched this category off.
     case categoryDisabled(ReelCategory)
     /// The Reel time limit is used up.

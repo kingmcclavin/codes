@@ -5,7 +5,8 @@ struct LimitationsView: View {
     var body: some View {
         List {
             Section("Works") {
-                Bullet("Instagram opened from Reels Guard: Reels you open from DMs, profiles, shared links and people you follow play normally. Swiping on to a Reel that isn't from someone you follow is blocked.")
+                Bullet("A Reel a friend sends you plays normally. Scrolling past it is blocked, because what comes next is Instagram's feed.")
+                Bullet("Reels you open from a profile or from people you follow play normally. Swiping on to a Reel that isn't from someone you follow is blocked.")
                 Bullet("The Reels tab, and Reels opened from Explore or suggestions, are blocked.")
                 if AppFeatures.hasSafariExtension {
                     Bullet("The same rules in Safari on instagram.com, with the Reels Guard extension turned on.")

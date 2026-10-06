@@ -38,10 +38,20 @@
     shadow.querySelector('.detail').textContent = copy.detail || '';
     var button = shadow.querySelector('button');
     button.textContent = copy.buttonTitle || 'Back to Instagram';
-    button.addEventListener('click', function () {
-      location.assign('https://www.instagram.com/');
-    });
+    button.addEventListener('click', backToInstagram);
     (document.documentElement || document).appendChild(host);
+  }
+
+  // Back to the page the Reels were opened from (such as the DM thread),
+  // otherwise the home feed. Never forward to another Reel.
+  function backToInstagram() {
+    var path = location.pathname;
+    var onReel = /^\/(reels?|tv)(\/|$)|^\/[^/]+\/(reel|reels|tv)\/[^/]+/i.test(path);
+    if (!onReel) { location.reload(); return; } // viewer opened over this page
+    history.back();
+    setTimeout(function () {
+      if (location.pathname === path) location.assign('https://www.instagram.com/');
+    }, 800);
   }
 
   function hideBlock() {

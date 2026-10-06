@@ -20,6 +20,7 @@ final class GuardedBrowserModel: NSObject, ObservableObject {
     let webView: WKWebView
     private let service: ReelsGuardService
     private var state = GuardState()
+    private var mediaSuspended = false
 
     static let home = URL(string: "https://www.instagram.com/")!
     private static let world = WKContentWorld.world(name: "ReelsGuard")
@@ -57,12 +58,20 @@ final class GuardedBrowserModel: NSObject, ObservableObject {
 
     // MARK: Actions
 
-    /// The only way out of the blocking screen: back to the home feed, with the
-    /// Reel chain reset. There is intentionally no "next Reel" option.
+    /// The only way out of the blocking screen: back to the page the Reels were
+    /// opened from (such as the DM conversation), or else the home feed. There
+    /// is intentionally no "next Reel" option. Media stays suspended until that
+    /// page is reported and allowed, which also ends the Reel chain.
     func backToInstagram() {
-        state = GuardState()
-        show(.allow)
-        webView.load(URLRequest(url: Self.home))
+        blockCopy = nil
+        if let url = webView.url, Self.isLandingPage(url) {
+            // A Reel viewer opened on top of this page (e.g. a DM thread).
+            webView.reload()
+        } else if let item = webView.backForwardList.backList.reversed().first(where: { Self.isLandingPage($0.url) }) {
+            webView.go(to: item)
+        } else {
+            webView.load(URLRequest(url: Self.home))
+        }
     }
 
     /// Opens a Reel from "Shared with me". The fresh state makes it count as
@@ -88,14 +97,25 @@ final class GuardedBrowserModel: NSObject, ObservableObject {
     private func show(_ decision: GuardDecision) {
         switch decision {
         case .allow:
-            if blockCopy != nil {
-                blockCopy = nil
+            blockCopy = nil
+            if mediaSuspended {
+                mediaSuspended = false
                 webView.setAllMediaPlaybackSuspended(false, completionHandler: nil)
             }
         case let .block(reason):
             blockCopy = BlockScreenCopy(reason: reason)
+            mediaSuspended = true
             webView.pauseAllMediaPlayback(completionHandler: nil)
             webView.setAllMediaPlaybackSuspended(true, completionHandler: nil)
+        }
+    }
+
+    /// Pages "Back to Instagram" may return to: not Reels, Explore or unknown pages.
+    private static func isLandingPage(_ url: URL) -> Bool {
+        guard InstagramURLClassifier.isInstagram(url) else { return false }
+        switch InstagramURLClassifier.classify(url) {
+        case .home, .profile, .directInbox, .directThread, .post, .stories: return true
+        case .reel, .reelsFeed, .explore, .other: return false
         }
     }
 

@@ -79,11 +79,17 @@ public struct CurrentReelRule: GuardRule {
 /// The heart of the app: a swipe to another Reel is only allowed when that
 /// Reel is from someone the user follows (or the same creator whose profile
 /// the chain started on). Everything else ends the chain.
+///
+/// A Reel someone sent the user is watched on its own: any swipe after it is
+/// blocked, because what comes next is Instagram's feed, not something sent.
 public struct ContinuationRule: GuardRule {
     public let name = "continuation"
     public init() {}
     public func verdict(for c: GuardContext) -> RuleVerdict {
         guard case let .continuation(chain)? = c.transition else { return .abstain }
+        if chain.entry == .directMessage || chain.entry == .sharedLink {
+            return .block(.endOfSentReel)
+        }
         if let anchor = chain.anchorCreator, c.sighting?.creator == anchor, c.policy.allowProfile {
             return .allow
         }

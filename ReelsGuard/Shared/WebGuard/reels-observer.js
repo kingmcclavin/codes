@@ -11,7 +11,8 @@
  *     next to the playing video
  *   - on profile pages: whether the header shows "Following"
  * What it never reads: DM contents, captions, comments, form fields, cookies.
- * On /direct/ pages it only reports the URL kind.
+ * On /direct/ pages it reports the URL kind and, when a full-screen Reel
+ * player is open, only that player's size and source, never text or names.
  *
  * Instagram's markup is undocumented and changes often. Everything that
  * depends on it is in the "DOM heuristics" section below so it can be
@@ -35,6 +36,7 @@
   var TICK_MS = 5000;
   var CREATOR_RETRY_MS = 250;
   var CREATOR_RETRIES = 6;
+  var ACTIVE_CHECK_MS = 500;
 
   // ---------------------------------------------------------------------------
   // URL parsing (mirrors InstagramURLClassifier for the parts the observer needs)
@@ -163,9 +165,21 @@
     var current = { kind: 'other' };
     var lastReelId = null;
     var navToken = 0;
-    var firstVideoSinceNav = true;
-    var videoIds = new WeakMap();
     var syntheticCounter = 0;
+
+    // The Reel currently on screen. Instagram may reuse one <video> element
+    // for the next Reel and swap its source, so identity is element + source.
+    var activeVideo = null;
+    var activeSrc = null;
+    // Set by touch / wheel / scroll input. A change of video only counts as a
+    // new Reel when the user actually moved, so re-renders of the same Reel
+    // aren't mistaken for a swipe.
+    var userMoved = false;
+    // Scroll position of each scroller when the current Reel became active.
+    var scrollBaselines = new WeakMap();
+    // A full-screen Reel viewer opened on top of a DM thread (no URL change).
+    var overlayViewer = false;
+    var missedViewerChecks = 0;
 
     function send(message) {
       queue = queue
@@ -194,12 +208,40 @@
       }
     }
 
-    function isReelContext() { return current.kind === 'reel' || current.kind === 'reelsFeed'; }
+    function srcOf(video) { return video.currentSrc || video.src || ''; }
+
+    /** A video tall enough to be a Reel player rather than an inline preview. */
+    function isPlayerSized(video) {
+      var r = video.getBoundingClientRect();
+      return r.height >= (root.innerHeight || 0) * 0.6 && visibleRatio(video) >= 0.5;
+    }
+
+    function largestPlayer() {
+      var best = null, bestRatio = 0;
+      var videos = root.document.querySelectorAll('video');
+      for (var i = 0; i < videos.length; i++) {
+        if (!isPlayerSized(videos[i])) continue;
+        var ratio = visibleRatio(videos[i]);
+        if (ratio > bestRatio) { best = videos[i]; bestRatio = ratio; }
+      }
+      return best;
+    }
+
+    function isReelUrl() { return current.kind === 'reel' || current.kind === 'reelsFeed'; }
+    function isReelContext() { return isReelUrl() || overlayViewer; }
+
+    function activate(video) {
+      activeVideo = video;
+      activeSrc = video ? srcOf(video) : null;
+      userMoved = false;
+      scrollBaselines = new WeakMap();
+    }
 
     function reportReel(id, video, urlAuthor) {
       if (id === lastReelId) return;
       lastReelId = id;
-      var found = video ? findCreator(video) : { creator: null, container: null };
+      // On DM pages nothing around the video is read: no names, no messages.
+      var found = video && current.kind !== 'direct' ? findCreator(video) : { creator: null, container: null };
       var creator = urlAuthor || found.creator;
       send({
         type: 'reel',
@@ -210,16 +252,80 @@
       });
     }
 
+    function newReelId(video) {
+      return (current.kind !== 'direct' && reelIdNear(video)) || ('video-' + (++syntheticCounter));
+    }
+
     function reportReelFromUrl(id, urlAuthor, token, attempt) {
       if (token !== navToken || id === lastReelId) return;
-      var video = mostVisibleVideo();
+      var video = largestPlayer() || mostVisibleVideo();
       var hasCreator = urlAuthor || (video && findCreator(video).creator);
       if (hasCreator || attempt >= CREATOR_RETRIES) {
-        if (video && !videoIds.has(video)) { videoIds.set(video, id); firstVideoSinceNav = false; }
+        if (video) activate(video);
         reportReel(id, video, urlAuthor);
         return;
       }
       setTimeout(function () { reportReelFromUrl(id, urlAuthor, token, attempt + 1); }, CREATOR_RETRY_MS);
+    }
+
+    /** Detects a swipe to another Reel by the on-screen player changing. */
+    function checkActiveReel() {
+      if (blocked) return;
+      if (current.kind === 'direct') trackOverlayViewer();
+      if (!isReelContext()) return;
+      var video = largestPlayer();
+      if (!video) return;
+      if (video === activeVideo && srcOf(video) === activeSrc) return;
+
+      if (activeVideo === null) {
+        // First player since navigation: it belongs to the Reel in the URL.
+        activate(video);
+        reportReel(current.kind === 'reel' ? current.id : newReelId(video), video,
+          current.kind === 'reel' ? current.author : null);
+        return;
+      }
+      if (!userMoved) {
+        // Same Reel re-rendered by Instagram; follow the new element silently.
+        activate(video);
+        return;
+      }
+      activate(video);
+      reportReel(newReelId(video), video, null);
+    }
+
+    /** Detects a swipe by the Reel scroller moving most of a screen. */
+    function onScroll(event) {
+      userMoved = true;
+      if (blocked || !isReelContext() || !activeVideo) return;
+      var target = event.target;
+      var scroller = (target === root.document || !target || target.nodeType !== 1)
+        ? root.document.scrollingElement : target;
+      if (!scroller || !scroller.contains(activeVideo)) return;
+      var height = scroller.clientHeight || root.innerHeight || 0;
+      if (height < (root.innerHeight || 0) * 0.6) return;
+      if (!scrollBaselines.has(scroller)) { scrollBaselines.set(scroller, scroller.scrollTop); return; }
+      if (Math.abs(scroller.scrollTop - scrollBaselines.get(scroller)) >= height * 0.6) {
+        var video = largestPlayer() || activeVideo;
+        activate(video);
+        reportReel(newReelId(video), video, null);
+      }
+    }
+
+    /** DM threads can open a Reel full screen without changing the URL. */
+    function trackOverlayViewer() {
+      var player = largestPlayer();
+      if (player && !player.paused) {
+        missedViewerChecks = 0;
+        if (!overlayViewer) { overlayViewer = true; activeVideo = null; }
+        return;
+      }
+      if (overlayViewer && !player && ++missedViewerChecks >= 3) {
+        // Viewer closed: back to the conversation, which ends the Reel chain.
+        overlayViewer = false;
+        activeVideo = null;
+        lastReelId = null;
+        send({ type: 'page', url: root.location.href });
+      }
     }
 
     function learnFromProfile(username, token, attempt) {
@@ -237,8 +343,11 @@
       if (href === lastHref) return;
       lastHref = href;
       navToken++;
-      firstVideoSinceNav = true;
       current = parsePath(root.location.pathname);
+      overlayViewer = false;
+      missedViewerChecks = 0;
+      activeVideo = null;
+      activeSrc = null;
 
       if (current.kind === 'reel') {
         reportReelFromUrl(current.id, current.author, navToken, 0);
@@ -249,22 +358,11 @@
       if (current.kind === 'profile') learnFromProfile(current.username, navToken, 0);
     }
 
-    function idForVideo(video) {
-      if (videoIds.has(video)) return videoIds.get(video);
-      var id = reelIdNear(video);
-      if (!id && firstVideoSinceNav && current.kind === 'reel') id = current.id;
-      if (!id) id = 'video-' + (++syntheticCounter);
-      firstVideoSinceNav = false;
-      videoIds.set(video, id);
-      return id;
-    }
-
     function onPlay(event) {
       var video = event.target;
       if (!video || video.tagName !== 'VIDEO') return;
       if (blocked) { video.pause(); return; }
-      if (!isReelContext() || visibleRatio(video) < 0.5) return;
-      reportReel(idForVideo(video), video, null);
+      checkActiveReel();
     }
 
     function onTick() {
@@ -278,11 +376,17 @@
       }
     }
 
+    function onUserMove() { userMoved = true; }
+
     // Isolated worlds can't see the page's history.pushState calls, so the URL
     // is polled. This is cheap: a string comparison every 300 ms.
     root.document.addEventListener('play', onPlay, true);
+    root.document.addEventListener('scroll', onScroll, true);
+    root.document.addEventListener('touchmove', onUserMove, { capture: true, passive: true });
+    root.document.addEventListener('wheel', onUserMove, { capture: true, passive: true });
     root.addEventListener('popstate', onUrlChange);
     setInterval(onUrlChange, URL_POLL_MS);
+    setInterval(checkActiveReel, ACTIVE_CHECK_MS);
     setInterval(onTick, TICK_MS);
     setInterval(function () { if (blocked) pauseAll(); }, 1000);
     onUrlChange();
