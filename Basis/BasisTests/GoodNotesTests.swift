@@ -1,4 +1,5 @@
 import CoreGraphics
+import UIKit
 import XCTest
 @testable import Basis
 
@@ -145,7 +146,7 @@ final class GoodNotesTests: XCTestCase {
         XCTAssertEqual(pdf.pageIndex, 0)
         XCTAssertEqual(archive.assets[pdf.assetName], Data("%PDF-1.7 paper".utf8))
 
-        // Second page (A): highlighter keeps its colour; white ink becomes black.
+        // Second page (A): highlighter and white ink keep their colours.
         let second = archive.pages[1]
         guard case let .stroke(highlight) = second.elements[0], case let .stroke(ink) = second.elements[1] else {
             return XCTFail("expected two strokes")
@@ -153,7 +154,52 @@ final class GoodNotesTests: XCTestCase {
         XCTAssertTrue(highlight.style.isHighlighter)
         XCTAssertEqual(highlight.style.width, 36, accuracy: 0.001)
         XCTAssertEqual(highlight.style.opacity, 0.5, accuracy: 0.001)
-        XCTAssertEqual(ink.style.color, RGBAColor(r: 0, g: 0, b: 0, a: 1))
+        XCTAssertEqual(ink.style.color.r, 0.99, accuracy: 0.001)
+        XCTAssertEqual(ink.style.color.g, 0.99, accuracy: 0.001)
+    }
+
+    /// A small dark PDF (like GoodNotes' paper templates).
+    private func smallDarkPDF() -> Data {
+        UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 100, height: 130)).pdfData { ctx in
+            ctx.beginPage()
+            UIColor(white: 0.2, alpha: 1).setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 100, height: 130))
+        }
+    }
+
+    func testPaperColourIsDetected() throws {
+        let colour = try XCTUnwrap(GoodNotesImporter.paperColor(of: smallDarkPDF(), pageIndex: 0))
+        XCTAssertEqual(colour.r, 0.2, accuracy: 0.03)
+        XCTAssertFalse(colour.isLight)
+        XCTAssertNil(GoodNotesImporter.paperColor(of: Data("not a pdf".utf8), pageIndex: 0))
+    }
+
+    /// A PDF smaller than the page must be scaled up to fill it, not drawn
+    /// small in the middle.
+    func testSmallPDFFillsTheWholePage() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try smallDarkPDF().write(to: dir.appendingPathComponent("paper.pdf"))
+
+        let size = CGSize(width: 400, height: 520)   // same shape, 4× larger
+        var pixels = [UInt8](repeating: 0, count: 400 * 520 * 4)
+        try pixels.withUnsafeMutableBytes { buf in
+            let ctx = try XCTUnwrap(CGContext(data: buf.baseAddress, width: 400, height: 520, bitsPerComponent: 8, bytesPerRow: 1600,
+                                              space: CGColorSpaceCreateDeviceRGB(),
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            // y-down page coordinates, like the app's tiles.
+            ctx.translateBy(x: 0, y: 520)
+            ctx.scaleBy(x: 1, y: -1)
+            var bg = PageBackground(color: .white)
+            bg.pdf = PDFPageSource(assetName: "paper.pdf", pageIndex: 0)
+            PageRenderer(assetsURL: dir).drawBackground(bg, pageSize: size, in: ctx, clip: CGRect(origin: .zero, size: size))
+        }
+        // Corners and centre are all dark paper (white would mean the PDF didn't fill the page).
+        for (x, y) in [(5, 5), (394, 5), (5, 514), (394, 514), (200, 260)] {
+            let i = (y * 400 + x) * 4
+            XCTAssertLessThan(pixels[i], 90, "pixel \(x),\(y) is \(pixels[i])")
+        }
     }
 
     @MainActor

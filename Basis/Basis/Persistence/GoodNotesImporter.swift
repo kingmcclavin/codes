@@ -83,6 +83,9 @@ enum GoodNotesImporter {
                 let name = "gn-\(att).pdf"
                 result.archive.assets[name] = pdf
                 background.pdf = PDFPageSource(assetName: name, pageIndex: template?.pageIndex ?? 0)
+                // Match the paper colour (dark paper keeps light ink readable,
+                // and the app treats the page as dark).
+                if let paper = paperColor(of: pdf, pageIndex: template?.pageIndex ?? 0) { background.color = paper }
             }
             var page = PageData(size: size, background: background)
             if let notesID = incrementedUUID(gn.id), let notes = zip.file("notes/\(notesID)") {
@@ -93,6 +96,34 @@ enum GoodNotesImporter {
         result.archive.manifest.pageIDs = result.archive.pages.map(\.id)
         result.archive.manifest.firstPageSize = result.archive.pages[0].size
         return result
+    }
+
+    /// Average colour of a PDF page (its paper), rendered small.
+    static func paperColor(of pdf: Data, pageIndex: Int) -> RGBAColor? {
+        guard let provider = CGDataProvider(data: pdf as CFData), let doc = CGPDFDocument(provider),
+              let page = doc.page(at: pageIndex + 1) else { return nil }
+        let n = 16
+        var pixels = [UInt8](repeating: 0, count: n * n * 4)
+        let rendered: Bool = pixels.withUnsafeMutableBytes { buf in
+            guard let ctx = CGContext(data: buf.baseAddress, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+            ctx.fill(CGRect(x: 0, y: 0, width: n, height: n))
+            let box = page.getBoxRect(.cropBox)
+            guard box.width > 0, box.height > 0 else { return false }
+            ctx.scaleBy(x: CGFloat(n) / box.width, y: CGFloat(n) / box.height)
+            ctx.translateBy(x: -box.minX, y: -box.minY)
+            ctx.drawPDFPage(page)
+            return true
+        }
+        guard rendered else { return nil }
+        var sum = (0, 0, 0)
+        for i in stride(from: 0, to: pixels.count, by: 4) {
+            sum.0 += Int(pixels[i]); sum.1 += Int(pixels[i + 1]); sum.2 += Int(pixels[i + 2])
+        }
+        let count = CGFloat(n * n) * 255
+        return RGBAColor(r: CGFloat(sum.0) / count, g: CGFloat(sum.1) / count, b: CGFloat(sum.2) / count, a: 1)
     }
 
     /// A page's ink lives in `notes/<page id + 1>`.
@@ -160,10 +191,7 @@ enum GoodNotesImporter {
         let r = CGFloat(rgba?.float(1) ?? 0), g = CGFloat(rgba?.float(2) ?? 0), b = CGFloat(rgba?.float(3) ?? 0)
         let a = CGFloat(rgba?.float(4) ?? 1)
         let isHighlighter = a < 0.95 || geometry.width >= 12
-        // GoodNotes' adaptive ink is stored near-white when written in dark
-        // mode; on white paper that would vanish, so show it as black.
-        var color = RGBAColor(r: r, g: g, b: b, a: isHighlighter ? 1 : a)
-        if !isHighlighter, 0.299 * r + 0.587 * g + 0.114 * b > 0.9 { color = RGBAColor(r: 0, g: 0, b: 0, a: 1) }
+        let color = RGBAColor(r: r, g: g, b: b, a: isHighlighter ? 1 : a)
         let style = StrokeStyle(kind: isHighlighter ? .highlighter : .fineliner,
                                 color: color,
                                 width: max(0.3, geometry.width),

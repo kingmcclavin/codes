@@ -228,9 +228,17 @@ struct PageRenderer {
         // Our contexts are y-down; PDF drawing is y-up.
         ctx.translateBy(x: 0, y: pageSize.height)
         ctx.scaleBy(x: 1, y: -1)
-        let target = CGRect(origin: .zero, size: pageSize)
-        ctx.concatenate(page.getDrawingTransform(.cropBox, rect: target, rotate: 0, preserveAspectRatio: true))
-        ctx.clip(to: page.getBoxRect(.cropBox))
+        // Scale the PDF page to fill the page (CGPDFPage's own drawing
+        // transform only ever scales down, so a small PDF on a large page
+        // would sit in the middle). Aspect ratio is kept; the page is centered.
+        let box = page.getBoxRect(.cropBox)
+        if box.width > 0, box.height > 0 {
+            let scale = min(pageSize.width / box.width, pageSize.height / box.height)
+            ctx.translateBy(x: (pageSize.width - box.width * scale) / 2, y: (pageSize.height - box.height * scale) / 2)
+            ctx.scaleBy(x: scale, y: scale)
+            ctx.translateBy(x: -box.minX, y: -box.minY)
+        }
+        ctx.clip(to: box)
         ctx.interpolationQuality = .high
         ctx.setRenderingIntent(.defaultIntent)
         ctx.drawPDFPage(page)
