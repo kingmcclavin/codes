@@ -18,7 +18,7 @@ let package = Package(
             bundleIdentifier: "com.example.inkpad.playgrounds",
             displayVersion: "1.0",
             bundleVersion: "1",
-            appIcon: .placeholder(icon: .pencil),
+            appIcon: .asset("AppIcon"),
             accentColor: .presetColor(.blue),
             supportedDeviceFamilies: [
                 .pad,

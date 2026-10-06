@@ -160,12 +160,9 @@ struct ExportView: View
                 Image(uiImage: AppIconWriter.squareOpaque(icon, pixels: 240))
                     .resizable()
             } else {
-                ZStack {
-                    LinearGradient(colors: [.accentColor, .accentColor.opacity(0.7)], startPoint: .top, endPoint: .bottom)
-                    Image(systemName: "pencil.tip")
-                        .font(.system(size: 40, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
+                // The app's built-in icon.
+                Image("BasisLogo")
+                    .resizable()
             }
         }
         .frame(width: 96, height: 96)

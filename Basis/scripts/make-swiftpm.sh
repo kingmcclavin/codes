@@ -12,4 +12,6 @@ cp Playgrounds/Package.swift "$OUT/"
 for dir in App Calculator Canvas Engine Export Model Persistence Recognition Tools UI; do
     cp -R "Basis/$dir" "$OUT/$dir"
 done
+# App icon and accent color.
+cp -R Basis/Resources/Assets.xcassets "$OUT/Assets.xcassets"
 echo "Created $OUT"
