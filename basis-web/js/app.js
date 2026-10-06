@@ -32,7 +32,7 @@ class App {
     this.menuBtn = h('button', { class: 'icon-btn nav-toggle', 'aria-label': 'Show library', onclick: () => this.root.classList.toggle('nav-open') }, icon('sidebar'));
     this.content = h('main', { class: 'content', id: 'main' });
     this.editorLayer = h('div', { class: 'editor-layer', hidden: true });
-    this.root.replaceChildren(this.nav, this.scrim, h('div', { class: 'content-wrap' }, h('div', { class: 'mobile-bar' }, this.menuBtn, h('span', { class: 'mobile-title' }, 'Basis')), this.content), this.editorLayer);
+    this.root.replaceChildren(this.nav, this.scrim, h('div', { class: 'content-wrap' }, h('div', { class: 'mobile-bar' }, this.menuBtn, h('span', { class: 'wordmark mobile-title', role: 'img', 'aria-label': 'Basis' })), this.content), this.editorLayer);
     if (!store.persistent) toast('This browser blocks storage here, so notebooks won’t be kept after you leave. Use Settings → Back Up.');
     this.renderScreen();
     const active = storage.get('basis.activeDoc', null);

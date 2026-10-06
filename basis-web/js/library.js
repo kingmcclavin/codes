@@ -54,7 +54,7 @@ export function sidebar(app) {
     const all = item({ name: 'library', folderId: null }, 'tray', 'All Notes', store.documentsIn(null).length);
     dropTarget(all, null);
     nav.replaceChildren(
-      h('div', { class: 'brand' }, h('img', { src: 'icons/favicon.png', alt: '', width: 28, height: 28 }), h('span', {}, 'Basis')),
+      h('div', { class: 'brand' }, h('img', { src: 'icons/favicon.png', alt: '', width: 28, height: 28 }), h('span', { class: 'wordmark', role: 'img', 'aria-label': 'Basis' })),
       h('div', { class: 'side-group' }, item({ name: 'search' }, 'search', 'Search'), item({ name: 'calculator' }, 'calc', 'Calculator')),
       h('div', { class: 'side-head' }, 'Toolbox'),
       h('div', { class: 'side-group' },
