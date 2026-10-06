@@ -147,7 +147,7 @@ export class CanvasView {
   isDoubleTap(ptr) {
     if (ptr.type !== 'touch' || this.pointers.size > 0) return false;
     const now = performance.now();
-    const isTap = dist(ptr.start, ptr.last) < 10 && now - ptr.t0 < 300;
+    const isTap = dist(ptr.start, ptr.last) < 10 && now - ptr.t0 < 300 && !this.stoppedMomentum;
     if (!isTap) { this.lastTap = null; return false; }
     const tool = this.settings.tool;
     const fingerInks = this.settings.fingerDrawing && !this.penSeen && ['pen', 'highlighter', 'shapes', 'eraser'].includes(tool);
@@ -185,6 +185,7 @@ export class CanvasView {
 
   /** Smoothly moves to a view (clamped), keeping the screen point under the finger steady. */
   animateView(to) {
+    this.stopMomentum();
     const from = { ...this.view };
     const end = { ...this.view, ...to };
     const saved = this.view;
@@ -382,6 +383,7 @@ export class CanvasView {
   }
 
   onPointerDown(e) {
+    this.stoppedMomentum = this.stopMomentum();
     if (this.textEdit && e.target === this.overlay) { this.endTextEdit(); if (this.settings.tool !== 'text') return; }
     this.overlay.focus({ preventScroll: true });
     this.overlay.setPointerCapture?.(e.pointerId);
@@ -454,6 +456,7 @@ export class CanvasView {
 
   onWheel(e) {
     e.preventDefault();
+    this.stopMomentum();
     const s = this.local(e);
     if (e.ctrlKey || e.metaKey) {
       this.setZoom(this.view.zoom * Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0022)), s);
@@ -492,6 +495,8 @@ export class CanvasView {
       anchor: this.screenToContent(center),
       moved: false,
       t0: performance.now(),
+      samples: [{ t: performance.now(), p: center }],
+      stoppedMomentum: this.stoppedMomentum,
     };
   }
 
@@ -506,6 +511,9 @@ export class CanvasView {
     this.view.x = g.anchor.x - center.x / zoom;
     this.view.y = g.anchor.y - center.y / zoom;
     if (dist(center, g.startCenter) > 4 || pos.length > 1) g.moved = true;
+    const now = performance.now();
+    g.samples.push({ t: now, p: center });
+    while (g.samples.length > 2 && now - g.samples[0].t > 100) g.samples.shift();
     const wantY = this.view.y;
     this.clampView();
     if (pos.length === 1 && wantY > this.maxY + 0.01) this.overscroll((wantY - this.maxY) * zoom);
@@ -592,10 +600,56 @@ export class CanvasView {
     const g = this.gesture;
     this.gesture = null;
     if (this.pull) { this.releasePull(); return; }
+    if (g?.moved && g.ids.length === 1) { this.fling(g); return; }
     // A finger tap (no movement) acts like a tap of the current tool for lasso/text.
-    if (g && !g.moved && g.ids.length === 1 && performance.now() - g.t0 < 350 && ptr?.type === 'touch') {
+    // A touch that only stopped a fling isn't a tap.
+    if (g && !g.moved && !g.stoppedMomentum && g.ids.length === 1 && performance.now() - g.t0 < 350 && ptr?.type === 'touch') {
       this.tap(ptr.last);
     }
+  }
+
+  // ---------- Momentum scrolling ----------
+
+  /** Keeps scrolling after a flick, slowing down like iOS (≈0.998 per ms). */
+  fling(g) {
+    const s = g.samples;
+    const now = performance.now();
+    const first = s[0], last = s[s.length - 1];
+    // A finger that paused before lifting doesn't fling.
+    if (s.length < 2 || now - last.t > 60) return;
+    const dt = Math.max(last.t - first.t, 8);
+    let vx = (last.p.x - first.p.x) / dt, vy = (last.p.y - first.p.y) / dt; // screen px per ms
+    const speed = Math.hypot(vx, vy);
+    if (speed < 0.15) return;
+    const max = 6;
+    if (speed > max) { vx *= max / speed; vy *= max / speed; }
+    this.stopMomentum();
+    let prev = now;
+    const step = (t) => {
+      const elapsed = Math.min(t - prev, 32);
+      prev = t;
+      const decay = Math.pow(0.998, elapsed);
+      vx *= decay; vy *= decay;
+      const ox = this.view.x, oy = this.view.y;
+      this.view.x -= (vx * elapsed) / this.view.zoom;
+      this.view.y -= (vy * elapsed) / this.view.zoom;
+      this.clampView();
+      // Stop along an axis that ran into an edge.
+      if (Math.abs(this.view.x - (ox - (vx * elapsed) / this.view.zoom)) > 0.01) vx = 0;
+      if (Math.abs(this.view.y - (oy - (vy * elapsed) / this.view.zoom)) > 0.01) vy = 0;
+      this.viewChanged();
+      if (Math.hypot(vx, vy) > 0.02) this.momentumRaf = requestAnimationFrame(step);
+      else this.momentumRaf = null;
+    };
+    this.momentumRaf = requestAnimationFrame(step);
+  }
+
+  /** Stops a running fling; returns whether one was running. */
+  stopMomentum() {
+    if (!this.momentumRaf) return false;
+    cancelAnimationFrame(this.momentumRaf);
+    this.momentumRaf = null;
+    return true;
   }
 
   tap(s) {

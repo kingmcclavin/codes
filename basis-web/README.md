@@ -39,7 +39,7 @@ This folder is a static site with no build step. Import the repository in Vercel
 - Formula library (math, physics, engineering, electrical), custom formulas, and formulas that use other formulas
 - Unit converter, function grapher, calculation history
 
-**Input**: pen and mouse draw. One finger scrolls and two fingers pinch-zoom. Double-tap with a finger to zoom the page edge to edge, and again to zoom back. Turn on *Draw with Finger* in ⋯ to draw with a finger. Keyboard: `1`–`6` tools, `E` eraser, `K` calculator, `⌘/Ctrl+Z` undo.
+**Input**: pen and mouse draw. One finger scrolls (with momentum when you flick) and two fingers pinch-zoom. Double-tap with a finger to zoom the page edge to edge, and again to zoom back. Turn on *Draw with Finger* in ⋯ to draw with a finger. Keyboard: `1`–`6` tools, `E` eraser, `K` calculator, `⌘/Ctrl+Z` undo.
 
 ## Data
 
