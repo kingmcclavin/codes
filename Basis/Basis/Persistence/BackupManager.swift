@@ -232,6 +232,12 @@ enum BackupManager {
             } catch {
                 report.failed.append(url.deletingPathExtension().lastPathComponent)
             }
+        } else if ext == "goodnotes" {
+            do {
+                try install(GoodNotesImporter.importFile(at: url).archive, folderID: parentFolder, store: store, report: &report)
+            } catch {
+                report.failed.append(url.deletingPathExtension().lastPathComponent)
+            }
         } else if url.lastPathComponent == calculatorFileName, let calculator, let data = try? Data(contentsOf: url) {
             report.calculatorMessage = try? calculator.importData(data)
         }

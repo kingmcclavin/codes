@@ -51,6 +51,8 @@ struct LibraryView: View {
     @State private var showExport = false
     @State private var customizing: LibraryItem?
     @State private var showPDFImporter = false
+    @State private var showGoodNotesImporter = false
+    @State private var importMessage: String?
     @State private var importError: String?
 
     private var folders: [Folder] {
@@ -108,6 +110,7 @@ struct LibraryView: View {
                     Button("New Folder", systemImage: "folder.badge.plus") { startNewFolder() }
                         .keyboardShortcut("n", modifiers: [.command, .shift])
                     Button("Import PDF…", systemImage: "doc.richtext") { showPDFImporter = true }
+                    Button("Import GoodNotes File…", systemImage: "square.and.arrow.down.on.square") { showGoodNotesImporter = true }
                 } label: {
                     Label("New", systemImage: "plus")
                 }
@@ -141,6 +144,15 @@ struct LibraryView: View {
                 do { opened = try store.createFromPDF(url, folderID: folderID) } catch { importError = error.localizedDescription }
             }
             if let opened { navigate(.document(opened)) }
+        }
+        .fileImporter(isPresented: $showGoodNotesImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            guard case let .success(urls) = result else { return }
+            importGoodNotes(urls)
+        }
+        .alert("GoodNotes Import", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(importMessage ?? "")
         }
         .alert("Couldn't Import PDF", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
             Button("OK", role: .cancel) {}
@@ -179,6 +191,34 @@ struct LibraryView: View {
         } message: {
             Text("Everything inside it will be deleted. This can't be undone.")
         }
+    }
+
+    // MARK: GoodNotes
+
+    /// Converts .goodnotes files into Basis notebooks in this folder.
+    private func importGoodNotes(_ urls: [URL]) {
+        var lines: [String] = []
+        var opened: UUID?
+        for url in urls {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let name = url.deletingPathExtension().lastPathComponent
+            do {
+                let result = try GoodNotesImporter.importFile(at: url)
+                var report = BackupManager.Report()
+                try BackupManager.install(result.archive, folderID: folderID, store: store, report: &report)
+                opened = result.archive.manifest.id
+                var line = "\(name): \(result.archive.pages.count) page\(result.archive.pages.count == 1 ? "" : "s"), \(result.strokes) stroke\(result.strokes == 1 ? "" : "s")"
+                if result.images > 0 { line += ", \(result.images) image\(result.images == 1 ? "" : "s")" }
+                if result.skipped > 0 { line += " (\(result.skipped) item\(result.skipped == 1 ? "" : "s") couldn't be read)" }
+                lines.append(line)
+            } catch {
+                lines.append("\(name): \(error.localizedDescription)")
+            }
+        }
+        store.reload()
+        importMessage = lines.joined(separator: "\n") + "\n\nHandwriting comes in as Basis ink you can erase and edit. Typed text boxes aren't imported yet."
+        if urls.count == 1, let opened { navigate(.document(opened)) }
     }
 
     // MARK: Rows
