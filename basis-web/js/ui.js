@@ -204,7 +204,7 @@ export function iconButton(name, title, onClick, { cls = '', size = 22 } = {}) {
 
 export function pickFile(accept, multiple = false) {
   return new Promise((resolve) => {
-    const input = h('input', { type: 'file', accept, multiple, style: { display: 'none' } });
+    const input = h('input', { type: 'file', accept: accept || null, multiple, style: { display: 'none' } });
     input.addEventListener('change', () => { resolve([...input.files]); input.remove(); });
     document.body.append(input);
     input.click();

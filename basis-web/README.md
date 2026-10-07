@@ -28,6 +28,7 @@ This folder is a static site with no build step. Import the repository in Vercel
 - Lasso: select, move, resize, rotate, recolor, restyle, cut/copy/paste, duplicate, arrange
 - Text boxes with fonts, size, bold/italic and alignment
 - Images, PDF import (pages become backgrounds you can write on), PDF and PNG export
+- GoodNotes import (`.goodnotes`): pages, paper, pen and highlighter strokes as editable ink, and images. Typed text boxes aren't imported yet.
 - Templates: blank, ruled, grid, dotted, engineering, isometric, Cornell, lab notebook. Also paper sizes, orientation, paper color and endless pages.
 - Pull up past the last page to add a page
 - Page manager with drag-to-reorder, duplicate and sections. Undo/redo, zoom, open-notebook tabs.
@@ -49,7 +50,7 @@ PDF import and export load pdf.js and jsPDF from cdnjs the first time you use th
 
 ## Not ported
 
-These need iOS-only APIs: handwriting recognition (auto-solving handwritten math), GoodNotes import, and IPA export. The Engineering Tools screen and the data tables from Data & Graphs aren't ported yet. Graphs are.
+These need iOS-only APIs: handwriting recognition (auto-solving handwritten math) and IPA export. The Engineering Tools screen and the data tables from Data & Graphs aren't ported yet. Graphs are.
 
 ## Layout
 

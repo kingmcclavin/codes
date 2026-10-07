@@ -8,6 +8,7 @@ import { store } from './store.js';
 import { PAPER_SIZES, TEMPLATES, PAPER_COLORS, LIBRARY_COLORS, LIBRARY_ICONS, sizeFor, makeBackground, makeDocument, makePage, describeSize } from './model.js';
 import { renderPageCanvas } from './render.js';
 import { importPDF } from './pdf.js';
+import { importGoodNotes } from './goodnotes.js';
 import { calc } from './calc/store.js';
 
 // ---------- Tiles ----------
@@ -111,6 +112,7 @@ export function libraryScreen(app, folderId) {
     { label: 'New Notebook', icon: 'docPlus', hint: 'N', action: () => newNotebookSheet(app, folderId) },
     { label: 'New Folder', icon: 'folderPlus', action: () => newFolder() },
     { label: 'Import PDF…', icon: 'import', action: () => importPDFNotebook(app, folderId) },
+    { label: 'Import GoodNotes File…', icon: 'import', action: () => importGoodNotesFiles(app, folderId) },
   ], { align: 'end' }));
   const folder = store.folder(folderId);
   const up = folder ? h('button', { class: 'btn ghost', onclick: () => app.go(folder.parentId ? { name: 'folder', folderId: folder.parentId } : { name: 'library' }) }, icon('back', 18), store.folder(folder.parentId)?.name || 'All Notes') : null;
@@ -289,6 +291,40 @@ async function importPDFNotebook(app, folderId) {
     }
   }
   if (opened) app.openDocument(opened);
+}
+
+/** Converts .goodnotes files into Basis notebooks in this folder. */
+async function importGoodNotesFiles(app, folderId) {
+  // No accept filter: iPadOS greys out file types it doesn't know.
+  const files = await pickFile('', true);
+  if (!files.length) return;
+  const lines = [];
+  let opened = null;
+  for (const file of files) {
+    const name = file.name.replace(/\.goodnotes$/i, '');
+    try {
+      toast(`Importing ${name}…`);
+      const r = await importGoodNotes(file, { folderId, onProgress: (n, t) => toast(`Importing ${name}: page ${n} of ${t}…`) });
+      await store.saveDocument(r.doc);
+      opened = r.doc.id;
+      let line = `${name}: ${plural(r.doc.pages.length, 'page')}, ${plural(r.strokes, 'stroke')}`;
+      if (r.images) line += `, ${plural(r.images, 'image')}`;
+      if (r.skipped) line += ` (${plural(r.skipped, 'item')} couldn’t be read)`;
+      lines.push(line);
+    } catch (e) {
+      lines.push(`${name}: ${e.message || 'couldn’t be imported.'}`);
+    }
+  }
+  sheet({
+    title: 'GoodNotes Import',
+    className: 'compact',
+    build(body, close) {
+      body.append(...lines.map((l) => h('p', { class: 'dialog-message' }, l)),
+        h('p', { class: 'muted small' }, 'Handwriting comes in as Basis ink you can erase and edit. Typed text boxes aren’t imported yet.'),
+        h('div', { class: 'dialog-actions' }, h('button', { class: 'btn primary', onclick: () => close(true) }, 'OK')));
+    },
+  });
+  if (files.length === 1 && opened) app.openDocument(opened);
 }
 
 // ---------- Customize & move ----------
