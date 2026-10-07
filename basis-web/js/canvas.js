@@ -415,7 +415,8 @@ export class CanvasView {
     const s = this.local(e);
     const p = this.screenToPage(pageIdx, s);
     let force = 0.25;
-    if (e.pointerType === 'pen') force = (e.pressure || 0.5) * 0.5;
+    // A Pencil often reports no pressure as it lands; -1 means "use the next reading".
+    if (e.pointerType === 'pen') force = e.pressure > 0 ? e.pressure * 0.5 : -1;
     let altitude = Math.PI / 2;
     if (e.pointerType === 'pen') {
       if (typeof e.altitudeAngle === 'number') altitude = e.altitudeAngle;
@@ -459,14 +460,14 @@ export class CanvasView {
 
   // ---------- Palm rejection ----------
   // Once the Pencil has been used, a touch that lands while it's writing (or
-  // just after), or with a palm-sized contact, is a resting hand: ignore it.
+  // a moment after) is a resting hand: ignore it.
 
   isPalm(e) {
     if (!this.penSeen) return false;
     const penDown = [...this.pointers.values()].some((p) => p.type === 'pen');
-    const recentPen = performance.now() - (this.lastPenUp || 0) < 700;
-    const big = Math.max(e.width || 0, e.height || 0) > 44;
-    return penDown || recentPen || big;
+    // Contact size isn't used: iPad Safari reports fingertips as large as palms.
+    const recentPen = performance.now() - (this.lastPenUp || 0) < 300;
+    return penDown || recentPen;
   }
 
   /** The Pencil came down: touches already on the screen were the palm, so undo what they started. */
@@ -1188,6 +1189,8 @@ class InkGesture {
     for (const ev of events) {
       const s = this.view.sample(ev, this.i);
       const last = this.samples[this.samples.length - 1];
+      if (s.force < 0) s.force = last.force;
+      else if (last.force < 0) for (const q of this.samples) if (q.force < 0) q.force = s.force;
       if (Math.abs(s.x - last.x) < 0.05 && Math.abs(s.y - last.y) < 0.05) continue;
       this.samples.push(s);
     }
@@ -1246,6 +1249,7 @@ class InkGesture {
         if (result) { v.commit('Scribble Erase', pageId, () => result); return; }
       }
     }
+    for (const q of this.samples) if (q.force < 0) q.force = 0.25;
     const stroke = makeStroke(this.samples, this.style);
     v.commitAppend(this.mode === 'highlighter' ? 'Highlight' : 'Ink', pageId, stroke);
   }
@@ -1294,7 +1298,13 @@ class InkGesture {
     if (!!path.__stroked !== this.pathKind) return false; // the whole stroke changed look
     const v = this.view, o = v.pageOrigin(this.i), z = v.view.zoom, d = v.dpr;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (let k = Math.max(0, this.drawnTo - 8); k < n; k++) {
+    // Width smoothing reaches back along the stroke, so repaint the last ~15 pt too.
+    let from = Math.max(0, this.drawnTo - 1), back = 0;
+    while (from > 0 && (back < 15 || this.drawnTo - from < 8)) {
+      back += Math.hypot(this.samples[from].x - this.samples[from - 1].x, this.samples[from].y - this.samples[from - 1].y);
+      from--;
+    }
+    for (let k = from; k < n; k++) {
       const q = this.samples[k];
       if (q.x < x0) x0 = q.x; if (q.x > x1) x1 = q.x;
       if (q.y < y0) y0 = q.y; if (q.y > y1) y1 = q.y;

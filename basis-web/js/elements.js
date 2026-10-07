@@ -435,7 +435,7 @@ export function strokePath(e) {
 export function buildStrokePath(pts, style, path = new Path2D()) {
   let s = [];
   for (let i = 0; i < pts.length; i += STRIDE) {
-    const q = { p: { x: pts[i], y: pts[i + 1] }, w: widthAt(style, pts[i + 2], pts[i + 3]) };
+    const q = { p: { x: pts[i], y: pts[i + 1] }, w: widthAt(style, pts[i + 2] < 0 ? 0.25 : pts[i + 2], pts[i + 3]) };
     const last = s[s.length - 1];
     if (last && (last.p.x - q.p.x) ** 2 + (last.p.y - q.p.y) ** 2 < 0.0025) { last.w = Math.max(last.w, q.w); continue; }
     s.push(q);
@@ -475,6 +475,33 @@ export function buildStrokePath(pts, style, path = new Path2D()) {
   return path;
 }
 
+// Pencil pressure jitters from sample to sample, which made ink look lumpy.
+// Smooth widths over distance along the stroke (forward and backward, so
+// there's no lag), and keep the first and last bits from bulging where the
+// Pencil lands and lifts.
+const WIDTH_SMOOTHING = 3; // pt along the stroke
+
+function smoothWidths(s) {
+  const n = s.length;
+  if (n < 3) return;
+  const w = s.map((q) => q.w);
+  const sorted = w.slice().sort((a, b) => a - b);
+  const median = sorted[n >> 1];
+  for (const k of [0, 1, n - 2, n - 1]) w[k] = Math.min(w[k], median);
+  const f = new Array(n), b = new Array(n);
+  f[0] = w[0];
+  for (let i = 1; i < n; i++) {
+    const a = 1 - Math.exp(-Math.hypot(s[i].p.x - s[i - 1].p.x, s[i].p.y - s[i - 1].p.y) / WIDTH_SMOOTHING);
+    f[i] = f[i - 1] + (w[i] - f[i - 1]) * a;
+  }
+  b[n - 1] = w[n - 1];
+  for (let i = n - 2; i >= 0; i--) {
+    const a = 1 - Math.exp(-Math.hypot(s[i].p.x - s[i + 1].p.x, s[i].p.y - s[i + 1].p.y) / WIDTH_SMOOTHING);
+    b[i] = b[i + 1] + (w[i] - b[i + 1]) * a;
+  }
+  for (let i = 0; i < n; i++) s[i].w = (f[i] + b[i]) / 2;
+}
+
 function smoothSamples(s) {
   if (s.length <= 2) return s;
   s = s.map((q) => ({ p: { ...q.p }, w: q.w }));
@@ -486,10 +513,7 @@ function smoothSamples(s) {
     }
     s = next;
   }
-  for (let pass = 0; pass < 3; pass++) {
-    const w = s.map((q) => q.w);
-    for (let i = 1; i < s.length - 1; i++) s[i].w = (w[i - 1] + 2 * w[i] + w[i + 1]) / 4;
-  }
+  smoothWidths(s);
   s[0].w = Math.min(s[0].w, s[1].w * 1.1);
   s[s.length - 1].w = Math.min(s[s.length - 1].w, s[s.length - 2].w * 1.1);
   return s;
