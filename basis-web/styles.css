@@ -522,3 +522,27 @@ kbd { font-size: 12px; padding: 2px 7px; border-radius: 6px; background: var(--s
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Tutorial */
+.tour { position: fixed; inset: 0; z-index: 90; animation: tour-in 0.2s ease; }
+.tour.closing { opacity: 0; transition: opacity 0.2s; }
+.tour-shade { position: absolute; inset: 0; }
+.tour-ring { position: absolute; border-radius: 14px; box-shadow: 0 0 0 3px var(--accent), 0 0 0 9999px rgba(8, 10, 14, 0.55); pointer-events: none; transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease; }
+.tour.centered .tour-ring { left: 50% !important; top: 50% !important; width: 0 !important; height: 0 !important; box-shadow: 0 0 0 9999px rgba(8, 10, 14, 0.55); }
+.tour-card { position: absolute; display: flex; flex-direction: column; gap: 10px; padding: 20px; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3); transition: left 0.25s ease, top 0.25s ease; }
+.tour-card.featured { border: 2px solid var(--accent); }
+.tour-badge { align-self: flex-start; padding: 3px 9px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 650; }
+.tour-art { display: flex; }
+.tour-logo { width: 64px; height: 64px; border-radius: 15px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2); }
+.tour-icon { display: inline-flex; align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); }
+.tour-title { margin: 0; font-size: 20px; font-weight: 650; line-height: 1.25; }
+.tour-body { margin: 0; color: var(--muted); line-height: 1.45; }
+.tour-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.tour-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.tour-skip { min-width: 44px; }
+.tour-dots { flex: 1; display: flex; justify-content: center; gap: 5px; }
+.tour-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--line-strong); }
+.tour-dots span.on { background: var(--accent); }
+.tour-nav { display: flex; gap: 6px; }
+@keyframes tour-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .tour, .tour-ring, .tour-card { animation: none; transition: none; } }

@@ -5,7 +5,8 @@ import { icon } from './icons.js';
 import { toast, closePopovers } from './ui.js';
 import { store } from './store.js';
 import { Editor } from './editor.js';
-import { sidebar, libraryScreen, searchScreen, settingsScreen, newNotebookSheet } from './library.js';
+import { sidebar, libraryScreen, searchScreen, settingsScreen, newNotebookSheet, importGoodNotesFiles } from './library.js';
+import { initTutorial, shouldShowWelcome, shouldShowEditorTour, resetTutorial, welcomeTour, editorTour } from './tour.js';
 import { feature } from './features.js';
 import { calculatorScreen, formulasScreen, unitConverterScreen, historyScreen, graphScreen } from './calculator.js';
 
@@ -36,8 +37,10 @@ class App {
     this.root.replaceChildren(this.nav, this.scrim, h('div', { class: 'content-wrap' }, h('div', { class: 'mobile-bar' }, this.menuBtn, h('span', { class: 'wordmark mobile-title', role: 'img', 'aria-label': 'Basis' })), this.content), this.editorLayer);
     if (!store.persistent) toast('This browser blocks storage here, so notebooks won’t be kept after you leave. Use Settings → Back Up.');
     this.renderScreen();
+    initTutorial();
     const active = storage.get('basis.activeDoc', null);
     if (active && store.summary(active)) await this.openDocument(active);
+    else if (shouldShowWelcome()) setTimeout(() => this.startWelcome(), 450);
     window.addEventListener('keydown', (e) => {
       if (this.editor || document.querySelector('.sheet')) return;
       const t = e.target;
@@ -56,6 +59,18 @@ class App {
       const f = e.dataTransfer.files[0];
       if (f.type.startsWith('image/')) this.editor.insertImage(f);
     });
+  }
+
+  startWelcome() {
+    const folderId = this.route.name === 'folder' ? this.route.folderId ?? null : null;
+    welcomeTour({ onNewNotebook: () => newNotebookSheet(this, folderId), onImport: () => importGoodNotesFiles(this, folderId) });
+  }
+
+  /** Replays the tutorial from Settings. */
+  showTutorial() {
+    resetTutorial();
+    this.go({ name: 'library' });
+    setTimeout(() => this.startWelcome(), 150);
   }
 
   setPrefs(p) {
@@ -126,6 +141,7 @@ class App {
     this.root.classList.add('editing');
     this.editor.mount(this.editorLayer);
     this.nav.render();
+    if (shouldShowEditorTour()) { const ed = this.editor; setTimeout(() => { if (this.editor === ed) editorTour(ed); }, 500); }
     if (this.pendingCard) {
       const src = this.pendingCard;
       this.pendingCard = null;

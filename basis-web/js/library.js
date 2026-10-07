@@ -113,7 +113,7 @@ export function libraryScreen(app, folderId) {
   const listHost = h('div', { class: 'library-list' });
   const search = h('input', { class: 'field search', type: 'search', id: 'lib-search', placeholder: 'Search all notebooks', 'aria-label': 'Search all notebooks' });
   search.addEventListener('input', () => { query = search.value.trim().toLowerCase(); render(); });
-  const newBtn = h('button', { class: 'btn primary', 'aria-haspopup': 'menu' }, icon('plus', 18), 'New');
+  const newBtn = h('button', { class: 'btn primary', 'aria-haspopup': 'menu', 'data-tour': 'new' }, icon('plus', 18), 'New');
   newBtn.addEventListener('click', () => menu(newBtn, [
     { label: 'New Notebook', icon: 'docPlus', hint: 'N', action: () => newNotebookSheet(app, folderId) },
     { label: 'New Folder', icon: 'folderPlus', action: () => newFolder() },
@@ -329,7 +329,7 @@ async function importBasisFiles(app, folderId, picked) {
 }
 
 /** Converts .goodnotes files into Basis notebooks in this folder. */
-async function importGoodNotesFiles(app, folderId, picked) {
+export async function importGoodNotesFiles(app, folderId, picked) {
   // No accept filter: iPadOS greys out file types it doesn't know.
   const files = picked || await pickFile('', true);
   if (!files.length) return;
@@ -537,6 +537,10 @@ export function settingsScreen(app) {
         } }, icon('import', 18), 'Restore from Backup…'),
         h('button', { class: 'btn', onclick: () => importGoodNotesFiles(app, null) }, icon('import', 18), 'Import GoodNotes or Notability File…')),
       h('p', { class: 'muted small' }, 'Restore accepts Basis backups (.json), Basis notebooks (.basis), GoodNotes files (.goodnotes) and Notability notes (.note).')),
+    h('div', { class: 'settings-group' },
+      h('h2', { class: 'list-title' }, 'Help'),
+      h('p', { class: 'muted' }, 'Take the tour of Basis again. The notebook tour plays the next time you open a notebook.'),
+      h('div', { class: 'row-actions' }, h('button', { class: 'btn', onclick: () => app.showTutorial() }, icon('play', 18), 'Show Tutorial'))),
     h('div', { class: 'settings-group' },
       h('h2', { class: 'list-title' }, 'Shortcuts'),
       h('dl', { class: 'shortcuts' },

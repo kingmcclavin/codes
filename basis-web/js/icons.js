@@ -38,6 +38,7 @@ const P = {
   paste: '<rect x="5.5" y="5" width="13" height="16" rx="2"/><path d="M9 5V4a1 1 0 011-1h4a1 1 0 011 1v1"/>',
   sliders: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
   export: '<path d="M12 15V3.5M7.5 8L12 3.5 16.5 8"/><path d="M5 12.5V19a1.5 1.5 0 001.5 1.5h11A1.5 1.5 0 0019 19v-6.5"/>',
+  play: '<circle cx="12" cy="12" r="8.5"/><path d="M10.2 8.6l5 3.4-5 3.4z"/>',
   import: '<path d="M12 3.5V15M7.5 10.5L12 15l4.5-4.5"/><path d="M5 12.5V19a1.5 1.5 0 001.5 1.5h11A1.5 1.5 0 0019 19v-6.5"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   bookmark: '<path d="M6.5 4.5h11v16l-5.5-4-5.5 4z"/>',

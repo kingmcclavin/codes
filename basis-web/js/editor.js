@@ -98,7 +98,7 @@ export class Editor {
     const back = h('button', { class: 'icon-btn', title: 'Back to library', 'aria-label': 'Back to library', onclick: () => this.onClose() }, icon('back'));
     this.titleBtn = h('button', { class: 'doc-title', title: 'Rename', onclick: () => this.rename() }, this.doc.title || 'Untitled');
     this.toolButtons = {};
-    const tools = h('div', { class: 'tool-group', role: 'toolbar', 'aria-label': 'Tools' });
+    const tools = h('div', { class: 'tool-group', role: 'toolbar', 'aria-label': 'Tools', 'data-tour': 'tools' });
     for (const t of TOOLS) {
       const b = h('button', { class: 'tool-btn', title: `${t.name} (${t.key})`, 'aria-label': t.name, 'aria-pressed': 'false' }, icon(TOOL_ICONS[t.id]), h('span', { class: 'tool-color' }));
       b.addEventListener('click', () => this.selectTool(t.id));
@@ -107,6 +107,7 @@ export class Editor {
     }
     const imgBtn = iconButton('image', 'Insert image', () => this.insertImage());
     this.calcBtn = iconButton('calc', 'Calculator (K)', () => this.toggleCalculator());
+    this.calcBtn.dataset.tour = 'calc';
     tools.append(h('span', { class: 'tool-sep' }), imgBtn, this.calcBtn);
 
     this.undoBtn = iconButton('undo', 'Undo (⌘Z)', () => this.undo());
@@ -114,6 +115,7 @@ export class Editor {
     const pagesBtn = iconButton('pages', 'Pages', () => this.showPageManager());
     const settingsBtn = iconButton('pagesettings', 'Page settings', () => this.showPageSettings());
     const moreBtn = iconButton('more', 'More', () => this.showMoreMenu(moreBtn));
+    moreBtn.dataset.tour = 'more';
 
     this.tabstrip = h('div', { class: 'tabstrip', role: 'tablist', 'aria-label': 'Open notebooks' });
     this.optionsBar = h('div', { class: 'options-bar' });
@@ -132,7 +134,7 @@ export class Editor {
     this.pageLabel.addEventListener('click', () => this.pageLabelMenu());
     this.prevBtn = iconButton('chevronUp', 'Previous page', () => this.canvas.scrollToPage(this.canvas.currentPageIndex - 1), { size: 18 });
     this.nextBtn = iconButton('chevronDown', 'Next page', () => this.canvas.scrollToPage(this.canvas.currentPageIndex + 1), { size: 18 });
-    const pageInd = h('div', { class: 'float-pill page-pill' }, this.prevBtn, this.pageLabel, this.nextBtn, iconButton('plus', 'Add page', () => this.addPage(), { size: 18 }));
+    const pageInd = h('div', { class: 'float-pill page-pill', 'data-tour': 'pages' }, this.prevBtn, this.pageLabel, this.nextBtn, iconButton('plus', 'Add page', () => this.addPage(), { size: 18 }));
     this.canvasHost.append(zoom, pageInd);
 
     this.root.append(
