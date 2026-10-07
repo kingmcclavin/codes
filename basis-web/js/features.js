@@ -10,6 +10,7 @@
 import { storage } from './util.js';
 
 export const FEATURES = {
+  toolbox: { name: 'Calculator Toolbox', status: 'pro', note: 'Formulas, Unit Converter, Graphs and History. The basic calculator stays free.' },
   // exampleTool: { name: 'Example Tool', status: 'testing', note: 'What it does' },
   //   status: 'testing' (not finished) | 'pro' (paid later) | 'released'
 };

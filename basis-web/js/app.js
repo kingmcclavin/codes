@@ -6,6 +6,7 @@ import { toast, closePopovers } from './ui.js';
 import { store } from './store.js';
 import { Editor } from './editor.js';
 import { sidebar, libraryScreen, searchScreen, settingsScreen, newNotebookSheet } from './library.js';
+import { feature } from './features.js';
 import { calculatorScreen, formulasScreen, unitConverterScreen, historyScreen, graphScreen } from './calculator.js';
 
 class App {
@@ -92,7 +93,9 @@ class App {
     const insertIntoNote = (source) => this.insertIntoNote(source);
     const open = { calculator: () => this.go({ name: 'calculator' }) };
     let s;
-    switch (r.name) {
+    // Toolbox screens are Pro; without it, fall back to the library.
+    const name = ['formulas', 'units', 'graphs', 'history'].includes(r.name) && !feature('toolbox') ? 'library' : r.name;
+    switch (name) {
       case 'folder': s = store.folder(r.folderId) ? libraryScreen(this, r.folderId) : libraryScreen(this, null); break;
       case 'search': s = searchScreen(this); break;
       case 'calculator': s = calculatorScreen({ insertIntoNote }); break;

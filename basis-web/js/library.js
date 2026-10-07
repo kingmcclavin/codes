@@ -63,12 +63,12 @@ export function sidebar(app) {
     nav.replaceChildren(
       h('div', { class: 'brand' }, h('img', { src: 'icons/favicon.png', alt: '', width: 28, height: 28 }), h('span', { class: 'wordmark', role: 'img', 'aria-label': 'Basis' })),
       h('div', { class: 'side-group' }, item({ name: 'search' }, 'search', 'Search'), item({ name: 'calculator' }, 'calc', 'Calculator')),
-      h('div', { class: 'side-head' }, 'Toolbox'),
-      h('div', { class: 'side-group' },
+      feature('toolbox') ? h('div', { class: 'side-head' }, 'Toolbox') : null,
+      feature('toolbox') ? h('div', { class: 'side-group' },
         item({ name: 'formulas' }, 'function', 'Formulas'),
         item({ name: 'units' }, 'convert', 'Unit Converter'),
         item({ name: 'graphs' }, 'graph', 'Graphs'),
-        item({ name: 'history' }, 'history', 'History')),
+        item({ name: 'history' }, 'history', 'History')) : null,
       h('div', { class: 'side-head' }, 'Notes'),
       h('div', { class: 'side-group' }, all),
       h('div', { class: 'side-head' }, 'Folders'),
@@ -423,7 +423,7 @@ function moveSheet(item) {
 // ---------- Search ----------
 
 export function searchScreen(app) {
-  const input = h('input', { class: 'field search big', type: 'search', id: 'global-search', placeholder: 'Search notebooks, typed text, sections, formulas', 'aria-label': 'Search' });
+  const input = h('input', { class: 'field search big', type: 'search', id: 'global-search', placeholder: feature('toolbox') ? 'Search notebooks, typed text, sections, formulas' : 'Search notebooks, typed text and sections', 'aria-label': 'Search' });
   const results = h('div', { class: 'search-results' });
   const root = h('section', { class: 'screen search-screen' }, h('header', { class: 'screen-header' }, h('h1', {}, 'Search')), input, results);
   const snippet = (text, q) => {
@@ -434,7 +434,7 @@ export function searchScreen(app) {
   };
   const render = () => {
     const q = input.value.trim().toLowerCase();
-    if (!q) { results.replaceChildren(h('p', { class: 'muted' }, 'Search looks through notebook titles, typed text and calculation cards, section names, folders and formulas.')); return; }
+    if (!q) { results.replaceChildren(h('p', { class: 'muted' }, 'Search looks through notebook titles, typed text and calculation cards, section names, folders' + (feature('toolbox') ? ' and formulas.' : '.'))); return; }
     const groups = [];
     const docs = store.allDocuments().filter((d) => d.title.toLowerCase().includes(q) || d.text?.toLowerCase().includes(q) || d.sections?.some((s) => s.title.toLowerCase().includes(q)));
     if (docs.length) groups.push(h('h2', { class: 'list-title' }, 'Notebooks'), h('div', { class: 'rows' }, ...docs.map((d) => {
@@ -444,7 +444,7 @@ export function searchScreen(app) {
     })));
     const folders = store.folders.filter((f) => f.name.toLowerCase().includes(q));
     if (folders.length) groups.push(h('h2', { class: 'list-title' }, 'Folders'), h('div', { class: 'rows' }, ...folders.map((f) => h('div', { class: 'row' }, h('button', { class: 'row-main', onclick: () => app.go({ name: 'folder', folderId: f.id }) }, folderTile(f.color, f.icon, 28), h('span', { class: 'row-text' }, h('span', { class: 'row-title' }, f.name)))))));
-    const formulas = calc.allFormulas.filter((f) => f.name.toLowerCase().includes(q) || f.summary?.toLowerCase().includes(q));
+    const formulas = !feature('toolbox') ? [] : calc.allFormulas.filter((f) => f.name.toLowerCase().includes(q) || f.summary?.toLowerCase().includes(q));
     if (formulas.length) groups.push(h('h2', { class: 'list-title' }, 'Formulas'), h('div', { class: 'rows' }, ...formulas.map((f) => h('div', { class: 'row' }, h('button', { class: 'row-main', onclick: () => { storage.set('basis.selectedFormula', f.id); app.go({ name: 'formulas' }); } }, icon('function', 22), h('span', { class: 'row-text' }, h('span', { class: 'row-title' }, f.name), h('span', { class: 'row-sub' }, `${f.category} · ${f.summary || ''}`)))))));
     results.replaceChildren(...(groups.length ? groups : [h('p', { class: 'muted' }, `Nothing matches “${input.value}”.`)]));
   };
@@ -545,7 +545,7 @@ export function settingsScreen(app) {
           ['Two fingers', 'Scroll and pinch to zoom'], ['Double-tap', 'Zoom so the page fills the screen edge to edge; again to zoom back'], ['Hold still', 'Snap a pen stroke to a shape'], ['Scribble', 'Scribble fast over ink with the pen to erase it']].flatMap(([k, v]) => [h('dt', {}, h('kbd', {}, k)), h('dd', {}, v)]))),
     devUnlocked() ? developerGroup() : null,
     versionLine(),
-    h('p', { class: 'muted small about' }, 'Basis for the web. Pens with pressure and tilt, shape recognition, vector erasing, templates, live calculation cards, formulas and unit conversion — all stored locally.'),
+    h('p', { class: 'muted small about' }, `Basis for the web. Pens with pressure and tilt, shape recognition, vector erasing, templates, live calculation cards${feature('toolbox') ? ', formulas and unit conversion' : ''} — all stored locally.`),
   );
   return root;
 }

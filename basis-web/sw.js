@@ -1,5 +1,5 @@
 // Offline support: cache the app shell; network first so updates arrive.
-const CACHE = 'basis-v17';
+const CACHE = 'basis-v18';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest', 'icons/favicon.png', 'icons/wordmark.png', 'icons/icon-192.png',
   'js/app.js', 'js/util.js', 'js/model.js', 'js/store.js', 'js/elements.js', 'js/render.js', 'js/recognizer.js',
