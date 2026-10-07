@@ -34,7 +34,8 @@ export class Editor {
     this.tabs = tabs;
     this.history = new History(doc, () => { this.refreshUndo(); });
     this.dirty = false;
-    this.save = debounce(() => this.saveNow(), 700);
+    // Autosave once writing pauses; saving a big notebook mid-stroke can stall the ink.
+    this.save = debounce(() => (this.canvas?.interaction ? this.save() : this.saveNow()), 1200);
     this.root = h('div', { class: 'editor' });
     this.buildChrome();
     this.canvas = new CanvasView(this, this.canvasHost);

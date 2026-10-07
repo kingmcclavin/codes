@@ -267,8 +267,39 @@ export class CanvasView {
   // ---------- Rendering ----------
 
   requestRender() {
+    this.needFull = true;
+    this.scheduleFrame();
+  }
+
+  /** A finished stroke only adds ink on top, so paint just it instead of the whole page. */
+  requestAppend(pageId, el) {
+    (this.appendQueue ||= []).push({ pageId, el });
+    this.scheduleFrame();
+  }
+
+  scheduleFrame() {
     if (this.raf) return;
-    this.raf = requestAnimationFrame(() => { this.raf = null; this.render(); this.renderOverlay(); });
+    this.raf = requestAnimationFrame(() => {
+      this.raf = null;
+      if (this.needFull || !this.appendQueue?.length) this.render(); else this.drawAppended();
+      this.needFull = false;
+      this.appendQueue = [];
+      this.renderOverlay();
+    });
+  }
+
+  drawAppended() {
+    const ctx = this.ctx;
+    for (const { pageId, el } of this.appendQueue) {
+      const i = this.pageIndex(pageId);
+      if (i < 0) continue;
+      const p = this.doc.pages[i];
+      this.pageTransform(ctx, i);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, p.w, p.h); ctx.clip();
+      drawElement(ctx, el, p);
+      ctx.restore();
+    }
   }
 
   requestOverlay() {
@@ -321,12 +352,18 @@ export class CanvasView {
 
   renderOverlay() {
     const ctx = this.octx;
+    const it = this.interaction;
+    // While writing, repaint only around the new ink: Safari draws canvases on
+    // the CPU, so clearing the whole full-screen layer every frame drops frames.
+    if (it && it === this.overlayOwner && it.drawIncremental?.(ctx)) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.overlay.width, this.overlay.height);
-    const it = this.interaction;
     if (it?.draw) it.draw(ctx);
     this.drawSelection(ctx);
-    if (this.hover && this.settings.tool === 'eraser' && !it) this.drawEraserCursor(ctx, this.hover);
+    const cursor = this.hover && this.settings.tool === 'eraser' && !it;
+    if (cursor) this.drawEraserCursor(ctx, this.hover);
+    // The overlay now holds only this gesture's ink, so later frames can patch it.
+    this.overlayOwner = it?.drawIncremental && !this.selection && !cursor ? it : null;
   }
 
   drawEraserCursor(ctx, s) {
@@ -491,7 +528,8 @@ export class CanvasView {
       const it = this.interaction;
       this.interaction = null;
       if (cancelled) it.cancel?.(); else it.end(e);
-      this.requestRender();
+      // New ink is painted on its own (requestAppend); anything else repaints the page.
+      if (it instanceof InkGesture && this.appendQueue?.length) this.requestOverlay(); else this.requestRender();
     }
     if (this.penDoubleTap === e) { this.penDoubleTap = null; this.onDoubleClick(e); }
   }
@@ -781,11 +819,18 @@ export class CanvasView {
     return changed;
   }
 
-  afterEdit() {
-    this.extendPages();
+  afterEdit(appended) {
+    const grew = this.extendPages();
     this.layout();
-    this.requestRender();
+    if (appended && !grew) this.requestAppend(appended.pageId, appended.el); else this.requestRender();
     this.editor.documentChanged();
+  }
+
+  /** Adds one element on top of a page (new ink): same as commit, but redraws only the new element. */
+  commitAppend(label, pageId, el) {
+    const changed = this.editor.history.perform(label, (pages) => setElements(pages, pageId, (els) => [...els, el]));
+    if (changed) this.afterEdit({ pageId, el });
+    return changed;
   }
 
   /** Endless pages grow down (and right) as content nears the edge. Not an undo step. */
@@ -810,6 +855,7 @@ export class CanvasView {
       for (const s of this.editor.history.undoStack) { s.before = fix(s.before); s.after = fix(s.after); }
       this.doc.pages = pages;
     }
+    return changed;
   }
 
   snapContext(pageIdx) {
@@ -1201,7 +1247,7 @@ class InkGesture {
       }
     }
     const stroke = makeStroke(this.samples, this.style);
-    v.commit(this.mode === 'highlighter' ? 'Highlight' : 'Ink', pageId, (els) => [...els, stroke]);
+    v.commitAppend(this.mode === 'highlighter' ? 'Highlight' : 'Ink', pageId, stroke);
   }
 
   cancel() { clearTimeout(this.holdTimer); }
@@ -1229,8 +1275,45 @@ class InkGesture {
     } else {
       const path = buildStrokePath(packPoints(this.samples), this.style);
       fillStrokePath(ctx, path, this.style, !isLight(this.page.background.color));
+      this.pathKind = !!path.__stroked;
+      this.drawnTo = this.samples.length;
     }
     ctx.restore();
+  }
+
+  /**
+   * Repaints just the end of the stroke: the samples added since the last
+   * frame plus the few before them that smoothing moves. Returns false when a
+   * full redraw is needed instead.
+   */
+  drawIncremental(ctx) {
+    if (this.snapped || this.mode === 'shapes' || this.drawnTo == null) return false;
+    const n = this.samples.length;
+    if (n === this.drawnTo) return true;
+    const path = buildStrokePath(packPoints(this.samples), this.style);
+    if (!!path.__stroked !== this.pathKind) return false; // the whole stroke changed look
+    const v = this.view, o = v.pageOrigin(this.i), z = v.view.zoom, d = v.dpr;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let k = Math.max(0, this.drawnTo - 8); k < n; k++) {
+      const q = this.samples[k];
+      if (q.x < x0) x0 = q.x; if (q.x > x1) x1 = q.x;
+      if (q.y < y0) y0 = q.y; if (q.y > y1) y1 = q.y;
+    }
+    const pad = maxWidth(this.style) / 2 + 2;
+    const rx = Math.floor(((o.x + x0 - pad - v.view.x) * z) * d) - 2;
+    const ry = Math.floor(((o.y + y0 - pad - v.view.y) * z) * d) - 2;
+    const rw = Math.ceil((x1 - x0 + pad * 2) * z * d) + 4;
+    const rh = Math.ceil((y1 - y0 + pad * 2) * z * d) + 4;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip();
+    ctx.clearRect(rx, ry, rw, rh);
+    v.pageTransform(ctx, this.i);
+    ctx.beginPath(); ctx.rect(0, 0, this.page.w, this.page.h); ctx.clip();
+    fillStrokePath(ctx, path, this.style, !isLight(this.page.background.color));
+    ctx.restore();
+    this.drawnTo = n;
+    return true;
   }
 }
 
