@@ -13,6 +13,7 @@ import { importNotability } from './notability.js';
 import { exportBasis, importBasis, isBasisArchive } from './basisfile.js';
 import { safeFileName } from './editor.js';
 import { calc } from './calc/store.js';
+import { VERSION } from './version.js';
 
 // ---------- Tiles ----------
 
@@ -502,6 +503,7 @@ export function settingsScreen(app) {
         ...[['1 – 6', 'Pen, Highlighter, Eraser, Shapes, Lasso, Text'], ['E', 'Toggle eraser'], ['K', 'Floating calculator'], ['⌘/Ctrl Z', 'Undo (add Shift to redo)'],
           ['⌘/Ctrl C, X, V, D', 'Copy, cut, paste, duplicate selection'], ['Delete', 'Delete selection'], ['⌘/Ctrl + / −', 'Zoom'], ['Space + drag', 'Scroll with a mouse'],
           ['Two fingers', 'Scroll and pinch to zoom'], ['Double-tap', 'Zoom so the page fills the screen edge to edge; again to zoom back'], ['Hold still', 'Snap a pen stroke to a shape'], ['Scribble', 'Scribble fast over ink with the pen to erase it']].flatMap(([k, v]) => [h('dt', {}, h('kbd', {}, k)), h('dd', {}, v)]))),
+    h('p', { class: 'version' }, `Basis Version ${VERSION}`),
     h('p', { class: 'muted small about' }, 'Basis for the web. Pens with pressure and tilt, shape recognition, vector erasing, templates, live calculation cards, formulas and unit conversion — all stored locally.'),
   );
   return root;
