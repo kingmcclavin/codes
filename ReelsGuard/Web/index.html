@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reels Guard</title>
+<meta name="description" content="Watch the Instagram Reels your friends send you, one at a time, with no feed after them.">
+<meta name="theme-color" content="#EEF1EC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111613" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Reels Guard">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="masthead">
+    <h1>Reels Guard</h1>
+    <p class="lede">Watch the Reels your friends send you. Each one plays on its own, with nothing after it.</p>
+  </header>
+
+  <main>
+    <!-- Reels tab -->
+    <section id="tab-reels" class="tab" aria-labelledby="tabbtn-reels">
+      <form id="add-form" class="add" novalidate>
+        <label for="link-input" class="field-label">Paste a Reel link</label>
+        <div class="add-row">
+          <input id="link-input" name="link" type="url" inputmode="url" autocomplete="off" autocapitalize="off"
+                 spellcheck="false" placeholder="https://www.instagram.com/reel/…" required>
+          <input id="from-input" name="from" type="text" autocomplete="off" maxlength="40"
+                 placeholder="From (optional)" aria-label="Who sent it (optional)">
+          <button type="submit" class="btn primary">Add</button>
+        </div>
+        <p id="add-error" class="field-error" role="alert" hidden></p>
+      </form>
+
+      <div id="paused" class="paused" role="status" hidden>
+        <p class="paused-title">Your Reel time is up.</p>
+        <p id="paused-text" class="paused-text"></p>
+      </div>
+
+      <div class="list-head">
+        <h2>Sent to you</h2>
+        <span id="count" class="count"></span>
+      </div>
+      <ul id="inbox" class="inbox"></ul>
+
+      <div id="empty" class="empty">
+        <p class="empty-title">No Reels here yet.</p>
+        <ol class="steps">
+          <li>In Instagram, open the Reel a friend sent you.</li>
+          <li>Tap <strong>Share</strong>, then <strong>Copy link</strong>.</li>
+          <li>Paste it above. It plays here on its own.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- Settings tab -->
+    <section id="tab-settings" class="tab" aria-labelledby="tabbtn-settings" hidden>
+      <div class="group">
+        <h2>Reel time</h2>
+        <div class="setting">
+          <label for="limit-select">Daily limit</label>
+          <select id="limit-select">
+            <option value="0">Off</option>
+            <option value="5">5 minutes</option>
+            <option value="10">10 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+          </select>
+        </div>
+        <div class="setting" id="cooldown-row">
+          <label for="cooldown-select">Cooldown</label>
+          <select id="cooldown-select">
+            <option value="30">30 minutes</option>
+            <option value="60">1 hour</option>
+            <option value="120">2 hours</option>
+            <option value="240">4 hours</option>
+          </select>
+        </div>
+        <p id="time-status" class="note"></p>
+        <p class="note">Counts the time a Reel is open here. When it runs out, Reels pause until the cooldown ends.</p>
+      </div>
+
+      <div class="group">
+        <h2>Your list</h2>
+        <div class="actions">
+          <button type="button" id="clear-watched" class="btn">Remove watched Reels</button>
+          <button type="button" id="clear-all" class="btn danger">Remove all Reels</button>
+        </div>
+        <p class="note">The list is stored only in this browser, on this device.</p>
+      </div>
+
+      <div class="group">
+        <h2>Put it on your Home Screen</h2>
+        <p class="note">In Safari, tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>. It then opens like an app.</p>
+      </div>
+
+      <div class="group">
+        <h2>What the web version can and can't do</h2>
+        <ul class="facts">
+          <li><span class="tag ok">Works</span>Plays one Reel or post from a link, through Instagram's own embed player. There's no feed after it, and links inside the player can't open Instagram.</li>
+          <li><span class="tag ok">Works</span>Daily Reel time limit with a cooldown.</li>
+          <li><span class="tag no">Can't</span>Filter instagram.com or the Instagram app. Instagram doesn't let other websites show its pages, so browsing your feed, profiles and messages has to happen in Instagram, or in the Reels Guard iPad app, which does filter them.</li>
+          <li><span class="tag no">Can't</span>Play Reels from private accounts, or Reels whose owner turned off embedding. Instagram shows a notice instead.</li>
+        </ul>
+        <p class="note">No account, no tracking. Nothing you add leaves this device, apart from loading the Reel itself from Instagram.</p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" role="tablist" aria-label="Sections">
+    <button type="button" role="tab" id="tabbtn-reels" aria-controls="tab-reels" aria-selected="true" data-tab="reels">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M10 9.2v5.6l4.6-2.8z"/></svg>
+      <span>Reels</span>
+    </button>
+    <button type="button" role="tab" id="tabbtn-settings" aria-controls="tab-settings" aria-selected="false" data-tab="settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+</div>
+
+<!-- One Reel, full screen, one way out. -->
+<div id="viewer" class="viewer" role="dialog" aria-modal="true" aria-labelledby="viewer-title" hidden>
+  <div class="viewer-bar">
+    <button type="button" id="viewer-done" class="btn primary">Done</button>
+    <p id="viewer-title" class="viewer-title"></p>
+    <button type="button" id="viewer-copy" class="btn">Copy link</button>
+  </div>
+  <div class="viewer-stage">
+    <iframe id="viewer-frame" title="Instagram Reel"
+            sandbox="allow-scripts allow-same-origin allow-presentation"
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            referrerpolicy="strict-origin-when-cross-origin"
+            src="about:blank"></iframe>
+  </div>
+  <p class="viewer-foot">This Reel plays on its own. There's nothing after it.</p>
+</div>
+
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -27,6 +27,25 @@ The blocking screen is intentionally plain: a title, one sentence of
 explanation, and a single **Back to Instagram** button. There is no "watch
 anyway" and no "next Reel" button.
 
+## Web app (any browser, no install)
+
+**https://kingmcclavin.github.io/codes/** (after Pages is turned on, below)
+
+A small installable web app in `Web/` for watching the Reels friends send you.
+Paste a Reel link and it plays through Instagram's official embed player:
+one Reel, no feed after it, and links inside the player can't open Instagram.
+It has the same daily Reel time limit and cooldown as the iOS app. Everything
+is stored in the browser only.
+
+What it can't do: show or filter instagram.com itself. Instagram forbids other
+websites from framing its pages, so feed, profile and DM filtering is only
+possible in the iOS / iPad app. Private accounts' Reels, and Reels whose owner
+disabled embedding, don't play in the embed player.
+
+Publishing: each push publishes `Web/` to the `gh-pages` branch. Turn GitHub
+Pages on once: repository **Settings → Pages → Build and deployment → Source:
+Deploy from a branch → `gh-pages` / `(root)` → Save**.
+
 ## Run it on an iPad (Swift Playgrounds, no Mac needed)
 
 `ReelsGuard.swiftpm` is a Swift Playgrounds app. It contains the in-app
@@ -136,6 +155,7 @@ ReelsGuard/
 ├── scripts/build-playgrounds-app.py  regenerates the two generated outputs
 ├── Packages/ReelsGuardCore/        Foundation-only policy package + tests
 ├── Shared/WebGuard/                reels-observer.js (shared) + Node tests
+├── Web/                            installable web app (GitHub Pages) + Node tests
 ├── App/Sources/                    SwiftUI companion app
 │   ├── Browser/                    guarded WKWebView (+ generated ObserverScript.swift)
 │   ├── Platform/                   App entry, Screen Time, Safari setup: swapped out in Playgrounds
