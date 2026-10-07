@@ -43,13 +43,13 @@ export function sheet({ title, build, wide = false, actions = null, onClose = nu
 }
 
 /** Text input dialog (replaces prompt()). */
-export function askText({ title, label, value = '', confirm = 'Save', placeholder = '' }) {
+export function askText({ title, label, value = '', confirm = 'Save', placeholder = '', type = 'text' }) {
   let input;
   return sheet({
     title,
     actions: { confirm, onConfirm: () => input.value },
     build(body, close) {
-      input = h('input', { class: 'field', id: 'ask-text', value, placeholder, 'aria-label': label || title });
+      input = h('input', { class: 'field', id: 'ask-text', type, value, placeholder, autocomplete: type === 'password' ? 'off' : null, 'aria-label': label || title });
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') close(input.value); });
       body.append(h('label', { class: 'form-row' }, label ? h('span', { class: 'form-label' }, label) : null, input));
       setTimeout(() => { input.focus(); input.select(); }, 50);

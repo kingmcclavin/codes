@@ -272,7 +272,8 @@ textarea.field { resize: vertical; line-height: 1.5; }
 .shortcuts { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; }
 .shortcuts dd { margin: 0; color: var(--muted); }
 kbd { font-size: 12px; padding: 2px 7px; border-radius: 6px; background: var(--surface-3); border: 1px solid var(--line); white-space: nowrap; }
-.settings-screen .version { margin: 4px 0 -8px; font-weight: 600; font-size: 14px; color: var(--fg); }
+.dev-features { display: flex; flex-direction: column; gap: 8px; }
+.settings-screen .version { cursor: default; user-select: none; -webkit-user-select: none; margin: 4px 0 -8px; font-weight: 600; font-size: 14px; color: var(--fg); }
 .about { max-width: 60ch; }
 
 .settings-split { display: grid; grid-template-columns: 1fr 240px; gap: 22px; }

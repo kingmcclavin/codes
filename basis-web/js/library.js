@@ -14,6 +14,7 @@ import { exportBasis, importBasis, isBasisArchive } from './basisfile.js';
 import { safeFileName } from './editor.js';
 import { calc } from './calc/store.js';
 import { VERSION } from './version.js';
+import { FEATURES, feature, devUnlocked, unlockDev, lockDev, setFeatureOn } from './features.js';
 import { LIBRARY_ICON_GROUPS, libraryIcon, libraryIconName } from './libicons.js';
 
 // ---------- Tiles ----------
@@ -455,6 +456,40 @@ export function searchScreen(app) {
 
 // ---------- Settings ----------
 
+// Tapping the version five times asks for the Developer Mode password.
+function versionLine() {
+  let taps = 0, timer = 0;
+  const el = h('p', { class: 'version' }, `Basis Version ${VERSION}`, devUnlocked() ? ' · Developer Mode' : '');
+  el.addEventListener('click', async () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { taps = 0; }, 1500);
+    if (++taps < 5 || devUnlocked()) return;
+    taps = 0;
+    const password = await askText({ title: 'Developer Mode', label: 'Password', confirm: 'Unlock', type: 'password' });
+    if (!password) return;
+    try {
+      if (await unlockDev(password)) location.reload();
+      else toast('That password isn’t right.');
+    } catch (e) { toast(e.message); }
+  });
+  return el;
+}
+
+function developerGroup() {
+  const entries = Object.entries(FEATURES).filter(([, f]) => f.status !== 'released');
+  const label = { testing: 'Testing', pro: 'Pro' };
+  return h('div', { class: 'settings-group' },
+    h('h2', { class: 'list-title' }, 'Developer Mode'),
+    h('p', { class: 'muted' }, 'Features that are still being tested, or are for Pro, show up on this device only. Switch one off to see Basis as everyone else does.'),
+    entries.length
+      ? h('div', { class: 'dev-features' }, ...entries.map(([id, f]) => h('div', { class: 'dev-feature' },
+        toggle(`dev-${id}`, `${f.name} (${label[f.status] || f.status})`, feature(id), (on) => { setFeatureOn(id, on); location.reload(); }),
+        f.note ? h('p', { class: 'muted small' }, f.note) : null)))
+      : h('p', { class: 'muted small' }, 'Nothing is in testing right now.'),
+    h('div', { class: 'row-actions' }, h('button', { class: 'btn', onclick: () => { lockDev(); location.reload(); } }, 'Turn Off Developer Mode')));
+}
+
+
 export function settingsScreen(app) {
   const prefs = app.prefs;
   const accent = swatches(LIBRARY_COLORS.map((c) => hexToRgba(c)), hexToRgba(prefs.accent || '#2f6bff'), (c) => app.setPrefs({ accent: rgbaToHex(c) }));
@@ -508,7 +543,8 @@ export function settingsScreen(app) {
         ...[['1 – 6', 'Pen, Highlighter, Eraser, Shapes, Lasso, Text'], ['E', 'Toggle eraser'], ['K', 'Floating calculator'], ['⌘/Ctrl Z', 'Undo (add Shift to redo)'],
           ['⌘/Ctrl C, X, V, D', 'Copy, cut, paste, duplicate selection'], ['Delete', 'Delete selection'], ['⌘/Ctrl + / −', 'Zoom'], ['Space + drag', 'Scroll with a mouse'],
           ['Two fingers', 'Scroll and pinch to zoom'], ['Double-tap', 'Zoom so the page fills the screen edge to edge; again to zoom back'], ['Hold still', 'Snap a pen stroke to a shape'], ['Scribble', 'Scribble fast over ink with the pen to erase it']].flatMap(([k, v]) => [h('dt', {}, h('kbd', {}, k)), h('dd', {}, v)]))),
-    h('p', { class: 'version' }, `Basis Version ${VERSION}`),
+    devUnlocked() ? developerGroup() : null,
+    versionLine(),
     h('p', { class: 'muted small about' }, 'Basis for the web. Pens with pressure and tilt, shape recognition, vector erasing, templates, live calculation cards, formulas and unit conversion — all stored locally.'),
   );
   return root;
