@@ -96,9 +96,14 @@ const ink = (kind, hex, width, extra = {}) => ({
   kind, color: hexToRgba(hex), width, opacity: 1, pressure: 0.5, tilt: 0, lineStyle: 'solid', ...extra,
 });
 
+// Like GoodNotes' ballpoint: an even line that only slightly follows pressure.
+export const BALLPOINT_PRESSURE = 0.12;
+/** Ballpoint sensitivity before it was lowered; notebooks still on it are updated. */
+export const OLD_BALLPOINT_PRESSURE = 0.55;
+
 export const PEN_PRESETS = [
   { id: 'fine', name: 'Fine Pen', style: ink('fineliner', '#111114', 1.0, { pressure: 0.15 }) },
-  { id: 'ballpoint', name: 'Ballpoint', style: ink('ballpoint', '#111114', 1.8, { pressure: 0.55 }) },
+  { id: 'ballpoint', name: 'Ballpoint', style: ink('ballpoint', '#111114', 1.8, { pressure: BALLPOINT_PRESSURE }) },
   { id: 'fountain', name: 'Fountain', style: ink('fountain', '#1F4FD8', 2.2, { pressure: 0.95 }) },
   { id: 'marker', name: 'Marker', style: ink('marker', '#D62828', 5, { opacity: 0.95, pressure: 0.1 }) },
   { id: 'pencil', name: 'Pencil', style: ink('pencil', '#3A3A3F', 1.4, { opacity: 0.8, pressure: 0.6, tilt: 0.6 }) },

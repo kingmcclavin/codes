@@ -9,7 +9,7 @@ import {
 import { CanvasView } from './canvas.js';
 import { History, setElements, updatePage } from './history.js';
 import {
-  TOOLS, INK_KINDS, INK_PALETTE, HIGHLIGHTER_PALETTE, PEN_PRESETS, HIGHLIGHTER_PRESET, FONT_FAMILIES, PAPER_SIZES, TEMPLATES, PAPER_COLORS,
+  TOOLS, INK_KINDS, INK_PALETTE, HIGHLIGHTER_PALETTE, PEN_PRESETS, BALLPOINT_PRESSURE, OLD_BALLPOINT_PRESSURE, HIGHLIGHTER_PRESET, FONT_FAMILIES, PAPER_SIZES, TEMPLATES, PAPER_COLORS,
   sizeFor, matchPaper, makeBackground, makePage, describeSize,
 } from './model.js';
 import { store } from './store.js';
@@ -30,6 +30,9 @@ let clipboard = null;
 export class Editor {
   constructor(doc, { onClose, tabs }) {
     this.doc = doc;
+    // Notebooks whose ballpoint is still on the old, very pressure-sensitive default.
+    const pen = doc.settings?.pen;
+    if (pen?.kind === 'ballpoint' && pen.pressure === OLD_BALLPOINT_PRESSURE) pen.pressure = BALLPOINT_PRESSURE;
     this.onClose = onClose;
     this.tabs = tabs;
     this.history = new History(doc, () => { this.refreshUndo(); });
