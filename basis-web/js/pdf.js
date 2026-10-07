@@ -101,6 +101,16 @@ export async function renderPDFPageImage(data, pageIndex = 0) {
   return { asset, color: { r: r / n, g: g / n, b: b / n, a: 1 } };
 }
 
+/** Wraps an image in a one-page PDF of the given size (points). */
+export async function imageToPDF(blob, w, h) {
+  await loadScript(JSPDF, () => !!window.jspdf);
+  const { jsPDF } = window.jspdf;
+  const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
+  const pdf = new jsPDF({ unit: 'pt', format: [w, h], orientation: w > h ? 'l' : 'p', compress: true });
+  pdf.addImage(url, blob.type === 'image/png' ? 'PNG' : 'JPEG', 0, 0, w, h, undefined, 'FAST');
+  return new Uint8Array(pdf.output('arraybuffer'));
+}
+
 /** Exports pages to a PDF blob (each page as a high-resolution image). */
 export async function exportPDF(doc, onProgress = () => {}) {
   await loadScript(JSPDF, () => !!window.jspdf);

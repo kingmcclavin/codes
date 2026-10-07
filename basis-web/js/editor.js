@@ -20,6 +20,7 @@ import { calc } from './calc/store.js';
 import { calculatorPad } from './calculator.js';
 import { importPDF, exportPDF, exportPNG } from './pdf.js';
 import { SCRIBBLE_MODES } from './scribble.js';
+import { exportBasis } from './basisfile.js';
 
 const TOOL_ICONS = { pen: 'pen', highlighter: 'highlighter', eraser: 'eraser', shapes: 'shapes', lasso: 'lasso', text: 'text' };
 
@@ -763,6 +764,7 @@ export class Editor {
       'sep',
       { label: 'Export PDF', icon: 'export', action: () => this.exportPDF() },
       { label: 'Export Page as PNG', icon: 'export', action: () => this.exportPNG() },
+      { label: 'Export as Basis Notebook (.basis)', icon: 'export', action: () => this.exportBasisFile() },
       'sep',
       { label: 'Scribble to Erase', checked: st.scribbleToErase !== false, action: () => { st.scribbleToErase = st.scribbleToErase === false; this.settingsChanged(); this.renderOptions(); toast(st.scribbleToErase ? 'Scribble quickly over ink with the pen to erase it.' : 'Scribble to erase is off.'); } },
       { header: 'Scribble erases' },
@@ -826,6 +828,15 @@ export class Editor {
     try {
       const blob = await exportPDF(this.doc, (n, t) => toast(`Rendering page ${n} of ${t}…`));
       if (saveFile(blob, `${this.doc.title || 'Notebook'}.pdf`)) toast('PDF exported');
+    } catch (e) { toast(e.message || 'Export failed.'); }
+  }
+
+  async exportBasisFile() {
+    await this.saveNow();
+    toast('Preparing notebook…');
+    try {
+      const blob = await exportBasis(this.doc, (n, t) => toast(`Packing page ${n} of ${t}…`));
+      if (saveFile(blob, `${safeFileName(this.doc.title)}.basis`)) toast('Notebook exported');
     } catch (e) { toast(e.message || 'Export failed.'); }
   }
 
@@ -929,6 +940,11 @@ export class Editor {
       },
     });
   }
+}
+
+export function safeFileName(name) {
+  const s = String(name || '').replace(/[\/:*?"<>|]/g, '-').trim().replace(/^\.+/, '');
+  return (s || 'Untitled').slice(0, 120);
 }
 
 function noteRecentColor(c) {

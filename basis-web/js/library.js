@@ -9,6 +9,8 @@ import { PAPER_SIZES, TEMPLATES, PAPER_COLORS, LIBRARY_COLORS, LIBRARY_ICONS, si
 import { renderPageCanvas } from './render.js';
 import { importPDF } from './pdf.js';
 import { importGoodNotes } from './goodnotes.js';
+import { exportBasis, importBasis, isBasisArchive } from './basisfile.js';
+import { safeFileName } from './editor.js';
 import { calc } from './calc/store.js';
 
 // ---------- Tiles ----------
@@ -113,6 +115,7 @@ export function libraryScreen(app, folderId) {
     { label: 'New Folder', icon: 'folderPlus', action: () => newFolder() },
     { label: 'Import PDF…', icon: 'import', action: () => importPDFNotebook(app, folderId) },
     { label: 'Import GoodNotes File…', icon: 'import', action: () => importGoodNotesFiles(app, folderId) },
+    { label: 'Import Basis Notebook (.basis)…', icon: 'import', action: () => importBasisFiles(app, folderId) },
   ], { align: 'end' }));
   const folder = store.folder(folderId);
   const up = folder ? h('button', { class: 'btn ghost', onclick: () => app.go(folder.parentId ? { name: 'folder', folderId: folder.parentId } : { name: 'library' }) }, icon('back', 18), store.folder(folder.parentId)?.name || 'All Notes') : null;
@@ -148,6 +151,12 @@ export function libraryScreen(app, folderId) {
       { label: 'Customize…', icon: 'palette', action: () => customizeSheet({ kind: 'doc', id: d.id }) },
       { label: 'Move to…', icon: 'move', action: () => moveSheet({ kind: 'doc', id: d.id }) },
       { label: 'Duplicate', icon: 'duplicate', action: () => store.duplicate(d.id) },
+      { label: 'Export as Basis Notebook (.basis)', icon: 'export', action: async () => {
+        const doc = await store.loadDocument(d.id);
+        if (!doc) return;
+        toast('Preparing notebook…');
+        try { if (saveFile(await exportBasis(doc), `${safeFileName(doc.title)}.basis`)) toast('Notebook exported'); } catch (e) { toast(e.message || 'Export failed.'); }
+      } },
       'sep',
       { label: 'Delete', icon: 'trash', danger: true, action: async () => {
         if (await confirmDialog({ title: `Delete “${d.title}”?`, message: 'The notebook and its pages will be deleted. This can’t be undone.' })) { app.tabs.close(d.id, true); await store.deleteDocument(d.id); }
@@ -291,6 +300,28 @@ async function importPDFNotebook(app, folderId) {
     }
   }
   if (opened) app.openDocument(opened);
+}
+
+/** Imports .basis notebooks (from this app or the Basis iPad app). */
+async function importBasisFiles(app, folderId, picked) {
+  const files = picked || await pickFile('', true);
+  if (!files.length) return;
+  let opened = null, count = 0;
+  for (const f of files) {
+    const file = f.file || f, parsed = f.json;
+    try {
+      const json = parsed || JSON.parse(await file.text());
+      toast(`Importing ${file.name}…`);
+      const doc = await importBasis(json, { folderId, onProgress: (n, t) => toast(`Importing ${file.name}: page ${n} of ${t}…`) });
+      await store.saveDocument(doc);
+      opened = doc.id;
+      count++;
+    } catch (e) {
+      toast(/JSON|Unexpected/.test(e.message) ? `“${file.name}” isn’t a Basis notebook.` : e.message);
+    }
+  }
+  if (count) toast(`Imported ${plural(count, 'notebook')}`);
+  if (files.length === 1 && opened) app.openDocument(opened);
 }
 
 /** Converts .goodnotes files into Basis notebooks in this folder. */
@@ -446,7 +477,10 @@ export function settingsScreen(app) {
             const head = new Uint8Array(await file.slice(0, 2).arrayBuffer());
             if (head[0] === 0x50 && head[1] === 0x4b) { goodnotes.push(file); continue; } // "PK" zip
             try {
-              const r = await store.importBackup(await file.text());
+              const text = await file.text();
+              const json = JSON.parse(text);
+              if (isBasisArchive(json)) { await importBasisFiles(app, null, [{ file, json }]); continue; }
+              const r = await store.importBackup(text);
               if (r.extra.calculator) calc.importData(r.extra.calculator);
               toast(`Restored ${plural(r.docs, 'notebook')} and ${plural(r.folders, 'folder')}`);
             } catch (e) { toast(/JSON|Unexpected/.test(e.message) ? `“${file.name}” isn’t a Basis backup or GoodNotes file.` : e.message); }
@@ -454,7 +488,7 @@ export function settingsScreen(app) {
           if (goodnotes.length) importGoodNotesFiles(app, null, goodnotes);
         } }, icon('import', 18), 'Restore from Backup…'),
         h('button', { class: 'btn', onclick: () => importGoodNotesFiles(app, null) }, icon('import', 18), 'Import GoodNotes File…')),
-      h('p', { class: 'muted small' }, 'Restore accepts Basis backups (.json) and GoodNotes files (.goodnotes).')),
+      h('p', { class: 'muted small' }, 'Restore accepts Basis backups (.json), Basis notebooks (.basis) and GoodNotes files (.goodnotes).')),
     h('div', { class: 'settings-group' },
       h('h2', { class: 'list-title' }, 'Shortcuts'),
       h('dl', { class: 'shortcuts' },

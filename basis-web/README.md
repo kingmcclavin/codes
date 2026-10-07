@@ -28,6 +28,7 @@ This folder is a static site with no build step. Import the repository in Vercel
 - Lasso: select, move, resize, rotate, recolor, restyle, cut/copy/paste, duplicate, arrange
 - Text boxes with fonts, size, bold/italic and alignment
 - Images, PDF import (pages become backgrounds you can write on), PDF and PNG export
+- `.basis` notebook export and import, in the same format as the Basis iPad app (editable ink, shapes, text, calculation cards, images and paper)
 - GoodNotes import (`.goodnotes`): pages, paper, pen and highlighter strokes as editable ink, and images. Typed text boxes aren't imported yet.
 - Templates: blank, ruled, grid, dotted, engineering, isometric, Cornell, lab notebook. Also paper sizes, orientation, paper color and endless pages.
 - Pull up past the last page to add a page
