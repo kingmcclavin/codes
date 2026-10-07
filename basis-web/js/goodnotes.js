@@ -341,7 +341,7 @@ function decodeBlock(src, start, end, expected) {
 
 // ---------- Zip (stored and deflate entries) ----------
 
-class ZipReader {
+export class ZipReader {
   static async open(b) {
     const z = new ZipReader();
     z.b = b;

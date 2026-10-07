@@ -30,6 +30,7 @@ This folder is a static site with no build step. Import the repository in Vercel
 - Images, PDF import (pages become backgrounds you can write on), PDF and PNG export
 - `.basis` notebook export and import, in the same format as the Basis iPad app (editable ink, shapes, text, calculation cards, images and paper)
 - GoodNotes import (`.goodnotes`): pages, paper, pen and highlighter strokes as editable ink, and images. Typed text boxes aren't imported yet.
+- Notability import (`.note`): handwriting as editable ink with its width variation, paper style (dots, grid, lines), page size, typed text and annotated PDFs. Images and audio aren't imported yet.
 - Templates: blank, ruled, grid, dotted, engineering, isometric, Cornell, lab notebook. Also paper sizes, orientation, paper color and endless pages.
 - Pull up past the last page to add a page
 - Page manager with drag-to-reorder, duplicate and sections. Undo/redo, zoom, open-notebook tabs.

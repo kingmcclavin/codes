@@ -8,7 +8,8 @@ import { store } from './store.js';
 import { PAPER_SIZES, TEMPLATES, PAPER_COLORS, LIBRARY_COLORS, LIBRARY_ICONS, sizeFor, makeBackground, makeDocument, makePage, describeSize } from './model.js';
 import { renderPageCanvas } from './render.js';
 import { importPDF } from './pdf.js';
-import { importGoodNotes } from './goodnotes.js';
+import { importGoodNotes, ZipReader } from './goodnotes.js';
+import { importNotability } from './notability.js';
 import { exportBasis, importBasis, isBasisArchive } from './basisfile.js';
 import { safeFileName } from './editor.js';
 import { calc } from './calc/store.js';
@@ -114,7 +115,7 @@ export function libraryScreen(app, folderId) {
     { label: 'New Notebook', icon: 'docPlus', hint: 'N', action: () => newNotebookSheet(app, folderId) },
     { label: 'New Folder', icon: 'folderPlus', action: () => newFolder() },
     { label: 'Import PDF…', icon: 'import', action: () => importPDFNotebook(app, folderId) },
-    { label: 'Import GoodNotes File…', icon: 'import', action: () => importGoodNotesFiles(app, folderId) },
+    { label: 'Import GoodNotes or Notability File…', icon: 'import', action: () => importGoodNotesFiles(app, folderId) },
     { label: 'Import Basis Notebook (.basis)…', icon: 'import', action: () => importBasisFiles(app, folderId) },
   ], { align: 'end' }));
   const folder = store.folder(folderId);
@@ -332,27 +333,33 @@ async function importGoodNotesFiles(app, folderId, picked) {
   const lines = [];
   let opened = null;
   for (const file of files) {
-    const name = file.name.replace(/\.goodnotes$/i, '');
+    const name = file.name.replace(/\.(goodnotes|note)$/i, '');
     try {
       toast(`Importing ${name}…`);
-      const r = await importGoodNotes(file, { folderId, onProgress: (n, t) => toast(`Importing ${name}: page ${n} of ${t}…`) });
+      // Both are zips: Notability notes hold a Session.plist, GoodNotes files an event log.
+      let isNotability = /\.note$/i.test(file.name);
+      try { isNotability = [...(await ZipReader.open(new Uint8Array(await file.arrayBuffer()))).entries.keys()].some((n) => /(^|\/)Session\.plist$/.test(n)); } catch { /* reported by the importer */ }
+      const r = isNotability
+        ? await importNotability(file, { folderId })
+        : await importGoodNotes(file, { folderId, onProgress: (n, t) => toast(`Importing ${name}: page ${n} of ${t}…`) });
       await store.saveDocument(r.doc);
       opened = r.doc.id;
-      let line = `${name}: ${plural(r.doc.pages.length, 'page')}, ${plural(r.strokes, 'stroke')}`;
+      let line = `${name} (${isNotability ? 'Notability' : 'GoodNotes'}): ${plural(r.doc.pages.length, 'page')}, ${plural(r.strokes, 'stroke')}`;
       if (r.images) line += `, ${plural(r.images, 'image')}`;
-      if (r.skipped) line += ` (${plural(r.skipped, 'item')} couldn’t be read)`;
-      if (r.paperErrors.length) line += `. The paper on some pages couldn’t be drawn (${r.paperErrors[0]})`;
+      if (r.text) line += ', typed text';
+      if (r.skipped) line += ` (${plural(r.skipped, 'item')} couldn’t be brought over)`;
+      if (r.paperErrors?.length) line += `. The paper on some pages couldn’t be drawn (${r.paperErrors[0]})`;
       lines.push(line);
     } catch (e) {
       lines.push(`${name}: ${e.message || 'couldn’t be imported.'}`);
     }
   }
   sheet({
-    title: 'GoodNotes Import',
+    title: 'Import',
     className: 'compact',
     build(body, close) {
       body.append(...lines.map((l) => h('p', { class: 'dialog-message' }, l)),
-        h('p', { class: 'muted small' }, 'Handwriting comes in as Basis ink you can erase and edit. Typed text boxes aren’t imported yet.'),
+        h('p', { class: 'muted small' }, 'Handwriting comes in as Basis ink you can erase and edit. GoodNotes text boxes and Notability images and audio aren’t imported yet.'),
         h('div', { class: 'dialog-actions' }, h('button', { class: 'btn primary', onclick: () => close(true) }, 'OK')));
     },
   });
@@ -483,12 +490,12 @@ export function settingsScreen(app) {
               const r = await store.importBackup(text);
               if (r.extra.calculator) calc.importData(r.extra.calculator);
               toast(`Restored ${plural(r.docs, 'notebook')} and ${plural(r.folders, 'folder')}`);
-            } catch (e) { toast(/JSON|Unexpected/.test(e.message) ? `“${file.name}” isn’t a Basis backup or GoodNotes file.` : e.message); }
+            } catch (e) { toast(/JSON|Unexpected/.test(e.message) ? `“${file.name}” isn’t a file Basis can open.` : e.message); }
           }
           if (goodnotes.length) importGoodNotesFiles(app, null, goodnotes);
         } }, icon('import', 18), 'Restore from Backup…'),
-        h('button', { class: 'btn', onclick: () => importGoodNotesFiles(app, null) }, icon('import', 18), 'Import GoodNotes File…')),
-      h('p', { class: 'muted small' }, 'Restore accepts Basis backups (.json), Basis notebooks (.basis) and GoodNotes files (.goodnotes).')),
+        h('button', { class: 'btn', onclick: () => importGoodNotesFiles(app, null) }, icon('import', 18), 'Import GoodNotes or Notability File…')),
+      h('p', { class: 'muted small' }, 'Restore accepts Basis backups (.json), Basis notebooks (.basis), GoodNotes files (.goodnotes) and Notability notes (.note).')),
     h('div', { class: 'settings-group' },
       h('h2', { class: 'list-title' }, 'Shortcuts'),
       h('dl', { class: 'shortcuts' },
