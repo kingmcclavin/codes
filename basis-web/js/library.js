@@ -294,9 +294,9 @@ async function importPDFNotebook(app, folderId) {
 }
 
 /** Converts .goodnotes files into Basis notebooks in this folder. */
-async function importGoodNotesFiles(app, folderId) {
+async function importGoodNotesFiles(app, folderId, picked) {
   // No accept filter: iPadOS greys out file types it doesn't know.
-  const files = await pickFile('', true);
+  const files = picked || await pickFile('', true);
   if (!files.length) return;
   const lines = [];
   let opened = null;
@@ -436,14 +436,24 @@ export function settingsScreen(app) {
           if (saveFile(new Blob([json], { type: 'application/json' }), `Basis Backup ${new Date().toISOString().slice(0, 10)}.json`)) toast('Backup saved');
         } }, icon('export', 18), 'Back Up Everything'),
         h('button', { class: 'btn', onclick: async () => {
-          const [file] = await pickFile('application/json,.json');
-          if (!file) return;
-          try {
-            const r = await store.importBackup(await file.text());
-            if (r.extra.calculator) calc.importData(r.extra.calculator);
-            toast(`Restored ${plural(r.docs, 'notebook')} and ${plural(r.folders, 'folder')}`);
-          } catch (e) { toast(e.message || 'That file isn’t a Basis backup.'); }
-        } }, icon('import', 18), 'Restore from Backup…'))),
+          // Any file type: iPadOS greys out types a picker doesn't list.
+          // Basis backups (.json) restore; GoodNotes files (zips) import.
+          const files = await pickFile('', true);
+          if (!files.length) return;
+          const goodnotes = [];
+          for (const file of files) {
+            const head = new Uint8Array(await file.slice(0, 2).arrayBuffer());
+            if (head[0] === 0x50 && head[1] === 0x4b) { goodnotes.push(file); continue; } // "PK" zip
+            try {
+              const r = await store.importBackup(await file.text());
+              if (r.extra.calculator) calc.importData(r.extra.calculator);
+              toast(`Restored ${plural(r.docs, 'notebook')} and ${plural(r.folders, 'folder')}`);
+            } catch (e) { toast(/JSON|Unexpected/.test(e.message) ? `“${file.name}” isn’t a Basis backup or GoodNotes file.` : e.message); }
+          }
+          if (goodnotes.length) importGoodNotesFiles(app, null, goodnotes);
+        } }, icon('import', 18), 'Restore from Backup…'),
+        h('button', { class: 'btn', onclick: () => importGoodNotesFiles(app, null) }, icon('import', 18), 'Import GoodNotes File…')),
+      h('p', { class: 'muted small' }, 'Restore accepts Basis backups (.json) and GoodNotes files (.goodnotes).')),
     h('div', { class: 'settings-group' },
       h('h2', { class: 'list-title' }, 'Shortcuts'),
       h('dl', { class: 'shortcuts' },
