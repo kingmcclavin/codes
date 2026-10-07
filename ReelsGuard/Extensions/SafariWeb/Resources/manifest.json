@@ -9,7 +9,7 @@
   "content_scripts": [
     {
       "matches": ["*://instagram.com/*", "*://*.instagram.com/*"],
-      "js": ["reels-observer.js", "content.js"],
+      "js": ["reels-observer.js", "block-overlay.js", "content.js"],
       "run_at": "document_start",
       "all_frames": false
     }

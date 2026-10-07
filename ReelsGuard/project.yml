@@ -94,6 +94,8 @@ targets:
         buildPhase: resources
       - path: Shared/WebGuard/reels-observer.js
         buildPhase: resources
+      - path: Shared/WebGuard/block-overlay.js
+        buildPhase: resources
     dependencies:
       - package: ReelsGuardCore
     info:

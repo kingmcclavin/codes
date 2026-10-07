@@ -141,23 +141,13 @@ is the surface with the most complete filtering anyway:
 | Share extension | ✅ | ❌ needs an app extension |
 | Screen Time lock and shield | ✅ | ❌ needs extensions and the Family Controls entitlement |
 
-## Web app
+## Why there's no standalone web app
 
-A website can't do what the iOS app does. instagram.com sends headers that
-forbid other sites from framing it, and browsers isolate cross-origin pages, so
-no web page can show Instagram's feed, read its pages, or interrupt its
-scrolling. A proxy that relayed instagram.com through a server would have to
-carry the user's Instagram login, which the privacy requirements rule out.
-
-The one supported way to show Instagram content on another website is the
-**official embed player** (`/reel/<code>/embed/`). It shows a single Reel or
-post with nothing after it. The web app (`Web/`) is built on it:
-
-| Feature | Web app |
-|---|---|
-| Watch a Reel someone sent (paste the link) | ✅ one Reel, no feed |
-| Links inside the player opening Instagram | ❌ blocked by the frame sandbox |
-| Daily Reel time limit + cooldown | ✅ counts time a Reel is open (playback inside the player can't be observed) |
-| Filtering the feed, profiles, Explore, DMs | ❌ not possible on the web |
-| Private accounts / embedding disabled | ❌ Instagram shows a notice instead |
-| Share sheet → app | Android (Web Share Target) only; iOS doesn't support it for web apps, so copy and paste the link |
+instagram.com sends headers that forbid other sites from framing it, and
+browsers isolate cross-origin pages, so a website can't show Instagram's feed,
+read its pages, or interrupt its scrolling. A proxy relaying instagram.com
+through a server would have to carry the user's Instagram login, which the
+privacy requirements rule out. Instagram's embed player can show a single Reel
+from a link, but that isn't Instagram with Reels removed. The supported
+browser route is the opposite: run Reels Guard *inside* Safari on
+instagram.com, as the Safari extension or the userscript.

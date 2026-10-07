@@ -39,9 +39,9 @@ jobs:
         working-directory: ReelsGuard/Shared/WebGuard
         run: npm install --no-audit --no-fund && npm test
       - name: Generated files are current
-        run: python3 scripts/build-playgrounds-app.py --check
-      - name: Web app tests
-        run: node --test Web/tests/*.test.js
+        run: |
+          python3 scripts/build-playgrounds-app.py --check
+          python3 scripts/build-userscript.py --check
 
   build:
     name: Build unsigned .ipa files
@@ -84,6 +84,8 @@ jobs:
           package ReelsGuard ReelsGuard-Full-unsigned.ipa
           # Swift Playgrounds project for iPad: unzip in Files, tap to open.
           zip -qry dist/ReelsGuard-SwiftPlaygrounds.zip ReelsGuard.swiftpm
+          # Safari userscript (install with the free Userscripts app).
+          cp Userscript/reels-guard.user.js dist/
           ls -l dist
       - uses: actions/upload-artifact@v4
         with:
@@ -100,23 +102,7 @@ jobs:
             --title "Reels Guard (latest build)" \
             --notes "Unsigned builds from ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}.
 
+          - reels-guard.user.js: Instagram without the Reels feed in Safari, via the free Userscripts app. No sideloading.
           - ReelsGuard-SwiftPlaygrounds.zip: open on iPad in Swift Playgrounds (unzip in Files, tap ReelsGuard.swiftpm).
           - ReelsGuard-Lite-unsigned.ipa: Instagram tab + Settings. No extensions or entitlements. Recommended for sideloading.
           - ReelsGuard-Full-unsigned.ipa: also includes the Safari, share and Screen Time extensions. Most sideloading tools with a free Apple ID can't grant Screen Time (Family Controls), so those features may not work."
-
-  web:
-    name: Publish web app to GitHub Pages
-    needs: checks
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      # Pushes ReelsGuard/Web to the gh-pages branch. Turn on Pages once in
-      # Settings → Pages → Deploy from a branch → gh-pages / (root).
-      - uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ github.token }}
-          publish_dir: ./ReelsGuard/Web
-          publish_branch: gh-pages
-          exclude_assets: ".github,tests"
-          force_orphan: true
-          commit_message: "Publish Reels Guard web app"
