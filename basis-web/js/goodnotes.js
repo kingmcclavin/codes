@@ -27,6 +27,7 @@ export async function importGoodNotes(file, { folderId = null, onProgress = () =
   const templates = new Map();
   const pages = new Map();
   const deleted = new Set();
+  const paperChanges = new Map();
   for (const message of delimited(events)) {
     for (const f of fields(message)) {
       if (!f.bytes) continue;
@@ -41,12 +42,17 @@ export async function importGoodNotes(file, { folderId = null, onProgress = () =
           const id = str(m, 2);
           if (!id) break;
           const size = msg(m, 8);
-          templates.set(id, { attachment: str(m, 4), w: flt(size, 1) ?? 612, h: flt(size, 2) ?? 792, pageIndex: Math.max(0, Number(vint(m, 5) ?? 1) - 1) });
+          templates.set(id, { name: str(m, 9) || '', attachment: str(m, 4), w: flt(size, 1) ?? 612, h: flt(size, 2) ?? 792, pageIndex: Math.max(0, Number(vint(m, 5) ?? 1) - 1) });
           break;
         }
         case 54: { // page
           const id = str(m, 2);
           if (id) pages.set(id, { id, template: str(msg(m, 3), 1), order: str(msg(m, 4), 1) ?? id });
+          break;
+        }
+        case 3: { // page paper changed (e.g. switched to a long page); later events win
+          const id = str(m, 2), template = str(msg(m, 3), 1);
+          if (id && template) paperChanges.set(id, template);
           break;
         }
         case 56: { // page deleted
@@ -57,6 +63,7 @@ export async function importGoodNotes(file, { folderId = null, onProgress = () =
       }
     }
   }
+  for (const [id, template] of paperChanges) if (pages.has(id) && templates.has(template)) pages.get(id).template = template;
   const ordered = [...pages.values()].filter((p) => !deleted.has(p.id)).sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0));
   if (!ordered.length) throw new GoodNotesError('No pages could be read from this GoodNotes file.');
 
@@ -75,8 +82,19 @@ export async function importGoodNotes(file, { folderId = null, onProgress = () =
       if (!paperCache.has(key)) {
         const pdf = await zip.file(`attachments/${t.attachment}`);
         let paper = null;
-        if (pdf && pdf[0] === 0x25 && pdf[1] === 0x50 && pdf[2] === 0x44 && pdf[3] === 0x46) { // %PDF
-          try { paper = await renderPDFPageImage(pdf, t.pageIndex); } catch (e) { paper = null; result.paperErrors.push(e.message || String(e)); }
+        if (isPDF(pdf)) {
+          try { paper = await renderPDFPageImage(pdf, t.pageIndex); } catch (e) { paper = null; if (!/empty/.test(e.message)) result.paperErrors.push(e.message || String(e)); }
+        }
+        // GoodNotes sometimes exports built-in paper as an empty placeholder PDF. Use the
+        // same paper family from another template in the file (e.g. its long-page version).
+        if (!paper) {
+          const family = paperFamily(t.name);
+          for (const other of templates.values()) {
+            if (paper || other === t || !family || paperFamily(other.name) !== family || !other.attachment) continue;
+            const bytes = await zip.file(`attachments/${other.attachment}`);
+            if (!isPDF(bytes)) continue;
+            try { paper = await renderPDFPageImage(bytes, other.pageIndex, { cropAspect: t.h / t.w }); } catch { paper = null; }
+          }
         }
         paperCache.set(key, paper);
       }
@@ -98,6 +116,14 @@ export async function importGoodNotes(file, { folderId = null, onProgress = () =
   return { doc, ...result };
 }
 
+const isPDF = (b) => !!b && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46; // %PDF
+
+/** "CC365888-…_standard_1_3 - Black" and "CC365888-…_455_5000_1_3 - Black" are the same paper. */
+function paperFamily(name) {
+  const parts = String(name || '').split('_');
+  return parts.length >= 2 ? `${parts[0]}|${parts[parts.length - 1]}` : '';
+}
+
 /** A page's ink lives in `notes/<page id + 1>`. */
 export function incrementedUUID(s) {
   const hex = String(s).replace(/-/g, '');
@@ -117,6 +143,13 @@ async function elementsFromNotes(data, zip, result, imageAssets) {
   const order = [];
   const latest = new Map();
   const erased = new Set();
+  // Elements (lasso groups) that ink can live inside: id → origin and scale. Last record wins.
+  const containers = new Map();
+  for (const message of delimited(data)) {
+    const c = msg(fields(message), 20);
+    const id = str(c, 1), t = msg(c, 20);
+    if (id && t) containers.set(id, { x: flt(msg(t, 1), 1) ?? 0, y: flt(msg(t, 1), 2) ?? 0, scale: flt(t, 3) || 1 });
+  }
   for (const message of delimited(data)) {
     const fs = fields(message);
     const headerId = str(fs, 1);
@@ -127,7 +160,7 @@ async function elementsFromNotes(data, zip, result, imageAssets) {
     const strokeBody = msg(fs, 7);
     const strokeId = str(strokeBody, 1);
     if (strokeBody && strokeId) {
-      const s = strokeFrom(strokeBody);
+      const s = strokeFrom(strokeBody, containers);
       if (s) {
         if (!latest.has(strokeId)) order.push(strokeId);
         latest.set(strokeId, s);
@@ -160,7 +193,7 @@ async function elementsFromNotes(data, zip, result, imageAssets) {
 }
 
 /** Stroke body: 2 = compressed geometry, 4 = RGBA colour. */
-function strokeFrom(body) {
+function strokeFrom(body, containers = new Map()) {
   const blob = bytesOf(body, 2);
   const raw = blob && decodeAppleLZ4(blob);
   const geometry = raw && parseStrokeGeometry(raw);
@@ -171,13 +204,26 @@ function strokeFrom(body) {
   const style = {
     kind: isHighlighter ? 'highlighter' : 'fineliner',
     color: { r, g, b, a: isHighlighter ? 1 : a },
-    width: Math.max(0.3, geometry.width),
+    width: Math.max(0.3, geometry.width * (containerScale(body, containers))),
     opacity: isHighlighter ? Math.max(0.3, a) : 1,
     pressure: 0, tilt: 0, lineStyle: 'solid',
   };
-  const pts = geometry.points.map((p) => ({ x: p.x, y: p.y, force: 0.25 }));
+  // Field 6 is a translation GoodNotes records when ink is moved with the
+  // lasso. Ink inside an element (field 100 → a container record) is stored
+  // relative to it: page position = container origin + scale × (points + offset).
+  const move = msg(body, 6);
+  let dx = flt(move, 1) ?? 0, dy = flt(move, 2) ?? 0;
+  let ox = 0, oy = 0, k = 1;
+  const parent = str(msg(body, 100), 1);
+  if (parent && containers.has(parent)) ({ x: ox, y: oy, scale: k } = containers.get(parent));
+  const pts = geometry.points.map((p) => ({ x: ox + k * (p.x + dx), y: oy + k * (p.y + dy), force: 0.25 }));
   if (pts.length === 1) pts.push({ ...pts[0] }); // a dot
   return makeStroke(pts, style);
+}
+
+function containerScale(body, containers) {
+  const parent = str(msg(body, 100), 1);
+  return parent && containers.has(parent) ? containers.get(parent).scale : 1;
 }
 
 /** GoodNotes stroke geometry ("tpl" record): a start point followed by

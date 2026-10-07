@@ -72,30 +72,35 @@ export async function importPDF(file, onProgress = () => {}) {
 }
 
 /** Renders one page of PDF bytes into a stored page image; also returns the paper's average color. */
-export async function renderPDFPageImage(data, pageIndex = 0) {
+export async function renderPDFPageImage(data, pageIndex = 0, { cropAspect = 0 } = {}) {
   const lib = await pdfjs();
   const pdf = await lib.getDocument({ data: data.slice(), isEvalSupported: false }).promise;
   const page = await pdf.getPage(Math.min(pdf.numPages, pageIndex + 1));
   const vp1 = page.getViewport({ scale: 1 });
-  const scale = Math.min(2.5, 2400 / Math.max(vp1.width, vp1.height));
+  if (vp1.width < 2 || vp1.height < 2) { pdf.destroy?.(); throw new Error('empty paper'); }
+  // Sharp at page width, within Safari's canvas limit (about 16 megapixels).
+  const shownH = cropAspect > 0 ? Math.min(vp1.height, vp1.width * cropAspect) : vp1.height;
+  const scale = Math.min(2.5, 2400 / vp1.width, Math.sqrt(12e6 / (vp1.width * shownH)));
   const vp = page.getViewport({ scale });
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil(vp.width);
-  canvas.height = Math.ceil(vp.height);
+  canvas.height = Math.ceil(shownH * scale);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  // With cropAspect only the top of the page is drawn (the canvas clips the rest).
+  const canvas2 = canvas;
   // Average colour of the paper (dark paper keeps light ink readable).
   const small = document.createElement('canvas');
   small.width = small.height = 16;
   const sctx = small.getContext('2d', { willReadFrequently: true });
-  sctx.drawImage(canvas, 0, 0, 16, 16);
+  sctx.drawImage(canvas2, 0, 0, 16, 16);
   const px = sctx.getImageData(0, 0, 16, 16).data;
   let r = 0, g = 0, b = 0;
   for (let i = 0; i < px.length; i += 4) { r += px[i]; g += px[i + 1]; b += px[i + 2]; }
   const n = (px.length / 4) * 255;
-  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.9));
+  const blob = await new Promise((res) => canvas2.toBlob(res, 'image/jpeg', 0.9));
   const asset = await store.putAsset(blob);
   pdf.destroy?.();
   return { asset, color: { r: r / n, g: g / n, b: b / n, a: 1 } };
