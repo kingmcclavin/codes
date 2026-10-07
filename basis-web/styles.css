@@ -253,7 +253,11 @@ textarea.field { resize: vertical; line-height: 1.5; }
 
 .customize-preview { display: flex; justify-content: center; padding: 8px 0; }
 .icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 6px; }
-.icon-cell { height: 42px; border-radius: 10px; border: 1px solid transparent; background: var(--surface-2); font-size: 20px; }
+.icon-picker { display: flex; flex-direction: column; gap: 6px; }
+.icon-group-title { margin: 8px 0 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.icon-cell { height: 42px; border-radius: 10px; border: 1px solid transparent; background: var(--surface-2); color: var(--fg); display: flex; align-items: center; justify-content: center; }
+.icon-none { font-size: 12px; color: var(--muted); }
+.lib-icon { display: inline-flex; line-height: 0; }
 .icon-cell.on { border-color: var(--accent); background: var(--accent-soft); }
 
 .list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }

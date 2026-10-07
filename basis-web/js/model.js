@@ -187,4 +187,3 @@ export function makeDocument({ title, size, background, folderId = null, color =
 
 /** Library colors and icons (emoji stand in for SF Symbols). */
 export const LIBRARY_COLORS = ['#1F6FEB', '#5E5CE6', '#9B51E0', '#E84393', '#E5484D', '#F76B15', '#D4A017', '#30A46C', '#12A594', '#0891B2', '#8D6E63', '#5F6B7A'];
-export const LIBRARY_ICONS = ['📝', '📘', '📚', '🎓', '📐', '📏', '∑', '√', '%', '📈', '📊', '⚛️', '🧪', '🔬', '🌿', '🧠', '❤️', '💻', '⚙️', '🔨', '🔧', '⚡', '💡', '🌎', '🏛️', '💼', '💲', '👥', '📅', '🎵', '🎨', '📷', '⭐', '🚩', '🔖', '🏠', '✈️', '🚗', '🏷️', '📦'];

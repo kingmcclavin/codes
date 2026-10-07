@@ -5,7 +5,7 @@ import { h, relativeTime, plural, hexToRgba, rgbaToHex, storage } from './util.j
 import { icon } from './icons.js';
 import { sheet, askText, confirmDialog, menu, toast, segmented, selectField, swatches, toggle, iconButton, pickFile, saveFile } from './ui.js';
 import { store } from './store.js';
-import { PAPER_SIZES, TEMPLATES, PAPER_COLORS, LIBRARY_COLORS, LIBRARY_ICONS, sizeFor, makeBackground, makeDocument, makePage, describeSize } from './model.js';
+import { PAPER_SIZES, TEMPLATES, PAPER_COLORS, LIBRARY_COLORS, sizeFor, makeBackground, makeDocument, makePage, describeSize } from './model.js';
 import { renderPageCanvas } from './render.js';
 import { importPDF } from './pdf.js';
 import { importGoodNotes, ZipReader } from './goodnotes.js';
@@ -14,18 +14,19 @@ import { exportBasis, importBasis, isBasisArchive } from './basisfile.js';
 import { safeFileName } from './editor.js';
 import { calc } from './calc/store.js';
 import { VERSION } from './version.js';
+import { LIBRARY_ICON_GROUPS, libraryIcon, libraryIconName } from './libicons.js';
 
 // ---------- Tiles ----------
 
 export function docTile(color, iconText, size = 36) {
   const c = color || 'var(--accent)';
   return h('span', { class: 'doc-tile', style: { '--tile': c, width: size + 'px', height: Math.round(size * 1.28) + 'px', fontSize: Math.round(size * 0.42) + 'px' }, 'aria-hidden': 'true' },
-    h('span', { class: 'doc-tile-spine' }), h('span', { class: 'doc-tile-icon' }, iconText || ''));
+    h('span', { class: 'doc-tile-spine' }), h('span', { class: 'doc-tile-icon' }, libraryIcon(iconText, Math.max(9, Math.round(size * 0.5)))));
 }
 
 export function folderTile(color, iconText, size = 36) {
   return h('span', { class: 'folder-tile', style: { '--tile': color || 'var(--accent)', width: size + 'px', height: Math.round(size * 0.82) + 'px', fontSize: Math.round(size * 0.36) + 'px' }, 'aria-hidden': 'true' },
-    h('span', { class: 'folder-tab' }), h('span', { class: 'folder-body' }, iconText || ''));
+    h('span', { class: 'folder-tab' }), h('span', { class: 'folder-body' }, size >= 20 ? libraryIcon(iconText, Math.round(size * (size < 30 ? 0.5 : 0.42))) : null));
 }
 
 // ---------- Sidebar ----------
@@ -375,12 +376,16 @@ function customizeSheet(item) {
   let color = cur?.color || null, ic = cur?.icon || null;
   const previewHost = h('div', { class: 'customize-preview' });
   const renderPreview = () => previewHost.replaceChildren(isFolder ? folderTile(color, ic, 90) : docTile(color, ic, 76));
-  const icons = h('div', { class: 'icon-grid' });
-  const renderIcons = () => icons.replaceChildren(...[null, ...LIBRARY_ICONS].map((x) => {
-    const b = h('button', { class: `icon-cell ${ic === x ? 'on' : ''}`, 'aria-label': x || 'No icon', 'aria-pressed': String(ic === x) }, x || '∅');
+  ic = libraryIconName(ic);
+  const icons = h('div', { class: 'icon-picker' });
+  const cell = (x) => {
+    const b = h('button', { class: `icon-cell ${ic === x ? 'on' : ''}`, 'aria-label': x || 'No icon', 'aria-pressed': String(ic === x) }, x ? libraryIcon(x, 22) : h('span', { class: 'icon-none' }, 'None'));
     b.addEventListener('click', () => { ic = x; renderIcons(); renderPreview(); });
     return b;
-  }));
+  };
+  const renderIcons = () => icons.replaceChildren(
+    h('div', { class: 'icon-grid' }, cell(null)),
+    ...LIBRARY_ICON_GROUPS.flatMap(([label, names]) => [h('h3', { class: 'icon-group-title' }, label), h('div', { class: 'icon-grid' }, ...names.map(cell))]));
   sheet({
     title: 'Customize',
     actions: {
