@@ -60,7 +60,7 @@ export async function importGoodNotes(file, { folderId = null, onProgress = () =
   const ordered = [...pages.values()].filter((p) => !deleted.has(p.id)).sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0));
   if (!ordered.length) throw new GoodNotesError('No pages could be read from this GoodNotes file.');
 
-  const result = { strokes: 0, images: 0, skipped: 0 };
+  const result = { strokes: 0, images: 0, skipped: 0, paperErrors: [] };
   const paperCache = new Map();
   const imageAssets = new Map();
   const outPages = [];
@@ -76,7 +76,7 @@ export async function importGoodNotes(file, { folderId = null, onProgress = () =
         const pdf = await zip.file(`attachments/${t.attachment}`);
         let paper = null;
         if (pdf && pdf[0] === 0x25 && pdf[1] === 0x50 && pdf[2] === 0x44 && pdf[3] === 0x46) { // %PDF
-          try { paper = await renderPDFPageImage(pdf, t.pageIndex); } catch { paper = null; }
+          try { paper = await renderPDFPageImage(pdf, t.pageIndex); } catch (e) { paper = null; result.paperErrors.push(e.message || String(e)); }
         }
         paperCache.set(key, paper);
       }

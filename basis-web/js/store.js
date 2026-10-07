@@ -207,13 +207,28 @@ class Store extends EventTarget {
 
   // ---------- Assets (images, imported PDF pages) ----------
 
+  // Assets are stored as raw bytes, not Blobs: Safari often can't display
+  // a Blob read back from IndexedDB ("WebKitBlobResource error 1").
   async putAsset(blob) {
     const id = uuid();
-    await this.db.put('assets', { id, blob, type: blob.type });
+    await this.db.put('assets', { id, data: await blob.arrayBuffer(), type: blob.type });
     return id;
   }
 
-  async assetBlob(id) { return (await this.db.get('assets', id))?.blob; }
+  async assetBlob(id) {
+    const rec = await this.db.get('assets', id);
+    if (!rec) return null;
+    if (rec.data) return new Blob([rec.data], { type: rec.type || '' });
+    if (!rec.blob) return null;
+    // Older records kept a Blob; copy it into bytes (and migrate) so Safari can use it.
+    try {
+      const data = await rec.blob.arrayBuffer();
+      await this.db.put('assets', { id, data, type: rec.type || rec.blob.type });
+      return new Blob([data], { type: rec.type || rec.blob.type });
+    } catch {
+      return null;
+    }
+  }
 
   async assetURL(id) {
     if (this.assetURLs.has(id)) return this.assetURLs.get(id);
@@ -222,6 +237,12 @@ class Store extends EventTarget {
     const url = URL.createObjectURL(blob);
     this.assetURLs.set(id, url);
     return url;
+  }
+
+  /** Data URL fallback for viewers that refuse blob: images. */
+  async assetDataURL(id) {
+    const blob = await this.assetBlob(id);
+    return blob ? blobToDataURL(blob) : null;
   }
 
   async deleteAsset(id) {
@@ -255,8 +276,13 @@ class Store extends EventTarget {
     const data = JSON.parse(text);
     if (data.format !== 'basis-backup') throw new Error('This file isn’t a Basis backup.');
     for (const [id, url] of Object.entries(data.assets || {})) {
-      const blob = await (await fetch(url)).blob();
-      await this.db.put('assets', { id, blob, type: blob.type });
+      // Decode the data URL by hand (fetch of data: URLs can be blocked).
+      const comma = url.indexOf(',');
+      const type = /^data:([^;,]*)/.exec(url)?.[1] || '';
+      const bin = atob(url.slice(comma + 1));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      await this.db.put('assets', { id, data: bytes.buffer, type });
     }
     for (const f of data.folders || []) {
       await this.db.put('folders', f);

@@ -10,15 +10,29 @@ const JSPDF = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.
 const loaded = new Map();
 const LOAD_ERROR = 'Couldn’t load the PDF library. Check your connection and try again.';
 
+// Bundled copies ship with the app (works offline and where the CDN is
+// blocked); the CDN is the fallback.
+const LOCAL = {
+  [PDFJS]: 'vendor/pdf.min.js',
+  [PDFJS_WORKER]: 'vendor/pdf.worker.min.js',
+  [JSPDF]: 'vendor/jspdf.umd.min.js',
+};
+
+function addScript(src, ready) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => { if (ready()) resolve(); else { s.remove(); reject(new Error(LOAD_ERROR)); } };
+    s.onerror = () => { s.remove(); reject(new Error(LOAD_ERROR)); };
+    document.head.append(s);
+  });
+}
+
 function loadScript(src, ready) {
+  if (ready()) return Promise.resolve();
   if (!loaded.has(src)) {
-    loaded.set(src, new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = src;
-      s.onload = () => { if (ready()) resolve(); else { loaded.delete(src); s.remove(); reject(new Error(LOAD_ERROR)); } };
-      s.onerror = () => { loaded.delete(src); s.remove(); reject(new Error(LOAD_ERROR)); };
-      document.head.append(s);
-    }));
+    const p = addScript(new URL(LOCAL[src], document.baseURI).href, ready).catch(() => addScript(src, ready));
+    loaded.set(src, p.catch((e) => { loaded.delete(src); throw e; }));
   }
   return loaded.get(src);
 }

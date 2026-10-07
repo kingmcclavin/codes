@@ -310,6 +310,7 @@ async function importGoodNotesFiles(app, folderId, picked) {
       let line = `${name}: ${plural(r.doc.pages.length, 'page')}, ${plural(r.strokes, 'stroke')}`;
       if (r.images) line += `, ${plural(r.images, 'image')}`;
       if (r.skipped) line += ` (${plural(r.skipped, 'item')} couldn’t be read)`;
+      if (r.paperErrors.length) line += `. The paper on some pages couldn’t be drawn (${r.paperErrors[0]})`;
       lines.push(line);
     } catch (e) {
       lines.push(`${name}: ${e.message || 'couldn’t be imported.'}`);

@@ -17,13 +17,16 @@ export function assetImage(id) {
   if (v instanceof HTMLImageElement) return v;
   if (!v) {
     images.set(id, 'loading');
-    store.assetURL(id).then((url) => {
+    const load = (url, fallback) => {
       if (!url) { images.set(id, 'error'); return; }
       const img = new Image();
       img.onload = () => { images.set(id, img); onImageLoad(id); };
-      img.onerror = () => images.set(id, 'error');
+      img.onerror = () => (fallback ? fallback() : images.set(id, 'error'));
       img.src = url;
-    });
+    };
+    // Object URL first; if the browser won't load it, retry as a data URL.
+    store.assetURL(id).then((url) => load(url, () => store.assetDataURL(id).then((d) => load(d, null))))
+      .catch(() => images.set(id, 'error'));
   }
   return null;
 }

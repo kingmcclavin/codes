@@ -46,7 +46,7 @@ This folder is a static site with no build step. Import the repository in Vercel
 
 Everything is stored in this browser (IndexedDB and localStorage) on this device. **Settings → Back Up Everything** saves a JSON file you can restore in any browser.
 
-PDF import and export load pdf.js and jsPDF from cdnjs the first time you use them.
+PDF import/export and GoodNotes paper use pdf.js and jsPDF, bundled in `vendor/` (Apache-2.0 and MIT licensed), with cdnjs as a fallback.
 
 ## Not ported
 
