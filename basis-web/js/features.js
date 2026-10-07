@@ -18,7 +18,7 @@ export const FEATURES = {
 // SHA-256 of 'basis-dev:' + password. The password itself isn't in the code.
 // To change it, run in a browser console:
 //   [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('basis-dev:NEW PASSWORD')))].map((b) => b.toString(16).padStart(2, '0')).join('')
-const PASSWORD_HASH = '99fe70f23f9263537581993d7a7ffe9ea99df8d8271e9a40a18f615b31b8b5d0';
+const PASSWORD_HASH = '1ca2812ed2b6cd20065722e37b9ab76d4f6e43d5fac0cfe1d7f321f0aa80cdd7';
 const KEY = 'basis.dev';
 
 const state = () => storage.get(KEY, { unlocked: false, off: [] });
