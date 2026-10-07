@@ -30,6 +30,7 @@ export class CanvasView {
     this.dpr = window.devicePixelRatio || 1;
     this.view = { x: 0, y: 0, zoom: 1 };
     this.pointers = new Map();
+    this.palms = new Set(); // touch ids rejected as a resting hand
     this.interaction = null;   // active tool gesture
     this.gesture = null;       // pan / pinch
     this.selection = null;     // { pageId, ids: Set }
@@ -352,6 +353,13 @@ export class CanvasView {
     el.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     el.addEventListener('dblclick', (e) => this.onDoubleClick(e));
     el.addEventListener('contextmenu', (e) => e.preventDefault());
+    // iPadOS starts text selection, the magnifier and callouts from a resting
+    // palm or a Pencil press unless the touch is cancelled. Pointer events still
+    // arrive; double-taps are then detected in onPointerUp instead of dblclick.
+    el.addEventListener('touchstart', (e) => {
+      if ([...e.changedTouches].some((t) => t.touchType === 'stylus')) this.stylusTouches = true;
+      e.preventDefault();
+    }, { passive: false });
     // Safari pinch on trackpads.
     el.addEventListener('gesturestart', (e) => { e.preventDefault(); this.gestureZoom = this.view.zoom; });
     el.addEventListener('gesturechange', (e) => { e.preventDefault(); this.setZoom(this.gestureZoom * e.scale, this.local(e)); });
@@ -386,7 +394,9 @@ export class CanvasView {
     this.stoppedMomentum = this.stopMomentum();
     if (this.textEdit && e.target === this.overlay) { this.endTextEdit(); if (this.settings.tool !== 'text') return; }
     this.overlay.focus({ preventScroll: true });
-    this.overlay.setPointerCapture?.(e.pointerId);
+    if (e.pointerType === 'touch' && this.isPalm(e)) { this.palms.add(e.pointerId); return; }
+    if (e.pointerType === 'pen') this.rejectPalms();
+    try { this.overlay.setPointerCapture?.(e.pointerId); } catch { /* pointer already gone */ }
     const s = this.local(e);
     this.pointers.set(e.pointerId, { type: e.pointerType, start: s, last: s, t0: performance.now() });
     if (e.pointerType === 'pen') this.penSeen = true;
@@ -410,7 +420,36 @@ export class CanvasView {
     this.beginTool(e, s);
   }
 
+  // ---------- Palm rejection ----------
+  // Once the Pencil has been used, a touch that lands while it's writing (or
+  // just after), or with a palm-sized contact, is a resting hand: ignore it.
+
+  isPalm(e) {
+    if (!this.penSeen) return false;
+    const penDown = [...this.pointers.values()].some((p) => p.type === 'pen');
+    const recentPen = performance.now() - (this.lastPenUp || 0) < 700;
+    const big = Math.max(e.width || 0, e.height || 0) > 44;
+    return penDown || recentPen || big;
+  }
+
+  /** The Pencil came down: touches already on the screen were the palm, so undo what they started. */
+  rejectPalms() {
+    const touchIds = [...this.pointers.entries()].filter(([, p]) => p.type === 'touch').map(([id]) => id);
+    if (!touchIds.length) return;
+    const g = this.gesture;
+    if (g && g.ids.some((id) => touchIds.includes(id))) {
+      this.gesture = null;
+      if (this.pull) { this.wheelPull = 0; this.setPull(0); }
+      // A palm that landed just before the Pencil may have nudged the page; put it back.
+      if (performance.now() - g.t0 < 600) { this.view = { ...g.startView }; this.clampView(); this.viewChanged(); }
+    }
+    if (this.interaction?.pointerType === 'touch') this.cancelInteraction();
+    for (const id of touchIds) { this.pointers.delete(id); this.palms.add(id); }
+    this.lastTap = null;
+  }
+
   onPointerMove(e) {
+    if (this.palms.has(e.pointerId)) return;
     const ptr = this.pointers.get(e.pointerId);
     const s = this.local(e);
     if (!ptr) {
@@ -428,13 +467,19 @@ export class CanvasView {
   }
 
   onPointerUp(e, cancelled = false) {
+    if (this.palms.delete(e.pointerId)) return;
     const ptr = this.pointers.get(e.pointerId);
     this.pointers.delete(e.pointerId);
     if (!ptr) return;
+    if (ptr.type === 'pen') this.lastPenUp = performance.now();
+    if (!cancelled && this.stylusTouches && this.isPenDoubleTap(ptr)) this.penDoubleTap = e;
     if (!cancelled && this.isDoubleTap(ptr)) {
       this.gesture = null;
       if (this.interaction?.pointerId === e.pointerId) { const it = this.interaction; this.interaction = null; it.cancel?.(); }
-      this.toggleFitZoom(ptr.last);
+      // Double-tapping a text box edits it; anywhere else zooms.
+      const i = this.pageAtScreen(ptr.last);
+      if (i >= 0 && this.topElementAt(i, this.screenToPage(i, ptr.last))?.type === 'text') this.onDoubleClick(e);
+      else this.toggleFitZoom(ptr.last);
       return;
     }
     if (this.gesture) {
@@ -448,6 +493,18 @@ export class CanvasView {
       if (cancelled) it.cancel?.(); else it.end(e);
       this.requestRender();
     }
+    if (this.penDoubleTap === e) { this.penDoubleTap = null; this.onDoubleClick(e); }
+  }
+
+  /** Two quick Pencil taps in the same spot (stands in for dblclick when Pencil touches are cancelled). */
+  isPenDoubleTap(ptr) {
+    if (ptr.type !== 'pen') return false;
+    const now = performance.now();
+    if (!(dist(ptr.start, ptr.last) < 8 && now - ptr.t0 < 300)) { this.lastPenTap = null; return false; }
+    const prev = this.lastPenTap;
+    if (prev && now - prev.t < 350 && dist(prev.p, ptr.last) < 20) { this.lastPenTap = null; return true; }
+    this.lastPenTap = { t: now, p: ptr.last };
+    return false;
   }
 
   cancelInteraction() {

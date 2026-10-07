@@ -329,6 +329,9 @@ kbd { font-size: 12px; padding: 2px 7px; border-radius: 6px; background: var(--s
 .options-bar .toggle-row { gap: 8px; font-size: 13px; }
 .options-bar .range { width: 120px; }
 
+/* Pencil presses mustn't start Safari's text selection, magnifier or callout on the page. */
+.editor { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.editor input, .editor textarea, .editor [contenteditable] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 .canvas-host { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--desk); touch-action: none; }
 .canvas-main, .canvas-overlay { position: absolute; left: 0; top: 0; }
 .canvas-overlay { touch-action: none; outline: none; cursor: crosshair; }
