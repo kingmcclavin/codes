@@ -166,9 +166,16 @@ class App {
 
 const app = new App(document.getElementById('app'));
 window.__app = app;
-app.start().catch((e) => {
+const hideSplash = () => {
+  const splash = document.getElementById('splash');
+  if (!splash) return;
+  splash.classList.add('done');
+  setTimeout(() => splash.remove(), 400);
+};
+app.start().then(hideSplash, (e) => {
   console.error(e);
   document.getElementById('app').textContent = 'Basis couldn’t start: ' + e.message;
+  hideSplash();
 });
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !location.hostname.endsWith('claude.ai') && !location.hostname.includes('claudeusercontent')) {

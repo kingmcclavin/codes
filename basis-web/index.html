@@ -17,9 +17,25 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=IBM+Plex+Mono:wght@300;400;500;600&family=Instrument+Sans:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="styles.css">
+  <script>
+    // Apply the saved theme before anything paints, so the splash matches.
+    try { const t = JSON.parse(localStorage.getItem('basis.prefs') || '{}').theme; if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch {}
+  </script>
+  <style>
+    /* Splash shown while the app loads; inline so it appears before styles.css. */
+    #splash { position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #eef0f4; color: #15171c; transition: opacity 0.35s ease, visibility 0.35s; }
+    #splash.done { opacity: 0; visibility: hidden; }
+    #splash .splash-icon { width: 104px; height: 104px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22); animation: splash-in 0.5s ease both; }
+    #splash .splash-word { width: 150px; height: 54px; background: currentColor; -webkit-mask: url("icons/wordmark.png") center / contain no-repeat; mask: url("icons/wordmark.png") center / contain no-repeat; animation: splash-in 0.5s 0.1s ease both; }
+    @keyframes splash-in { from { opacity: 0; transform: translateY(6px) scale(0.97); } }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #splash { background: #131417; color: #eceef2; } }
+    :root[data-theme="dark"] #splash { background: #131417; color: #eceef2; }
+    @media (prefers-reduced-motion: reduce) { #splash .splash-icon, #splash .splash-word { animation: none; } }
+  </style>
 </head>
 <body>
-  <div id="app" class="app" aria-live="polite">Loading Basis…</div>
+  <div id="splash" role="img" aria-label="Loading Basis"><img class="splash-icon" src="icons/icon-192.png" alt=""><div class="splash-word"></div></div>
+  <div id="app" class="app" aria-live="polite"></div>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>
