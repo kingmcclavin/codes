@@ -217,7 +217,9 @@ function drawImage(ctx, e) {
   ctx.translate(b.cx, b.cy); ctx.rotate(b.rot || 0);
   ctx.globalAlpha *= e.opacity ?? 1;
   const img = assetImage(e.asset);
-  if (img) ctx.drawImage(img, -b.w / 2, -b.h / 2, b.w, b.h);
+  const c = e.crop; // part of the image shown, as fractions of its width and height
+  if (img && c) ctx.drawImage(img, c.x * img.naturalWidth, c.y * img.naturalHeight, c.w * img.naturalWidth, c.h * img.naturalHeight, -b.w / 2, -b.h / 2, b.w, b.h);
+  else if (img) ctx.drawImage(img, -b.w / 2, -b.h / 2, b.w, b.h);
   else { ctx.fillStyle = 'rgba(128,128,128,0.25)'; ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h); }
   ctx.restore();
 }

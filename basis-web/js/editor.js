@@ -354,6 +354,7 @@ export class Editor {
             iconButton('copy', 'Copy (⌘C)', () => this.copy(), { size: 18 }),
             iconButton('duplicate', 'Duplicate (⌘D)', () => this.duplicateSelection(), { size: 18 }),
             iconButton('trash', 'Delete (⌫)', () => this.deleteSelection(), { size: 18, cls: 'danger' }),
+            els.length === 1 && els[0].type === 'image' ? h('button', { class: 'opt-btn', onclick: () => this.cropImage() }, icon('crop', 18), h('span', {}, 'Crop')) : null,
             sep(),
             els.some((e) => e.type !== 'image') ? this.colorStrip() : null,
             h('button', { class: 'opt-btn', onclick: (e) => this.showSelectionStyle(e.currentTarget) }, icon('sliders', 18), h('span', {}, 'Style')),
@@ -765,6 +766,77 @@ export class Editor {
   }
 
   // ---------- Menus & inserts ----------
+
+  // ---------- Crop ----------
+
+  /** Crops the selected image. Non-destructive: the whole image is kept, so it can be re-cropped or reset. */
+  async cropImage() {
+    const sel = this.canvas.selection;
+    const el = this.canvas.selectedElements()[0];
+    if (!sel || !el || el.type !== 'image') return;
+    const url = (await store.assetURL(el.asset)) || (await store.assetDataURL(el.asset));
+    if (!url) { toast('This image couldn’t be loaded.'); return; }
+    const full = { x: 0, y: 0, w: 1, h: 1 };
+    let r = { ...(el.crop || full) };
+    const img = h('img', { class: 'crop-img', src: url, alt: '', draggable: 'false' });
+    const box = h('div', { class: 'crop-box' }, ...['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((d) => h('span', { class: `crop-handle ${d}`, 'data-dir': d })));
+    const stage = h('div', { class: 'crop-stage' }, h('div', { class: 'crop-inner' }, img, box));
+    const place = () => Object.assign(box.style, { left: r.x * 100 + '%', top: r.y * 100 + '%', width: r.w * 100 + '%', height: r.h * 100 + '%' });
+    place();
+    const MIN = 0.03;
+    box.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      box.setPointerCapture(e.pointerId);
+      const dir = e.target.dataset.dir || 'move';
+      const W = img.clientWidth, H = img.clientHeight, x0 = e.clientX, y0 = e.clientY, start = { ...r };
+      const onMove = (m) => {
+        const dx = (m.clientX - x0) / W, dy = (m.clientY - y0) / H;
+        let { x, y, w, h: hh } = start;
+        if (dir === 'move') {
+          x = clamp(x + dx, 0, 1 - w); y = clamp(y + dy, 0, 1 - hh);
+        } else {
+          if (dir.includes('w')) { const nx = clamp(x + dx, 0, x + w - MIN); w += x - nx; x = nx; }
+          if (dir.includes('e')) w = clamp(w + dx, MIN, 1 - x);
+          if (dir.includes('n')) { const ny = clamp(y + dy, 0, y + hh - MIN); hh += y - ny; y = ny; }
+          if (dir.includes('s')) hh = clamp(hh + dy, MIN, 1 - y);
+        }
+        r = { x, y, w, h: hh };
+        place();
+      };
+      const onUp = () => { box.removeEventListener('pointermove', onMove); box.removeEventListener('pointerup', onUp); box.removeEventListener('pointercancel', onUp); };
+      box.addEventListener('pointermove', onMove);
+      box.addEventListener('pointerup', onUp);
+      box.addEventListener('pointercancel', onUp);
+    });
+    const apply = () => {
+      const c0 = el.crop || full;
+      const round = (v) => Math.round(v * 1e4) / 1e4;
+      const c1 = { x: round(r.x), y: round(r.y), w: round(r.w), h: round(r.h) };
+      if (['x', 'y', 'w', 'h'].every((k) => Math.abs(c1[k] - c0[k]) < 1e-4)) return;
+      // Keep the visible part where it is on the page: the box shrinks or grows around it.
+      const b = el.box, sx = b.w / c0.w, sy = b.h / c0.h;
+      const dx = (c1.x + c1.w / 2 - (c0.x + c0.w / 2)) * sx, dy = (c1.y + c1.h / 2 - (c0.y + c0.h / 2)) * sy;
+      const rot = b.rot || 0, cos = Math.cos(rot), sin = Math.sin(rot);
+      const nb = { ...b, cx: b.cx + dx * cos - dy * sin, cy: b.cy + dx * sin + dy * cos, w: c1.w * sx, h: c1.h * sy };
+      const isFull = c1.x <= 1e-4 && c1.y <= 1e-4 && c1.w >= 0.9999 && c1.h >= 0.9999;
+      this.canvas.commit('Crop', sel.pageId, (els) => els.map((x) => {
+        if (x.id !== el.id) return x;
+        const { crop, ...rest } = x;
+        return isFull ? { ...rest, box: nb } : { ...rest, crop: c1, box: nb };
+      }));
+      this.canvas.setSelection(sel.pageId, [el.id]);
+    };
+    sheet({
+      title: 'Crop Image',
+      wide: true,
+      actions: { confirm: 'Done', onConfirm: () => { apply(); } },
+      build: (body) => body.append(
+        h('div', { class: 'crop-wrap' }, stage),
+        h('div', { class: 'crop-foot' },
+          h('span', { class: 'muted small' }, 'Drag the corners or edges to crop. Drag inside to move the frame.'),
+          h('button', { class: 'btn ghost small', onclick: () => { r = { ...full }; place(); } }, 'Reset'))),
+    });
+  }
 
   // ---------- Search ----------
 

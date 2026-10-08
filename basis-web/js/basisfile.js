@@ -38,12 +38,15 @@ function fromBase64(b64) {
 
 export async function exportBasis(doc, onProgress = () => {}) {
   const assets = {};
-  const addAsset = async (id, ext) => {
-    const name = `${id}.${ext}`;
+  const addAsset = async (id, ext, crop = null) => {
+    const name = crop ? `${id}-crop-${[crop.x, crop.y, crop.w, crop.h].map((v) => Math.round(v * 1e4)).join('-')}.png` : `${id}.${ext}`;
     if (!assets[name]) {
       const blob = await store.assetBlob(id);
       if (!blob) return null;
-      assets[name] = toBase64(new Uint8Array(await blob.arrayBuffer()));
+      // The iPad app has no crop setting, so a cropped image is exported as just the cropped part.
+      const out = crop ? await cropBlob(blob, crop) : blob;
+      if (!out) return null;
+      assets[name] = toBase64(new Uint8Array(await out.arrayBuffer()));
     }
     return name;
   };
@@ -126,7 +129,7 @@ async function exportElement(e, addAsset) {
     case 'image': {
       const blob = await store.assetBlob(e.asset);
       const ext = blob?.type === 'image/png' ? 'png' : 'jpg';
-      const assetName = await addAsset(e.asset, ext);
+      const assetName = await addAsset(e.asset, ext, e.crop || null);
       if (!assetName) return null;
       return { type: 'image', image: { id: swiftUUID(e.id), assetName, box: box(e.box), opacity: e.opacity ?? 1 } };
     }
@@ -200,6 +203,21 @@ export async function importBasis(archive, { folderId = null, onProgress = () =>
   // Keep the notebook's id unless this library already has it (then import a copy).
   if (m.id && !store.summary(String(m.id).toLowerCase())) doc.id = String(m.id).toLowerCase();
   return doc;
+}
+
+async function cropBlob(blob, c) {
+  try {
+    const img = await createImageBitmap(blob);
+    const sx = Math.round(c.x * img.width), sy = Math.round(c.y * img.height);
+    const sw = Math.max(1, Math.round(c.w * img.width)), sh = Math.max(1, Math.round(c.h * img.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = sw; canvas.height = sh;
+    canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+    img.close?.();
+    return await new Promise((res) => canvas.toBlob(res, 'image/png'));
+  } catch {
+    return null;
+  }
 }
 
 async function importElement(raw, assetBytes, imageAssets) {
