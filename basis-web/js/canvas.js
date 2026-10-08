@@ -988,9 +988,11 @@ export class CanvasView {
     // Live transformed copies.
     if (t) {
       this.pageTransform(ctx, f.i);
-      const page = this.doc.pages[f.i];
+      // Clip to the page it would land on (the selection can move to another page).
+      const j = this.selTransform.target ?? f.i;
+      const page = this.doc.pages[j], oi = this.pageOrigin(f.i), oj = this.pageOrigin(j);
       ctx.save();
-      ctx.beginPath(); ctx.rect(0, 0, page.w, page.h); ctx.clip();
+      ctx.beginPath(); ctx.rect(oj.x - oi.x, oj.y - oi.y, page.w, page.h); ctx.clip();
       for (const e of this.selectedElements()) drawElement(ctx, transformElement(e, t), page);
       ctx.restore();
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -1042,40 +1044,94 @@ export class CanvasView {
     }
     const start = this.screenToPage(f.i, s);
     const ids = this.selection.ids;
-    this.interaction = {
+    let last = s, edgeRaf = null;
+    const update = () => {
+      const p = this.screenToPage(f.i, last);
+      let t;
+      if (mode === 'move') t = translateT(p.x - start.x, p.y - start.y);
+      else if (mode === 'scale') {
+        const d0 = dist(start, ref), d1 = dist(p, ref);
+        t = scaleAboutT(clamp(d1 / Math.max(d0, 1e-3), 0.05, 50), ref);
+      } else {
+        let a = angleOf(sub(p, centerPage)) - angleOf(sub(start, centerPage));
+        const snap = Math.round(a / (Math.PI / 12)) * (Math.PI / 12);
+        if (Math.abs(a - snap) < 0.04) a = snap;
+        t = rotateAboutT(a, centerPage);
+      }
+      // Moving can carry the selection onto another page.
+      this.selTransform = { t, target: mode === 'move' ? this.dropPage(f, t) : f.i };
+      for (const id of ids) this.hidden.add(id);
+      this.requestRender();
+    };
+    // Holding a dragged selection near the top or bottom edge scrolls, to reach other pages.
+    const edgeScroll = () => {
+      edgeRaf = null;
+      if (this.interaction !== it) return;
+      const m = 56;
+      const dy = last.y < m ? last.y - m : last.y > this.h - m ? last.y - (this.h - m) : 0;
+      if (!dy) return;
+      const y0 = this.view.y;
+      this.view.y += (clamp(dy, -m, m) * 0.4) / this.view.zoom;
+      this.clampView();
+      if (this.view.y === y0) return;
+      this.viewChanged();
+      update();
+      edgeRaf = requestAnimationFrame(edgeScroll);
+    };
+    const it = {
       pointerId: e.pointerId,
       pointerType: e.pointerType,
       move: (events) => {
-        const p = this.screenToPage(f.i, this.local(events[events.length - 1]));
-        let t;
-        if (mode === 'move') t = translateT(p.x - start.x, p.y - start.y);
-        else if (mode === 'scale') {
-          const d0 = dist(start, ref), d1 = dist(p, ref);
-          t = scaleAboutT(clamp(d1 / Math.max(d0, 1e-3), 0.05, 50), ref);
-        } else {
-          let a = angleOf(sub(p, centerPage)) - angleOf(sub(start, centerPage));
-          const snap = Math.round(a / (Math.PI / 12)) * (Math.PI / 12);
-          if (Math.abs(a - snap) < 0.04) a = snap;
-          t = rotateAboutT(a, centerPage);
-        }
-        this.selTransform = { t };
-        for (const id of ids) this.hidden.add(id);
-        this.requestRender();
+        last = this.local(events[events.length - 1]);
+        update();
+        if (mode === 'move' && !edgeRaf) edgeRaf = requestAnimationFrame(edgeScroll);
       },
       end: () => {
-        const t = this.selTransform?.t;
+        cancelAnimationFrame(edgeRaf);
+        const t = this.selTransform?.t, target = this.selTransform?.target ?? f.i;
         this.selTransform = null;
         this.hidden.clear();
-        if (t && (Math.abs(t[4]) > 0.01 || Math.abs(t[5]) > 0.01 || Math.abs(t[0] - 1) > 1e-4 || Math.abs(t[1]) > 1e-4)) {
+        if (t && target !== f.i) this.moveSelectionToPage(f.i, target, ids, t);
+        else if (t && (Math.abs(t[4]) > 0.01 || Math.abs(t[5]) > 0.01 || Math.abs(t[0] - 1) > 1e-4 || Math.abs(t[1]) > 1e-4)) {
           const label = mode === 'move' ? 'Move' : mode === 'scale' ? 'Resize' : 'Rotate';
           this.commit(label, this.selection.pageId, (els) => els.map((x) => (ids.has(x.id) ? transformElement(x, t) : x)));
           this.editor.selectionChanged();
         }
         this.requestRender();
       },
-      cancel: () => { this.selTransform = null; this.hidden.clear(); this.requestRender(); },
+      cancel: () => { cancelAnimationFrame(edgeRaf); this.selTransform = null; this.hidden.clear(); this.requestRender(); },
     };
+    this.interaction = it;
     return true;
+  }
+
+  /** The page a selection moved by `t` (in page f.i coordinates) is dropped on: the one under its center, else the nearest. */
+  dropPage(f, t) {
+    const c = applyT(t, mid(f.corners[0], f.corners[2]));
+    const o = this.pageOrigin(f.i);
+    const x = c.x + o.x, y = c.y + o.y; // content coordinates
+    let best = f.i, bestD = Infinity;
+    for (let j = 0; j < this.doc.pages.length; j++) {
+      const p = this.doc.pages[j], oj = this.pageOrigin(j);
+      const dx = x < oj.x ? oj.x - x : x > oj.x + p.w ? x - oj.x - p.w : 0;
+      const dy = y < oj.y ? oj.y - y : y > oj.y + p.h ? y - oj.y - p.h : 0;
+      const d = Math.hypot(dx, dy);
+      if (d < bestD) { bestD = d; best = j; }
+    }
+    return best;
+  }
+
+  /** Moves selected elements from page i to page j (one undo step), keeping where they were dropped. */
+  moveSelectionToPage(i, j, ids, t) {
+    const from = this.doc.pages[i], to = this.doc.pages[j];
+    const oi = this.pageOrigin(i), oj = this.pageOrigin(j);
+    const tt = concatT(t, translateT(oi.x - oj.x, oi.y - oj.y)); // page i → page j coordinates
+    const moved = from.elements.filter((x) => ids.has(x.id)).map((x) => transformElement(x, tt));
+    const changed = this.editor.history.perform('Move to Page', (pages) =>
+      setElements(setElements(pages, from.id, (els) => els.filter((x) => !ids.has(x.id))), to.id, (els) => [...els, ...moved]));
+    if (!changed) return;
+    this.afterEdit();
+    this.setSelection(to.id, moved.map((x) => x.id));
   }
 
   // ---------- Text ----------
