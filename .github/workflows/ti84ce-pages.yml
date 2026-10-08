@@ -1,0 +1,40 @@
+name: TI-84 CE web app (GitHub Pages)
+
+# Copies TI84CE/Web to the gh-pages branch, which GitHub Pages serves at
+# https://<owner>.github.io/<repo>/. The ROM is never part of it (*.rom is ignored).
+on:
+  push:
+    branches: [main, ti84ce-emulator]
+    paths:
+      - "TI84CE/Web/**"
+      - ".github/workflows/ti84ce-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ti84ce-pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish TI84CE/Web to gh-pages
+        run: |
+          set -e
+          SRC="$PWD/TI84CE/Web"
+          OUT="$(mktemp -d)"
+          cp -R "$SRC/." "$OUT/"
+          rm -rf "$OUT/dist" "$OUT"/*.rom
+          touch "$OUT/.nojekyll"
+          sed -i "s/ti84ce-v1/ti84ce-${GITHUB_SHA::7}/" "$OUT/sw.js"
+          cd "$OUT"
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Publish web app from ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
