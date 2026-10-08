@@ -67,7 +67,7 @@ button { cursor: pointer; }
   padding: 0 var(--gutter) var(--gutter);
   display: flex;
   flex-direction: column;
-  gap: calc(var(--cw) * 0.03);
+  gap: calc(var(--cw) * 0.02);
 }
 
 .screen { flex: none; display: flex; flex-direction: column; }
@@ -133,7 +133,7 @@ button { cursor: pointer; }
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  grid-template-rows: 0.78fr repeat(9, 1fr);
+  grid-template-rows: 0.85fr repeat(9, 1fr);
   column-gap: calc(var(--cw) * 0.034);
   row-gap: calc(var(--cw) * 0.006);
   --legend: calc(var(--cw) * 0.028);
@@ -150,7 +150,7 @@ button { cursor: pointer; }
 
 .legend {
   flex: none;
-  height: calc(var(--legend) * 1.35);
+  height: calc(var(--legend) * 1.2);
   display: flex;
   justify-content: space-between;
   align-items: flex-end;

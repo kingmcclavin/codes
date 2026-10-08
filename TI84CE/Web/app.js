@@ -291,14 +291,26 @@ function scheduleDraw() {
 
 // ---------------------------------------------------------------- layout
 
+function standalone() {
+  try { return navigator.standalone === true || matchMedia('(display-mode: standalone)').matches; } catch { return false; }
+}
+
 function layout() {
   const root = document.documentElement;
   // iOS home-screen apps can report a page height shorter than the screen, so
   // size the page from the real window height; the safe-area padding on :root
   // keeps the keys clear of the status bar and the home indicator.
-  root.style.setProperty('--app-h', `${window.innerHeight}px`);
+  // In a home-screen app on iPhone, innerHeight can come up short by the status
+  // bar height, leaving a gap above the home indicator; the screen size is exact.
+  let appH = window.innerHeight;
+  if (standalone()) {
+    const portrait = window.innerHeight >= window.innerWidth;
+    const screenH = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+    if (screenH > appH && screenH - appH < 120) appH = screenH;
+  }
+  root.style.setProperty('--app-h', `${appH}px`);
   const cs = getComputedStyle(root);
-  const h = window.innerHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const h = appH - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
   const w = root.clientWidth;
   // Portrait phones use the full width and the keypad takes the rest of the
   // height. On wide screens the calculator keeps a phone-like shape.
