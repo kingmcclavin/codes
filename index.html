@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>TI-84 Plus CE Emulator</title>
+<meta name="description" content="Runs your own TI-84 Plus CE ROM in the browser by emulating the calculator's eZ80 hardware.">
+<meta name="theme-color" content="#16171a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TI-84 CE">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+
+<main id="calc" class="calc" hidden>
+  <section class="screen" aria-label="Calculator screen">
+    <div class="strip">
+      <span id="status" class="status"></span>
+      <button id="menuBtn" class="menu-btn" type="button" aria-label="Menu" aria-haspopup="menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11"/><circle class="dot" cx="7" cy="12" r="1.7"/><circle class="dot" cx="12" cy="12" r="1.7"/><circle class="dot" cx="17" cy="12" r="1.7"/></svg>
+      </button>
+    </div>
+    <div class="lcd">
+      <canvas id="lcd" width="320" height="240" aria-label="TI-84 Plus CE display"></canvas>
+      <div id="dim" class="dim"></div>
+    </div>
+  </section>
+  <section id="keypad" class="keypad" aria-label="Keypad"></section>
+</main>
+
+<div id="menu" class="menu" role="menu" hidden>
+  <button type="button" role="menuitem" id="mPause">Pause</button>
+  <button type="button" role="menuitem" id="mSettings">Settings</button>
+  <button type="button" role="menuitem" id="mDebugger" hidden>Debugger</button>
+  <hr>
+  <button type="button" role="menuitem" id="mReset">Reset calculator</button>
+</div>
+
+<section id="setup" class="setup" hidden>
+  <div class="setup-card">
+    <div class="setup-mark" aria-hidden="true"><span></span></div>
+    <h1>TI-84 Plus CE</h1>
+    <p class="lede">This page emulates the calculator's hardware: the eZ80 processor, flash and RAM, LCD, keypad and timers. The operating system comes from a ROM image of your own calculator.</p>
+    <button id="pickRom" class="primary" type="button">Choose ROM file</button>
+    <p class="fine">A 4 MB TI-84 Plus CE dump (<code>.rom</code>). It stays in this browser and is never uploaded. You can also drop the file onto this page.</p>
+    <p id="setupError" class="error" hidden></p>
+  </div>
+</section>
+
+<section id="settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
+  <header class="sheet-head">
+    <h2 id="settingsTitle">Settings</h2>
+    <button type="button" class="done" data-close>Done</button>
+  </header>
+  <div class="sheet-body">
+    <div class="group">
+      <h3>Emulation</h3>
+      <label class="row" for="speedSel"><span>Speed</span>
+        <select id="speedSel">
+          <option value="0.5">50%</option>
+          <option value="1">100% (real calculator)</option>
+          <option value="2">200%</option>
+          <option value="4">400%</option>
+          <option value="0">Unlimited</option>
+        </select>
+      </label>
+      <div class="row"><span>Measured speed</span><span id="speedOut" class="value">–</span></div>
+      <label class="row" for="hapticsChk"><span>Vibrate on key press</span><input id="hapticsChk" type="checkbox"></label>
+      <label class="row" for="batterySel"><span>Battery level</span>
+        <select id="batterySel"><option value="4">Full</option><option value="3">3 of 4</option><option value="2">2 of 4</option><option value="1">1 of 4</option><option value="0">Empty</option></select>
+      </label>
+    </div>
+
+    <div class="group">
+      <h3>Memory</h3>
+      <p class="note">RAM, archive and the full machine state are saved in this browser automatically when you leave the page, and restored when you come back. Slots keep extra snapshots.</p>
+      <div id="slots"></div>
+      <p id="storageNote" class="note warn" hidden>This browser is not keeping data for this page (private window or blocked storage), so memory will not survive a reload.</p>
+    </div>
+
+    <div class="group">
+      <h3>Reset</h3>
+      <button type="button" class="row-btn" id="sReset">Reset calculator (keep RAM)</button>
+      <button type="button" class="row-btn danger" id="sResetRAM" data-confirm="Tap again to clear RAM">Reset RAM</button>
+      <button type="button" class="row-btn danger" id="sErase" data-confirm="Tap again to erase archive and RAM">Erase archive and RAM</button>
+    </div>
+
+    <div class="group">
+      <h3>ROM</h3>
+      <div class="row"><span>Loaded</span><span id="romInfo" class="value mono">–</span></div>
+      <button type="button" class="row-btn" id="sNewRom">Use a different ROM file</button>
+    </div>
+
+    <div class="group">
+      <h3>Developer</h3>
+      <label class="row" for="debugChk"><span>Show debugger in menu</span><input id="debugChk" type="checkbox"></label>
+    </div>
+
+    <div class="group">
+      <h3>Keyboard shortcuts</h3>
+      <dl class="shortcuts">
+        <dt>0–9 . , + − * / ^ ( )</dt><dd>Digits and operators</dd>
+        <dt>Enter</dt><dd>enter</dd>
+        <dt>Backspace</dt><dd>del</dd>
+        <dt>Esc</dt><dd>clear</dd>
+        <dt>Shift (tap)</dt><dd>2nd</dd>
+        <dt>Alt / Option (tap)</dt><dd>alpha</dd>
+        <dt>Arrow keys</dt><dd>Arrow pad</dd>
+        <dt>F1–F5</dt><dd>y=, window, zoom, trace, graph</dd>
+        <dt>F6</dt><dd>on</dd>
+        <dt>M A P V</dt><dd>math, apps, prgm, vars</dd>
+        <dt>S C T</dt><dd>sin, cos, tan</dd>
+        <dt>L N X</dt><dd>log, ln, X,T,θ,n</dd>
+        <dt>K ` D E</dt><dd>sto→, (−), mode, stat</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section id="debugger" class="sheet" role="dialog" aria-modal="true" aria-labelledby="debugTitle" hidden>
+  <header class="sheet-head">
+    <h2 id="debugTitle">Debugger</h2>
+    <button type="button" class="done" data-close>Done</button>
+  </header>
+  <div class="sheet-body">
+    <div class="dbg-controls">
+      <button type="button" id="dRun">Run</button>
+      <button type="button" id="dPause">Pause</button>
+      <button type="button" id="dStep">Step</button>
+    </div>
+    <div class="row">
+      <label for="bpInput">Breakpoint</label>
+      <span class="bp-entry"><input id="bpInput" class="mono" placeholder="hex address" autocomplete="off" spellcheck="false"><button type="button" id="bpAdd">Add</button></span>
+    </div>
+    <div id="bpList" class="bp-list"></div>
+    <pre id="dbgOut" class="dbg-out mono"></pre>
+  </div>
+</section>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<input id="romFile" type="file" hidden>
+
+</body>
+</html>
