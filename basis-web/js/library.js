@@ -84,7 +84,9 @@ export function sidebar(app) {
         const s = store.summary(id);
         return h('button', { class: 'side-item', onclick: () => app.openDocument(id) }, docTile(s?.color, s?.icon, 14), h('span', { class: 'side-label' }, s?.title || 'Untitled'));
       })) : null,
-      h('div', { class: 'side-foot' }, item({ name: 'settings' }, 'settings', 'Settings')),
+      h('div', { class: 'side-foot' },
+        feature('ai') ? (() => { const b = item({ name: 'ai' }, 'sparkle', 'AI'); b.dataset.tour = 'ai'; return b; })() : null,
+        item({ name: 'settings' }, 'settings', 'Settings')),
     );
   };
   function dropTarget(el, folderId) {

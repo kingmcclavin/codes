@@ -11,6 +11,7 @@ import { storage } from './util.js';
 
 export const FEATURES = {
   toolbox: { name: 'Calculator Toolbox', status: 'pro', note: 'Formulas, Unit Converter, Graphs and History. The basic calculator stays free.' },
+  ai: { name: 'AI (bring your own key)', status: 'testing', note: 'The AI tab and its setup, plus the tutorial step about it.' },
   // exampleTool: { name: 'Example Tool', status: 'testing', note: 'What it does' },
   //   status: 'testing' (not finished) | 'pro' (paid later) | 'released'
 };

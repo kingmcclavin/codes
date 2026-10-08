@@ -5,6 +5,7 @@
 import { h, storage } from './util.js';
 import { icon } from './icons.js';
 import { store } from './store.js';
+import { feature } from './features.js';
 
 const KEY = 'basis.tutorial';
 const seen = () => storage.get(KEY, null);
@@ -25,6 +26,7 @@ let active = null;
  * art?, badge?, actions?: [{ label, primary, run }], enter?, leave? }.
  */
 export function runTour(steps, { onDone } = {}) {
+  steps = steps.filter(Boolean);
   active?.end(false);
   let i = 0, ended = false;
   const root = h('div', { class: 'tour', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Tutorial' });
@@ -38,7 +40,9 @@ export function runTour(steps, { onDone } = {}) {
     const el = s.target?.();
     if (!el) return null;
     const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0 ? r : null;
+    // Off-screen targets (e.g. the sidebar hidden on a phone) get a centered card instead.
+    const onScreen = r.right > 0 && r.bottom > 0 && r.left < window.innerWidth && r.top < window.innerHeight;
+    return r.width > 0 && r.height > 0 && onScreen ? r : null;
   };
 
   const place = () => {
@@ -158,6 +162,16 @@ export function welcomeTour({ onNewNotebook, onImport }) {
       ],
       actions: [{ label: 'Import a File…', icon: 'import', run: onImport }],
     },
+    feature('ai') ? {
+      badge: 'Optional',
+      target: () => document.querySelector('[data-tour="ai"]'),
+      art: art('sparkle'),
+      title: 'AI study tools, whenever you want them',
+      body: [
+        'Connect your own Claude or Gemini account to search your handwriting and make practice exams, flashcards and summaries from your notes.',
+        'No need to do it now. Set it up any time from AI in the sidebar; it walks you through each step.',
+      ],
+    } : null,
     {
       target: () => document.querySelector('[data-tour="new"]'),
       title: 'Make your first notebook',

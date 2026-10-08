@@ -48,7 +48,9 @@ This folder is a static site with no build step. Import the repository in Vercel
 
 Everything is stored in this browser (IndexedDB and localStorage) on this device. **Settings → Back Up Everything** saves a JSON file you can restore in any browser.
 
-PDF import/export and GoodNotes paper use pdf.js and jsPDF, bundled in `vendor/` (Apache-2.0 and MIT licensed), with cdnjs as a fallback.
+PDF import/export and GoodNotes paper use pdf.js and jsPDF, bundled in `vendor/` (Apache-2.0 and MIT licensed), with cdnjs as a fallback. The AI tab uses the Anthropic TypeScript SDK (MIT), bundled as `vendor/anthropic-sdk.mjs` and loaded only when AI is used.
+
+**AI (bring your own key, in testing):** the AI tab walks you through connecting your own Claude (Anthropic) or Gemini (Google) account. The key stays in this browser, isn't included in backups, and requests go straight from the browser to that provider. Basis has no server.
 
 ## Not ported
 

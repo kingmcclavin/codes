@@ -8,6 +8,7 @@ import { Editor } from './editor.js';
 import { sidebar, libraryScreen, searchScreen, settingsScreen, newNotebookSheet, importGoodNotesFiles } from './library.js';
 import { initTutorial, shouldShowWelcome, shouldShowEditorTour, resetTutorial, welcomeTour, editorTour } from './tour.js';
 import { feature } from './features.js';
+import { aiScreen } from './aiscreen.js';
 import { calculatorScreen, formulasScreen, unitConverterScreen, historyScreen, graphScreen } from './calculator.js';
 
 class App {
@@ -109,7 +110,8 @@ class App {
     const open = { calculator: () => this.go({ name: 'calculator' }) };
     let s;
     // Toolbox screens are Pro; without it, fall back to the library.
-    const name = ['formulas', 'units', 'graphs', 'history'].includes(r.name) && !feature('toolbox') ? 'library' : r.name;
+    let name = ['formulas', 'units', 'graphs', 'history'].includes(r.name) && !feature('toolbox') ? 'library' : r.name;
+    if (name === 'ai' && !feature('ai')) name = 'library';
     switch (name) {
       case 'folder': s = store.folder(r.folderId) ? libraryScreen(this, r.folderId) : libraryScreen(this, null); break;
       case 'search': s = searchScreen(this); break;
@@ -119,6 +121,7 @@ class App {
       case 'graphs': s = graphScreen(); break;
       case 'history': s = historyScreen({ insertIntoNote, openCalculator: open.calculator }); break;
       case 'settings': s = settingsScreen(this); break;
+      case 'ai': s = aiScreen(this); break;
       default: s = libraryScreen(this, null);
     }
     this.screen = s;
