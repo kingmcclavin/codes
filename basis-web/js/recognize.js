@@ -2,7 +2,7 @@
 // person's own AI (see ai.js). The text is kept on the document (doc.ocr,
 // outside undo history) so search works offline afterwards.
 
-import { aiConfig, autoRecognize, transcribeImage, AIError } from './ai.js';
+import { aiConfig, autoRecognize, transcribeImage, AIError, setLastAIError } from './ai.js';
 import { feature } from './features.js';
 import { drawBackground, drawElement, preloadAssets } from './render.js';
 import { renderPDFRegion } from './pdf.js';
@@ -100,7 +100,7 @@ export class Recognizer {
   async run({ all = false, onProgress } = {}) {
     if (this.running || this.stopped || !aiAvailable()) return { done: 0, failed: 0 };
     this.running = true;
-    let done = 0, failed = 0;
+    let done = 0, failed = 0, error = null;
     try {
       const queue = this.pending({ all });
       for (let k = 0; k < queue.length && !this.stopped; k++) {
@@ -115,18 +115,22 @@ export class Recognizer {
           if (this.stopped) break;
           (this.doc.ocr ||= {})[p.id] = { sig, text, at: Date.now() };
           done++;
+          setLastAIError(null);
           this.editor.save();
         } catch (e) {
           failed++;
-          if (e instanceof AIError && e.stop) { toast(`Couldn’t read your handwriting: ${e.message}`); break; }
-          if (all) toast(`Page ${this.doc.pages.indexOf(p) + 1}: ${e.message}`);
+          error = e.message || String(e);
+          console.warn('Handwriting recognition failed', e);
+          setLastAIError(error);
+          if (e instanceof AIError && e.stop) { if (!all) toast(`Couldn’t read your handwriting: ${error}`); break; }
+          if (all) toast(`Page ${this.doc.pages.indexOf(p) + 1}: ${error}`);
         }
       }
     } finally {
       this.running = false;
     }
-    if (!all && !this.stopped && this.pending().length) this.schedule(); // more writing arrived meanwhile
-    return { done, failed };
+    if (!all && !this.stopped && !error && this.pending().length) this.schedule(); // more writing arrived meanwhile
+    return { done, failed, error };
   }
 }
 

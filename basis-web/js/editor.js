@@ -826,8 +826,18 @@ export class Editor {
       confirm: 'Read Pages', destructive: false,
     });
     if (!ok) return;
-    const { done, failed } = await this.recognizer.run({ all: true, onProgress: (n, total) => toast(`Reading page ${n} of ${total}…`) });
-    if (done || failed) toast(failed ? `Read ${done} page${done === 1 ? '' : 's'}; ${failed} couldn’t be read.` : `Done. ${done} page${done === 1 ? ' is' : 's are'} now searchable.`);
+    const { done, failed, error } = await this.recognizer.run({ all: true, onProgress: (n, total) => toast(`Reading page ${n} of ${total}…`) });
+    if (!failed) { if (done) toast(`Done. ${done} page${done === 1 ? ' is' : 's are'} now searchable.`); return; }
+    // Keep the reason on screen (toasts vanish) so it can be fixed.
+    sheet({
+      title: done ? 'Some Pages Couldn’t Be Read' : 'Pages Couldn’t Be Read',
+      className: 'compact',
+      build: (body, close) => body.append(
+        h('p', { class: 'dialog-message' }, `${done ? `Read ${done} page${done === 1 ? '' : 's'}. ` : ''}${failed} page${failed === 1 ? '' : 's'} couldn’t be read.`),
+        h('p', { class: 'dialog-message' }, h('b', {}, 'Reason: '), error),
+        h('p', { class: 'muted small' }, 'You can check your key with Test Connection in the AI tab, then try again.'),
+        h('div', { class: 'dialog-actions' }, h('button', { class: 'btn primary', onclick: () => close(true) }, 'OK'))),
+    });
   }
 
   showMoreMenu(anchor) {

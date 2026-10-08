@@ -89,42 +89,89 @@ async function testClaude(key, model) {
 
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
 
+class GeminiError extends Error {
+  constructor(message, status, raw = '') {
+    super(message);
+    this.status = status;
+    // The model itself can't be used (retired, not on this account, or no free allowance): try another.
+    this.modelProblem = status === 404 || (status === 400 && /model/i.test(raw)) || (status === 429 && /limit:\s*0\b/.test(raw));
+    this.stop = !this.modelProblem && (status === 401 || status === 403 || status === 429 || /API_KEY_INVALID/.test(raw));
+  }
+}
+
 async function gemini(path, key, init = {}) {
   let res;
   try {
     res = await fetch(`${GEMINI}/${path}`, { ...init, headers: { 'x-goog-api-key': key, ...(init.headers || {}) } });
   } catch {
-    throw new Error('Couldn’t reach Google. Check your internet connection.');
+    throw new GeminiError('Couldn’t reach Google. Check your internet connection.', 0);
   }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
+    const raw = `${body?.error?.status || ''} ${body?.error?.message || ''} ${JSON.stringify(body?.error?.details || '')}`;
     const reason = body?.error?.details?.find?.((d) => d.reason)?.reason;
-    if (res.status === 400 && reason === 'API_KEY_INVALID') throw new Error('That key wasn’t accepted. Check that you copied all of it (it starts with “AIza”).');
-    if (res.status === 403) throw new Error('This key isn’t allowed to use the Gemini API. Make a new key in Google AI Studio.');
-    if (res.status === 429) throw new Error('You’ve hit the free tier’s limit for now. Wait a bit and try again.');
-    throw new Error(`Google returned an error (${res.status}): ${body?.error?.message || res.statusText}`);
+    if (res.status === 400 && reason === 'API_KEY_INVALID') throw new GeminiError('That key wasn’t accepted. Check that you copied all of it (it starts with “AIza”).', 400, raw);
+    if (res.status === 403) throw new GeminiError('This key isn’t allowed to use the Gemini API. Make a new key in Google AI Studio.', 403, raw);
+    if (res.status === 429 && !/limit:\s*0\b/.test(raw)) throw new GeminiError('You’ve hit the free tier’s limit for now. Wait a bit and try again.', 429, raw);
+    throw new GeminiError(`Google said: ${body?.error?.message || res.statusText || `error ${res.status}`}`, res.status, raw);
   }
   return body;
 }
 
-/** Newest "flash" model the account can use (fast, and the one with the most generous free tier). */
-function pickGeminiModel(models) {
-  const usable = models.filter((m) => m.supportedGenerationMethods?.includes('generateContent'));
-  const version = (name) => parseFloat(/gemini-(\d+(?:\.\d+)?)/.exec(name)?.[1] || '0');
-  const rank = (m) => {
-    const n = m.name.replace(/^models\//, '');
-    if (!/^gemini-[\d.]+-flash$/.test(n)) return -1; // stable flash only (no lite, preview or dated builds)
-    return version(n);
+/** Usable models, best first: stable "flash" models (newest first), then other flash, lite and pro models. */
+function geminiCandidates(models) {
+  const names = models.filter((m) => m.supportedGenerationMethods?.includes('generateContent')).map((m) => m.name.replace(/^models\//, ''))
+    .filter((n) => /^gemini/.test(n) && !/image|tts|audio|live|embed|vision|learnlm|robotics|computer/.test(n));
+  const version = (n) => parseFloat(/gemini-(\d+(?:\.\d+)?)/.exec(n)?.[1] || '0');
+  const tier = (n) => (/^gemini-[\d.]+-flash$/.test(n) ? 0 : n === 'gemini-flash-latest' ? 1 : /flash-lite/.test(n) ? 3 : /flash/.test(n) ? 2 : /pro/.test(n) ? 4 : 5);
+  return [...new Set(names)].sort((a, b) => tier(a) - tier(b) || version(b) - version(a) || a.length - b.length);
+}
+
+async function geminiModels(key) {
+  return geminiCandidates((await gemini('models?pageSize=200', key)).models || []);
+}
+
+/** One generateContent call. Resolves to the reply's text. */
+async function geminiGenerate(key, model, system, parts) {
+  const body = await gemini(`models/${encodeURIComponent(model)}:generateContent`, key, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+      contents: [{ role: 'user', parts }],
+      generationConfig: { temperature: 0, maxOutputTokens: 16000 },
+    }),
+  });
+  const cand = body.candidates?.[0];
+  if (!cand) throw new GeminiError(body.promptFeedback?.blockReason ? `Gemini declined to read this (${body.promptFeedback.blockReason}).` : 'Gemini didn’t return anything.', 200);
+  const text = (cand.content?.parts || []).filter((x) => !x.thought).map((x) => x.text || '').join('').trim();
+  if (!text && cand.finishReason && !['STOP', 'FINISH_REASON_UNSPECIFIED'].includes(cand.finishReason)) {
+    throw new GeminiError(`Gemini stopped before answering (${cand.finishReason}).`, 200);
+  }
+  return text;
+}
+
+/** Tries models in order until one actually answers; resolves to { model, text }. */
+async function geminiWithFallback(key, preferred, system, parts) {
+  const tried = new Set();
+  let last = null;
+  const attempt = async (model) => {
+    tried.add(model);
+    return { model, text: await geminiGenerate(key, model, system, parts) };
   };
-  const best = usable.map((m) => ({ m, r: rank(m) })).filter((x) => x.r >= 0).sort((a, b) => b.r - a.r)[0]?.m
-    || usable.find((m) => /flash/.test(m.name) && !/lite|image|tts|audio|live/.test(m.name));
-  return best?.name.replace(/^models\//, '') || null;
+  if (preferred) {
+    try { return await attempt(preferred); } catch (e) { if (!(e instanceof GeminiError) || !e.modelProblem) throw e; last = e; }
+  }
+  for (const model of (await geminiModels(key)).slice(0, 6)) {
+    if (tried.has(model)) continue;
+    try { return await attempt(model); } catch (e) { if (!(e instanceof GeminiError) || !e.modelProblem) throw e; last = e; }
+  }
+  throw last || new GeminiError('No Gemini model on this account can be used. Check Google AI Studio.', 0);
 }
 
 async function testGemini(key) {
-  const body = await gemini('models?pageSize=200', key);
-  const model = pickGeminiModel(body.models || []);
-  if (!model) throw new Error('Your key works, but no suitable Gemini model is available on this account.');
+  // Ask for a one-word reply: proves the key can actually generate, not just list models.
+  const { model } = await geminiWithFallback(key, null, null, [{ text: 'Reply with the single word OK.' }]);
   return { model };
 }
 
@@ -152,6 +199,11 @@ const TRANSCRIBE = [
   'Do not add commentary, headings or explanations, and do not correct or complete the writing.',
   'If there is no writing at all, reply with nothing.',
 ].join(' ');
+
+const ERR_KEY = 'basis.ai.lastError';
+/** The most recent problem reading pages, shown in the AI tab. */
+export const lastAIError = () => storage.get(ERR_KEY, null);
+export const setLastAIError = (message) => storage.set(ERR_KEY, message ? { message, at: Date.now() } : null);
 
 export class AIError extends Error {
   constructor(message, { stop = false } = {}) { super(message); this.stop = stop; }
@@ -193,21 +245,12 @@ async function transcribeClaude(cfg, base64) {
 }
 
 async function transcribeGemini(cfg, base64) {
-  let body;
   try {
-    body = await gemini(`models/${encodeURIComponent(cfg.model)}:generateContent`, cfg.key, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: TRANSCRIBE }] },
-        contents: [{ role: 'user', parts: [{ inline_data: { mime_type: 'image/jpeg', data: base64 } }, { text: 'Transcribe this page.' }] }],
-        generationConfig: { temperature: 0, maxOutputTokens: 8000 },
-      }),
-    });
+    const { model, text } = await geminiWithFallback(cfg.key, cfg.model, TRANSCRIBE,
+      [{ inline_data: { mime_type: 'image/jpeg', data: base64 } }, { text: 'Transcribe this page.' }]);
+    if (model !== cfg.model) setAIModel(model); // remember the model that works
+    return text;
   } catch (e) {
-    throw new AIError(e.message, { stop: /accepted|allowed|limit/.test(e.message) });
+    throw new AIError(e.message, { stop: !!e.stop });
   }
-  const cand = body.candidates?.[0];
-  if (!cand) throw new AIError(body.promptFeedback?.blockReason ? 'Gemini declined to read this page.' : 'Gemini didn’t return anything.');
-  return (cand.content?.parts || []).map((p) => p.text || '').join('').trim();
 }

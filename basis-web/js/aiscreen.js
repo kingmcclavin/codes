@@ -1,9 +1,9 @@
 // The AI tab: connect your own Claude or Gemini account, step by step.
 
-import { h } from './util.js';
+import { h, relativeTime } from './util.js';
 import { icon } from './icons.js';
 import { toast, confirmDialog, selectField, toggle } from './ui.js';
-import { PROVIDERS, aiConfig, saveAIConfig, setAIModel, clearAIConfig, maskKey, testConnection, autoRecognize, setAutoRecognize } from './ai.js';
+import { PROVIDERS, aiConfig, saveAIConfig, setAIModel, clearAIConfig, maskKey, testConnection, autoRecognize, setAutoRecognize, lastAIError, setLastAIError } from './ai.js';
 
 const STEPS = ['Choose', 'Account', 'Key', 'Connect', 'Done'];
 
@@ -40,6 +40,8 @@ export function aiScreen(app) {
   function connectedView(cfg) {
     const p = PROVIDERS[cfg.provider];
     const status = h('p', { class: 'muted small ai-status' });
+    const lastErr = lastAIError();
+    const problem = lastErr ? h('p', { class: 'ai-error' }, `Last problem reading pages (${relativeTime(lastErr.at)}): ${lastErr.message}`) : null;
     const modelRow = p.models
       ? h('div', { class: 'form-row' }, h('span', { class: 'form-label' }, 'Model'),
         selectField('ai-model', p.models.map((m) => ({ value: m.id, label: `${m.label} · ${m.note}` })), cfg.model, (v) => { setAIModel(v); toast('Model changed'); }))
@@ -52,7 +54,12 @@ export function aiScreen(app) {
         h('div', { class: 'row-actions' },
           h('button', { class: 'btn', onclick: async (e) => {
             const b = e.currentTarget; b.disabled = true; status.textContent = 'Checking…';
-            try { await testConnection(cfg.provider, cfg.key, cfg.model); status.textContent = 'Everything’s working.'; } catch (err) { status.textContent = err.message; }
+            try {
+              const { model } = await testConnection(cfg.provider, cfg.key, cfg.model);
+              if (model && model !== cfg.model) setAIModel(model);
+              setLastAIError(null); problem?.remove();
+              status.textContent = `Everything’s working${cfg.provider === 'gemini' ? ` (using ${model})` : ''}.`;
+            } catch (err) { status.textContent = err.message; }
             b.disabled = false;
           } }, 'Test Connection'),
           h('button', { class: 'btn', onclick: startWizard }, 'Change Provider or Key'),
@@ -60,7 +67,7 @@ export function aiScreen(app) {
             if (!(await confirmDialog({ title: 'Disconnect AI?', message: 'Your key will be removed from this device. You can set it up again any time.', confirm: 'Disconnect' }))) return;
             clearAIConfig(); toast('AI disconnected'); render();
           } }, 'Disconnect')),
-        status),
+        status, problem),
       h('div', { class: 'settings-group' },
         h('h2', { class: 'list-title' }, 'Handwriting search'),
         h('p', { class: 'muted' }, 'AI reads your handwriting (math included) so you can find it with Find in Notebook (⌘F or the ⋯ menu) and in Search.'),
