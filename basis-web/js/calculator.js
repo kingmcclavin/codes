@@ -5,7 +5,6 @@ import { h, uuid, storage, relativeTime, clamp } from './util.js';
 import { icon } from './icons.js';
 import { sheet, menu, toast, popover, selectField, confirmDialog, iconButton } from './ui.js';
 import { calc } from './calc/store.js';
-import { feature } from './features.js';
 import { CalculatorEngine, formatNumber, plainNumber, prettyMath, FUNCTION_CATALOG, CONSTANTS, tokenize, outputNames, formulaLines } from './calc/engine.js';
 import { UNITS, UNIT_CATEGORIES, unitsIn, convertUnit, parseUnit } from './calc/units.js';
 
@@ -136,7 +135,7 @@ export function calculatorScreen({ insertIntoNote } = {}) {
   const moreBtn = iconButton('more', 'More', () => {
     menu(moreBtn, [
       { label: 'Variables…', icon: 'function', action: () => variablesSheet() },
-      feature('toolbox') ? { label: 'Save as Formula…', icon: 'docPlus', action: saveAsFormula } : null,
+      { label: 'Save as Formula…', icon: 'docPlus', action: saveAsFormula },
       'sep',
       { label: 'Clear Tape', icon: 'trash', danger: true, action: () => calc.deleteHistory(new Set(calc.history.filter((r) => !r.formulaId).map((r) => r.id))) },
     ], { align: 'end' });

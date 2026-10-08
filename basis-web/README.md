@@ -1,5 +1,7 @@
 # Basis for the web
 
+Basis is free forever, with no ads and no paid features.
+
 A browser port of the Basis iPad app (Swift Playgrounds): handwritten notebooks with an engineering calculator built in. Plain HTML, CSS and JavaScript modules, with no build step and no server code.
 
 ## Run it

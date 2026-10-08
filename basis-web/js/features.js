@@ -1,6 +1,8 @@
 // Feature flags and Developer Mode.
 //
-// Features listed here stay hidden until they're released. Unlock Developer
+// Basis is free forever, with no ads and no paid tier: flags only hide
+// features that are still being finished. Features listed here stay hidden
+// until they're released. Unlock Developer
 // Mode (tap the version in Settings five times, then enter the password) to
 // see and test them on this device.
 //
@@ -10,10 +12,9 @@
 import { storage } from './util.js';
 
 export const FEATURES = {
-  toolbox: { name: 'Calculator Toolbox', status: 'pro', note: 'Formulas, Unit Converter, Graphs and History. The basic calculator stays free.' },
   ai: { name: 'AI (bring your own key)', status: 'testing', note: 'The AI tab and its setup, plus the tutorial step about it.' },
   // exampleTool: { name: 'Example Tool', status: 'testing', note: 'What it does' },
-  //   status: 'testing' (not finished) | 'pro' (paid later) | 'released'
+  //   status: 'testing' (not finished) | 'released'
 };
 
 // SHA-256 of 'basis-dev:' + password. The password itself isn't in the code.

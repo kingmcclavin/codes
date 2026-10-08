@@ -109,8 +109,7 @@ class App {
     const insertIntoNote = (source) => this.insertIntoNote(source);
     const open = { calculator: () => this.go({ name: 'calculator' }) };
     let s;
-    // Toolbox screens are Pro; without it, fall back to the library.
-    let name = ['formulas', 'units', 'graphs', 'history'].includes(r.name) && !feature('toolbox') ? 'library' : r.name;
+    let name = r.name;
     if (name === 'ai' && !feature('ai')) name = 'library';
     switch (name) {
       case 'folder': s = store.folder(r.folderId) ? libraryScreen(this, r.folderId) : libraryScreen(this, null); break;
