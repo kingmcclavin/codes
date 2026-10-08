@@ -582,3 +582,10 @@ kbd { font-size: 12px; padding: 2px 7px; border-radius: 6px; background: var(--s
 .ai-connected { display: flex; align-items: center; gap: 12px; }
 .ai-check { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: color-mix(in srgb, #30a46c 18%, transparent); color: #30a46c; flex: none; }
 .ai-status:empty { display: none; }
+
+/* Find in notebook */
+.find-results { display: flex; flex-direction: column; gap: 4px; max-height: 55vh; overflow-y: auto; margin: 10px 0; }
+.find-hit { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 10px; border: 0; background: var(--surface-2); color: var(--fg); font: inherit; cursor: pointer; }
+.find-hit:hover { background: var(--surface-3); }
+.find-page { font-weight: 600; font-size: 14px; }
+.find-hit .snippet { color: var(--muted); font-size: 14px; line-height: 1.4; }

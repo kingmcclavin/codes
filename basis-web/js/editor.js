@@ -18,7 +18,9 @@ import { renderPageCanvas, fillStrokePath } from './render.js';
 import { translateT } from './util.js';
 import { calc } from './calc/store.js';
 import { calculatorPad } from './calculator.js';
-import { importPDF, exportPDF, exportPNG } from './pdf.js';
+import { importPDF, exportPDF, exportPNG, pdfPageText } from './pdf.js';
+import { Recognizer, aiAvailable, findInDocument, pageChunks, hasContent } from './recognize.js';
+import { aiConfig, PROVIDERS } from './ai.js';
 import { SCRIBBLE_MODES } from './scribble.js';
 import { exportBasis } from './basisfile.js';
 
@@ -51,6 +53,7 @@ export class Editor {
     document.addEventListener('visibilitychange', this.onHide);
     this.onCalc = () => this.floatPad?.refresh();
     calc.addEventListener('change', this.onCalc);
+    this.recognizer = new Recognizer(this);
   }
 
   mount(parent) { parent.append(this.root); this.canvas.resize(); }
@@ -62,6 +65,7 @@ export class Editor {
   }
 
   destroy() {
+    this.recognizer.stop();
     window.removeEventListener('keydown', this.onKey);
     document.removeEventListener('visibilitychange', this.onHide);
     calc.removeEventListener('change', this.onCalc);
@@ -76,6 +80,7 @@ export class Editor {
   documentChanged() {
     this.dirty = true;
     this.save();
+    this.recognizer?.schedule();
     this.refreshPageIndicator();
   }
 
@@ -571,6 +576,7 @@ export class Editor {
       this.canvas.setSelection(page.id, page.elements.map((x) => x.id));
       return;
     }
+    if (mod && k === 'f') { e.preventDefault(); this.findInNotebook(); return; }
     if (mod && (k === '=' || k === '+')) { e.preventDefault(); this.canvas.zoomBy(1.25); return; }
     if (mod && k === '-') { e.preventDefault(); this.canvas.zoomBy(0.8); return; }
     if (mod && k === '0') { e.preventDefault(); this.canvas.fitWidth(); return; }
@@ -760,6 +766,70 @@ export class Editor {
 
   // ---------- Menus & inserts ----------
 
+  // ---------- Search ----------
+
+  /** Search typed text, calculation cards, recognized handwriting and PDF text; tap a result to go to its page. */
+  findInNotebook() {
+    const doc = this.doc;
+    const input = h('input', { class: 'field search', type: 'search', id: 'find-in-notebook', placeholder: 'Find in this notebook', 'aria-label': 'Find in this notebook' });
+    const results = h('div', { class: 'find-results' });
+    const ai = aiAvailable();
+    const unread = () => doc.pages.filter((p) => hasContent(p) && !doc.ocr?.[p.id]).length;
+    const footer = h('p', { class: 'muted small' });
+    const renderFooter = () => {
+      const n = unread();
+      footer.textContent = !ai
+        ? 'Finds typed text, calculation cards and text in PDFs. Connect AI in the AI tab to search handwriting too.'
+        : n ? `Handwriting on ${n} page${n === 1 ? '' : 's'} hasn’t been read yet. Use Make Notebook Searchable in the ⋯ menu.` : 'Finds handwriting, typed text, calculation cards and PDF text.';
+    };
+    sheet({
+      title: 'Find in Notebook',
+      build: (body, close) => {
+        const render = () => {
+          const q = input.value.trim();
+          if (!q) { results.replaceChildren(); return; }
+          const hits = findInDocument(doc, q);
+          results.replaceChildren(...(hits.length ? hits.map((x) => h('button', { class: 'find-hit', onclick: () => { close(); this.canvas.scrollToPage(x.page); } },
+            h('span', { class: 'find-page' }, `Page ${x.page + 1}`, h('span', { class: 'muted small' }, ` · ${x.kind}`)),
+            h('span', { class: 'snippet' }, x.snippet[0], h('mark', {}, x.snippet[1]), x.snippet[2]))) : [h('p', { class: 'muted' }, `Nothing on these pages matches “${q}”.`)]));
+        };
+        input.addEventListener('input', render);
+        body.append(input, results, footer);
+        renderFooter();
+        // PDF text layers are read once, then kept with the notebook.
+        (async () => {
+          let added = false;
+          for (const p of doc.pages) {
+            if (!p.background.pdf || doc.pdfText?.[p.id] != null) continue;
+            try { (doc.pdfText ||= {})[p.id] = await pdfPageText(p.background.pdf); added = true; } catch { /* unreadable PDF: skip */ }
+          }
+          if (added) { this.save(); render(); }
+        })();
+      },
+    });
+  }
+
+  /** Reads every page that hasn't been read yet, after showing roughly what it costs. */
+  async makeSearchable() {
+    const cfg = aiConfig();
+    if (!cfg) return;
+    const pages = this.recognizer.pending({ all: true });
+    if (!pages.length) { toast('Every page in this notebook is already searchable.'); return; }
+    const pieces = pages.reduce((n, p) => n + pageChunks(p).length, 0);
+    const per = { 'claude-opus-5-5': 0.02, 'claude-sonnet-5-5': 0.01, 'claude-haiku-5-5': 0.002 }[cfg.model];
+    const cost = cfg.provider === 'gemini'
+      ? 'On Gemini’s free tier this is usually free, within its daily limits.'
+      : `This will cost roughly $${Math.max(0.01, pieces * per).toFixed(2)} on your Anthropic account.`;
+    const ok = await confirmDialog({
+      title: 'Make Notebook Searchable?',
+      message: `${PROVIDERS[cfg.provider].name} will read the handwriting on ${pages.length} page${pages.length === 1 ? '' : 's'} so you can search it. ${cost} Keep this notebook open until it finishes.`,
+      confirm: 'Read Pages', destructive: false,
+    });
+    if (!ok) return;
+    const { done, failed } = await this.recognizer.run({ all: true, onProgress: (n, total) => toast(`Reading page ${n} of ${total}…`) });
+    if (done || failed) toast(failed ? `Read ${done} page${done === 1 ? '' : 's'}; ${failed} couldn’t be read.` : `Done. ${done} page${done === 1 ? ' is' : 's are'} now searchable.`);
+  }
+
   showMoreMenu(anchor) {
     const st = this.settings;
     menu(anchor, [
@@ -767,6 +837,9 @@ export class Editor {
       { label: 'Insert Calculation Card…', icon: 'function', action: () => this.newCalculation() },
       { label: 'Insert Image…', icon: 'image', action: () => this.insertImage() },
       { label: 'Import PDF Pages…', icon: 'import', action: () => this.importPDFPages() },
+      'sep',
+      { label: 'Find in Notebook…', icon: 'search', hint: '⌘F', action: () => this.findInNotebook() },
+      aiAvailable() ? { label: 'Make Notebook Searchable…', icon: 'sparkle', action: () => this.makeSearchable() } : null,
       'sep',
       { label: 'Export PDF', icon: 'export', action: () => this.exportPDF() },
       { label: 'Export Page as PNG', icon: 'export', action: () => this.exportPNG() },

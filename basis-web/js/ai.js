@@ -136,3 +136,78 @@ export function testConnection(provider, key, model) {
   if (provider === 'gemini') return testGemini(k);
   return Promise.reject(new Error('Choose a provider first.'));
 }
+
+// ---------- Reading handwriting ----------
+
+const AUTO_KEY = 'basis.ai.auto';
+/** Whether pages you write on are read automatically (on unless turned off). */
+export const autoRecognize = () => storage.get(AUTO_KEY, true) !== false;
+export const setAutoRecognize = (on) => storage.set(AUTO_KEY, !!on);
+
+const TRANSCRIBE = [
+  'You transcribe images of pages from a student’s notebook so the notes can be searched.',
+  'Transcribe all handwritten and printed text in reading order, one line per line of writing.',
+  'Write math in LaTeX inside $…$, for example $\\int_0^\\pi \\sin^2(t)\\,dt$.',
+  'Describe drawings, graphs and diagrams briefly in square brackets, for example [graph of y = x^2].',
+  'Do not add commentary, headings or explanations, and do not correct or complete the writing.',
+  'If there is no writing at all, reply with nothing.',
+].join(' ');
+
+export class AIError extends Error {
+  constructor(message, { stop = false } = {}) { super(message); this.stop = stop; }
+}
+
+/** Transcribes one image (base64 JPEG) of notebook writing. Resolves to plain text with $LaTeX$ math. */
+export async function transcribeImage(base64) {
+  const cfg = aiConfig();
+  if (!cfg) throw new AIError('AI isn’t set up.', { stop: true });
+  return cfg.provider === 'claude' ? transcribeClaude(cfg, base64) : transcribeGemini(cfg, base64);
+}
+
+async function transcribeClaude(cfg, base64) {
+  const { Anthropic, client } = await anthropic(cfg.key);
+  const params = {
+    model: cfg.model,
+    max_tokens: 8000,
+    output_config: { effort: 'low' }, // transcription doesn't need deep thinking
+    system: TRANSCRIBE,
+    messages: [{ role: 'user', content: [
+      { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+      { type: 'text', text: 'Transcribe this page.' },
+    ] }],
+  };
+  // Opus and Sonnet can retry a (rare, false-positive) safety decline on another model server-side.
+  const fallback = cfg.model !== 'claude-haiku-5-5';
+  let res;
+  try {
+    res = fallback
+      ? await client.beta.messages.create({ ...params, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' })
+      : await client.messages.create(params);
+  } catch (e) {
+    const stop = e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError || e instanceof Anthropic.NotFoundError
+      || (e instanceof Anthropic.APIError && (e.status === 402 || e.type === 'billing_error'));
+    throw new AIError(claudeError(Anthropic, e), { stop: stop || e instanceof Anthropic.RateLimitError });
+  }
+  if (res.stop_reason === 'refusal') throw new AIError('Claude declined to read this page.');
+  return res.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+}
+
+async function transcribeGemini(cfg, base64) {
+  let body;
+  try {
+    body = await gemini(`models/${encodeURIComponent(cfg.model)}:generateContent`, cfg.key, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: TRANSCRIBE }] },
+        contents: [{ role: 'user', parts: [{ inline_data: { mime_type: 'image/jpeg', data: base64 } }, { text: 'Transcribe this page.' }] }],
+        generationConfig: { temperature: 0, maxOutputTokens: 8000 },
+      }),
+    });
+  } catch (e) {
+    throw new AIError(e.message, { stop: /accepted|allowed|limit/.test(e.message) });
+  }
+  const cand = body.candidates?.[0];
+  if (!cand) throw new AIError(body.promptFeedback?.blockReason ? 'Gemini declined to read this page.' : 'Gemini didn’t return anything.');
+  return (cand.content?.parts || []).map((p) => p.text || '').join('').trim();
+}

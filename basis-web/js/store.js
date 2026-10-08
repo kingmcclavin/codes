@@ -62,6 +62,11 @@ export function summarize(doc) {
     // Typed text, for search.
     text: doc.pages.flatMap((p) => p.elements.filter((e) => e.type === 'text').map((e) => e.text)).join('\n').slice(0, 4000),
     sections: doc.pages.map((p, i) => (p.background.section ? { title: p.background.section, page: i } : null)).filter(Boolean),
+    // Recognized handwriting and PDF text per page, for library search.
+    pageText: doc.pages.map((p, i) => {
+      const t = [doc.ocr?.[p.id]?.text, doc.pdfText?.[p.id]].filter(Boolean).join('\n');
+      return t ? { page: i, text: t.slice(0, 3000) } : null;
+    }).filter(Boolean).slice(0, 300),
   };
 }
 

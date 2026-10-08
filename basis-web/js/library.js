@@ -14,6 +14,7 @@ import { exportBasis, importBasis, isBasisArchive } from './basisfile.js';
 import { safeFileName } from './editor.js';
 import { calc } from './calc/store.js';
 import { VERSION } from './version.js';
+import { searchable } from './recognize.js';
 import { FEATURES, feature, devUnlocked, unlockDev, lockDev, setFeatureOn } from './features.js';
 import { LIBRARY_ICON_GROUPS, libraryIcon, libraryIconName } from './libicons.js';
 
@@ -436,13 +437,21 @@ export function searchScreen(app) {
   };
   const render = () => {
     const q = input.value.trim().toLowerCase();
-    if (!q) { results.replaceChildren(h('p', { class: 'muted' }, 'Search looks through notebook titles, typed text and calculation cards, section names, folders' + (feature('toolbox') ? ' and formulas.' : '.'))); return; }
+    if (!q) { results.replaceChildren(h('p', { class: 'muted' }, 'Search looks through notebook titles, typed text and calculation cards, handwriting that AI has read, PDF text, section names, folders' + (feature('toolbox') ? ' and formulas.' : '.'))); return; }
     const groups = [];
-    const docs = store.allDocuments().filter((d) => d.title.toLowerCase().includes(q) || d.text?.toLowerCase().includes(q) || d.sections?.some((s) => s.title.toLowerCase().includes(q)));
+    const fq = searchable(q).trim();
+    const inPages = (d) => (fq ? d.pageText?.find((x) => searchable(x.text).includes(fq)) : null);
+    const docs = store.allDocuments().filter((d) => d.title.toLowerCase().includes(q) || d.text?.toLowerCase().includes(q) || d.sections?.some((s) => s.title.toLowerCase().includes(q)) || inPages(d));
     if (docs.length) groups.push(h('h2', { class: 'list-title' }, 'Notebooks'), h('div', { class: 'rows' }, ...docs.map((d) => {
       const sec = d.sections?.find((s) => s.title.toLowerCase().includes(q));
-      return h('div', { class: 'row' }, h('button', { class: 'row-main', onclick: () => app.openDocument(d.id, sec?.page) }, docTile(d.color, d.icon, 28),
-        h('span', { class: 'row-text' }, h('span', { class: 'row-title' }, d.title), d.title.toLowerCase().includes(q) ? h('span', { class: 'row-sub' }, relativeTime(d.modifiedAt)) : sec ? h('span', { class: 'row-sub' }, `Section “${sec.title}” · page ${sec.page + 1}`) : h('span', { class: 'row-sub' }, snippet(d.text || '', q)))));
+      const typed = d.text?.toLowerCase().includes(q);
+      const hit = !sec && !typed ? inPages(d) : null;
+      const sub = d.title.toLowerCase().includes(q) ? relativeTime(d.modifiedAt)
+        : sec ? `Section “${sec.title}” · page ${sec.page + 1}`
+          : typed ? snippet(d.text || '', q)
+            : h('span', {}, `Page ${hit.page + 1} · `, snippet(searchable(hit.text), fq));
+      return h('div', { class: 'row' }, h('button', { class: 'row-main', onclick: () => app.openDocument(d.id, sec?.page ?? hit?.page) }, docTile(d.color, d.icon, 28),
+        h('span', { class: 'row-text' }, h('span', { class: 'row-title' }, d.title), h('span', { class: 'row-sub' }, sub))));
     })));
     const folders = store.folders.filter((f) => f.name.toLowerCase().includes(q));
     if (folders.length) groups.push(h('h2', { class: 'list-title' }, 'Folders'), h('div', { class: 'rows' }, ...folders.map((f) => h('div', { class: 'row' }, h('button', { class: 'row-main', onclick: () => app.go({ name: 'folder', folderId: f.id }) }, folderTile(f.color, f.icon, 28), h('span', { class: 'row-text' }, h('span', { class: 'row-title' }, f.name)))))));

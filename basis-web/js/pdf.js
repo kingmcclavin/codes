@@ -196,3 +196,11 @@ export async function exportPNG(page) {
   const canvas = renderPageCanvas(page, 3, 30e6);
   return new Promise((r) => canvas.toBlob(r, 'image/png'));
 }
+
+/** The text layer of a PDF-backed page ('' for scans and handwriting-only PDFs). */
+export async function pdfPageText(ref) {
+  const doc = await pdfDoc(ref.asset);
+  const page = await doc.getPage(Math.min(doc.numPages, (ref.page || 0) + 1));
+  const content = await page.getTextContent();
+  return content.items.map((it) => (it.str || '') + (it.hasEOL ? '\n' : ' ')).join('').replace(/[ \t]+/g, ' ').trim();
+}

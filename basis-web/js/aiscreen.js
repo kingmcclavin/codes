@@ -2,8 +2,8 @@
 
 import { h } from './util.js';
 import { icon } from './icons.js';
-import { toast, confirmDialog, selectField } from './ui.js';
-import { PROVIDERS, aiConfig, saveAIConfig, setAIModel, clearAIConfig, maskKey, testConnection } from './ai.js';
+import { toast, confirmDialog, selectField, toggle } from './ui.js';
+import { PROVIDERS, aiConfig, saveAIConfig, setAIModel, clearAIConfig, maskKey, testConnection, autoRecognize, setAutoRecognize } from './ai.js';
 
 const STEPS = ['Choose', 'Account', 'Key', 'Connect', 'Done'];
 
@@ -62,10 +62,14 @@ export function aiScreen(app) {
           } }, 'Disconnect')),
         status),
       h('div', { class: 'settings-group' },
-        h('h2', { class: 'list-title' }, 'What it’s for'),
+        h('h2', { class: 'list-title' }, 'Handwriting search'),
+        h('p', { class: 'muted' }, 'AI reads your handwriting (math included) so you can find it with Find in Notebook (⌘F or the ⋯ menu) and in Search.'),
+        toggle('ai-auto', 'Read pages as I write', autoRecognize(), (on) => { setAutoRecognize(on); toast(on ? 'Pages you write on will be read a few seconds after you stop.' : 'Pages won’t be read automatically. Use Make Notebook Searchable in a notebook’s ⋯ menu.'); }),
+        h('p', { class: 'muted small' }, 'Each page is read once, and again only after it changes. To read the pages already in a notebook, open it and choose Make Notebook Searchable in the ⋯ menu.')),
+      h('div', { class: 'settings-group' },
+        h('h2', { class: 'list-title' }, 'Coming soon'),
         h('ul', { class: 'ai-points' },
-          h('li', {}, icon('search', 18), h('span', {}, h('b', {}, 'Handwriting search. '), 'Find any word or equation in your handwritten notes. Coming next.')),
-          h('li', {}, icon('graduation', 18), h('span', {}, h('b', {}, 'Study Buddy. '), 'Practice exams, flashcards and summaries made from your notes. Coming soon.')))),
+          h('li', {}, icon('graduation', 18), h('span', {}, h('b', {}, 'Study Buddy. '), 'Practice exams, flashcards and summaries made from your notes.')))),
       h('p', { class: 'muted small about' }, `Your key is stored only in this browser on this device and isn’t included in backups. Requests go straight from here to ${p.company}. You can see usage and set spending limits in ${p.console}.`));
   }
 
