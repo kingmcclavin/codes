@@ -31,7 +31,8 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
-html, body { height: 100%; }
+html { height: var(--app-h, 100%); }
+body { height: 100%; }
 
 body {
   margin: 0;
@@ -63,7 +64,7 @@ button { cursor: pointer; }
   width: var(--cw);
   max-width: 100%;
   margin: 0 auto;
-  padding: 0 var(--gutter) calc(var(--gutter) * 1.4);
+  padding: 0 var(--gutter) var(--gutter);
   display: flex;
   flex-direction: column;
   gap: calc(var(--cw) * 0.03);
