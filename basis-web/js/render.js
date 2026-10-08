@@ -48,7 +48,7 @@ export async function preloadAssets(pages) {
 
 // ---------- Background ----------
 
-export function drawBackground(ctx, page, clip) {
+export function drawBackground(ctx, page, clip, afterImage) {
   const bg = page.background;
   const W = page.w, H = page.h;
   const r = intersect(clip || { x: 0, y: 0, w: W, h: H }, { x: 0, y: 0, w: W, h: H });
@@ -66,6 +66,7 @@ export function drawBackground(ctx, page, clip) {
       ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
     }
   }
+  afterImage?.();
 
   const spacing = Math.max(bg.spacing, 4);
   ctx.strokeStyle = css(lineColor(bg));

@@ -296,7 +296,7 @@ async function importPDFNotebook(app, folderId) {
     try {
       const pages = await importPDF(file, (n, t) => toast(`Importing page ${n} of ${t}…`));
       const doc = makeDocument({ title: file.name.replace(/\.pdf$/i, ''), size: { w: pages[0].w, h: pages[0].h }, background: makeBackground('blank'), folderId });
-      doc.pages = pages.map((p) => makePage({ w: p.w, h: p.h }, { ...makeBackground('blank'), image: p.asset }));
+      doc.pages = pages.map((p) => makePage({ w: p.w, h: p.h }, { ...makeBackground('blank'), image: p.asset, pdf: p.pdf }));
       await store.saveDocument(doc);
       opened = doc.id;
     } catch (e) {

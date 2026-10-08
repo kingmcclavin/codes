@@ -39,23 +39,78 @@ function loadScript(src, ready) {
 
 async function pdfjs() {
   await loadScript(PDFJS, () => !!window.pdfjsLib);
-  // Loading the worker as a script lets pdf.js run it on the main thread,
-  // which also works where cross-origin workers are blocked.
-  await loadScript(PDFJS_WORKER, () => !!window.pdfjsWorker);
-  return window.pdfjsLib;
+  const lib = window.pdfjsLib;
+  // Parse PDFs in a worker so big files don't freeze the page. pdf.js falls
+  // back to running the worker script on the main thread if workers are blocked.
+  if (!lib.GlobalWorkerOptions.workerSrc) lib.GlobalWorkerOptions.workerSrc = new URL(LOCAL[PDFJS_WORKER], document.baseURI).href;
+  return lib;
+}
+
+/** Page-width-based render scale for a page image: sharp across the width, within a pixel budget (long pages stay sharp). */
+function imageScale(w, h, budget = 6e6) {
+  return Math.min(3, 2000 / w, Math.sqrt(budget / (w * h)));
+}
+
+const pdfDocs = new Map(); // asset id → Promise<PDFDocumentProxy>
+function pdfDoc(assetId) {
+  if (!pdfDocs.has(assetId)) {
+    const p = (async () => {
+      const lib = await pdfjs();
+      const blob = await store.assetBlob(assetId);
+      if (!blob) throw new Error('PDF not found');
+      return lib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), isEvalSupported: false }).promise;
+    })();
+    pdfDocs.set(assetId, p.catch((e) => { pdfDocs.delete(assetId); throw e; }));
+  }
+  return pdfDocs.get(assetId);
+}
+
+/**
+ * Renders part of a PDF-backed page at full sharpness. `ref` is the page's
+ * background.pdf ({ asset, page }); the PDF page is scaled to `pageW` points
+ * wide and top-aligned. `region` is in page points; `pxPerPt` is device
+ * pixels per point. Returns { promise (→ canvas), cancel }.
+ */
+export function renderPDFRegion(ref, pageW, region, pxPerPt) {
+  let task = null, cancelled = false;
+  const promise = (async () => {
+    const doc = await pdfDoc(ref.asset);
+    const page = await doc.getPage(Math.min(doc.numPages, (ref.page || 0) + 1));
+    if (cancelled) throw new Error('cancelled');
+    const k = pageW / page.getViewport({ scale: 1 }).width;
+    const viewport = page.getViewport({ scale: pxPerPt * k });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.ceil(region.w * pxPerPt));
+    canvas.height = Math.max(1, Math.ceil(region.h * pxPerPt));
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    task = page.render({ canvasContext: ctx, viewport, transform: [1, 0, 0, 1, -region.x * pxPerPt, -region.y * pxPerPt] });
+    await task.promise;
+    return canvas;
+  })();
+  return { promise, cancel: () => { cancelled = true; task?.cancel(); } };
+}
+
+/** Keeps a PDF file's bytes with the notebook so its pages can be re-rendered sharply (once per file). */
+const storedPDFs = new WeakMap();
+function storePDF(data) {
+  if (!storedPDFs.has(data)) storedPDFs.set(data, store.putAsset(new Blob([data], { type: 'application/pdf' })));
+  return storedPDFs.get(data);
 }
 
 /** Renders every page of a PDF file into page images. Returns pages for a document. */
 export async function importPDF(file, onProgress = () => {}) {
   const lib = await pdfjs();
   const data = new Uint8Array(await file.arrayBuffer());
-  const pdf = await lib.getDocument({ data, isEvalSupported: false }).promise;
+  const pdf = await lib.getDocument({ data: data.slice(), isEvalSupported: false }).promise;
+  const pdfAsset = await storePDF(data);
   const pages = [];
   for (let n = 1; n <= pdf.numPages; n++) {
     onProgress(n, pdf.numPages);
     const page = await pdf.getPage(n);
     const vp1 = page.getViewport({ scale: 1 });
-    const scale = Math.min(2.5, 2400 / Math.max(vp1.width, vp1.height));
+    const scale = imageScale(vp1.width, vp1.height);
     const vp = page.getViewport({ scale });
     const canvas = document.createElement('canvas');
     canvas.width = Math.ceil(vp.width);
@@ -66,8 +121,9 @@ export async function importPDF(file, onProgress = () => {}) {
     await page.render({ canvasContext: ctx, viewport: vp }).promise;
     const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.9));
     const asset = await store.putAsset(blob);
-    pages.push({ w: vp1.width, h: vp1.height, asset });
+    pages.push({ w: vp1.width, h: vp1.height, asset, pdf: { asset: pdfAsset, page: n - 1 } });
   }
+  pdf.destroy?.();
   return pages;
 }
 
@@ -102,8 +158,9 @@ export async function renderPDFPageImage(data, pageIndex = 0, { cropAspect = 0 }
   const n = (px.length / 4) * 255;
   const blob = await new Promise((res) => canvas2.toBlob(res, 'image/jpeg', 0.9));
   const asset = await store.putAsset(blob);
+  const pdfPage = Math.min(pdf.numPages, pageIndex + 1) - 1;
   pdf.destroy?.();
-  return { asset, color: { r: r / n, g: g / n, b: b / n, a: 1 } };
+  return { pdf: { asset: await storePDF(data), page: pdfPage }, asset, color: { r: r / n, g: g / n, b: b / n, a: 1 } };
 }
 
 /** Wraps an image in a one-page PDF of the given size (points). */

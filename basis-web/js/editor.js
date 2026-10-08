@@ -589,7 +589,7 @@ export class Editor {
 
   blankPageLike(index) {
     const ref = this.doc.pages[clamp(index, 0, this.doc.pages.length - 1)];
-    const bg = { ...structuredClone(ref.background), image: null, section: null };
+    const bg = { ...structuredClone(ref.background), image: null, pdf: null, section: null };
     return makePage({ w: ref.w, h: ref.h }, bg);
   }
 
@@ -751,7 +751,7 @@ export class Editor {
     const cur = this.doc.pages[this.canvas.currentPageIndex];
     this.history.perform('Page Settings', (pages) => pages.map((p) => {
       if (!all && p.id !== cur.id) return p;
-      const background = { ...structuredClone(bg), section: p.background.section, image: p.background.image };
+      const background = { ...structuredClone(bg), section: p.background.section, image: p.background.image, pdf: p.background.pdf ?? null };
       if (p.background.image) return { ...p, background };
       return { ...p, w: size.w, h: size.h, background };
     }));
@@ -818,7 +818,7 @@ export class Editor {
       const imported = await importPDF(file, (n, total) => toast(`Importing page ${n} of ${total}…`));
       const at = this.canvas.currentPageIndex + 1;
       const ref = this.doc.pages[this.canvas.currentPageIndex].background;
-      const pages = imported.map((x) => makePage({ w: x.w, h: x.h }, { ...makeBackground('blank', ref.color), image: x.asset, color: { r: 1, g: 1, b: 1, a: 1 } }));
+      const pages = imported.map((x) => makePage({ w: x.w, h: x.h }, { ...makeBackground('blank', ref.color), image: x.asset, pdf: x.pdf, color: { r: 1, g: 1, b: 1, a: 1 } }));
       this.history.perform('Import PDF', (ps) => [...ps.slice(0, at), ...pages, ...ps.slice(at)]);
       this.afterHistory();
       this.canvas.scrollToPage(at);

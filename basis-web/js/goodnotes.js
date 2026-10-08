@@ -101,6 +101,7 @@ export async function importGoodNotes(file, { folderId = null, onProgress = () =
       const paper = paperCache.get(key);
       if (paper) {
         bg.image = paper.asset;
+        bg.pdf = paper.pdf;
         bg.color = paper.color;
       }
     }

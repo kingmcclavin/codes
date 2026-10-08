@@ -181,7 +181,7 @@ export async function importBasis(archive, { folderId = null, onProgress = () =>
         if (bytes) { try { res = await renderPDFPageImage(bytes, b.pdf.pageIndex || 0); } catch { res = null; } }
         pdfPages.set(key, res);
       }
-      if (pdfPages.get(key)) bg.image = pdfPages.get(key).asset;
+      if (pdfPages.get(key)) { bg.image = pdfPages.get(key).asset; bg.pdf = pdfPages.get(key).pdf; }
     }
     const page = makePage({ w: pd.size?.[0] ?? 612, h: pd.size?.[1] ?? 792 }, bg);
     page.id = pd.id || page.id;

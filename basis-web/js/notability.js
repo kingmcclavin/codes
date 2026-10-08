@@ -61,7 +61,7 @@ export async function importNotability(file, { folderId = null } = {}) {
     if (!name.startsWith(folder + 'PDFs/') || !/\.pdf$/i.test(name)) continue;
     const bytes = await zip.file(name);
     for (let p = 0; bytes && p < pages.length; p++) {
-      try { pages[p].background.image = (await renderPDFPageImage(bytes, p)).asset; } catch { break; }
+      try { const r = await renderPDFPageImage(bytes, p); pages[p].background.image = r.asset; pages[p].background.pdf = r.pdf; } catch { break; }
     }
   }
 

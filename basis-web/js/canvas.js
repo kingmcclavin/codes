@@ -18,6 +18,7 @@ import { isScribble, scribbleErase } from './scribble.js';
 import { setElements } from './history.js';
 import { fontCss, maxWidth } from './model.js';
 import { icon } from './icons.js';
+import { renderPDFRegion } from './pdf.js';
 
 const GAP = 28;          // between pages, in page points
 const MIN_ZOOM = 0.2, MAX_ZOOM = 8;
@@ -31,6 +32,7 @@ export class CanvasView {
     this.view = { x: 0, y: 0, zoom: 1 };
     this.pointers = new Map();
     this.palms = new Set(); // touch ids rejected as a resting hand
+    this.sharp = new Map(); // pageId → sharp render of the visible part of its PDF
     this.interaction = null;   // active tool gesture
     this.gesture = null;       // pan / pinch
     this.selection = null;     // { pageId, ids: Set }
@@ -62,6 +64,10 @@ export class CanvasView {
   }
 
   destroy() {
+    this.destroyed = true;
+    clearTimeout(this.sharpTimer);
+    this.sharpTask?.cancel();
+    this.sharp.clear();
     this.ro.disconnect();
     this.endTextEdit();
     window.removeEventListener('keydown', this.onKeyDown);
@@ -336,7 +342,7 @@ export class CanvasView {
       ctx.fillRect(0, 0, p.w, p.h);
       ctx.restore();
       const vis = this.visiblePageRect(i);
-      drawBackground(ctx, p, vis);
+      drawBackground(ctx, p, vis, () => this.drawSharp(ctx, p));
       ctx.save();
       ctx.beginPath(); ctx.rect(0, 0, p.w, p.h); ctx.clip();
       const pad = expandRect(vis, 4);
@@ -348,6 +354,68 @@ export class CanvasView {
       }
       ctx.restore();
     }
+    this.scheduleSharpen();
+  }
+
+  // ---------- Sharp PDF pages ----------
+  // Imported PDF pages are stored as an image for quick drawing. Once the view
+  // settles, the visible part is re-rendered from the PDF at the current zoom.
+
+  sharpKey(p) { const r = p.background.pdf; return r ? `${r.asset}#${r.page}#${p.w}` : null; }
+
+  drawSharp(ctx, p) {
+    const t = this.sharp.get(p.id);
+    if (t && t.key === this.sharpKey(p)) ctx.drawImage(t.canvas, t.x, t.y, t.w, t.h);
+  }
+
+  scheduleSharpen() {
+    clearTimeout(this.sharpTimer);
+    if (!this.doc.pages.some((p) => p.background.pdf)) return;
+    this.sharpTimer = setTimeout(() => this.sharpen(), 200);
+  }
+
+  async sharpen() {
+    if (this.destroyed) return;
+    // Wait until writing, scrolling and zooming have stopped.
+    if (this.interaction || this.gesture || this.momentumRaf || this.pointers.size) { this.scheduleSharpen(); return; }
+    const need = Math.min(this.view.zoom * this.dpr, 8);
+    const vy0 = this.view.y, vy1 = this.view.y + this.h / this.view.zoom;
+    const visible = new Set();
+    for (let i = 0; i < this.doc.pages.length; i++) {
+      const p = this.doc.pages[i];
+      if (this.tops[i] > vy1 || this.tops[i] + p.h < vy0) continue;
+      visible.add(p.id);
+      const key = this.sharpKey(p);
+      if (!key || this.sharpFailed?.has(key)) continue;
+      const v = this.visiblePageRect(i);
+      const vis = { x: Math.max(0, v.x), y: Math.max(0, v.y), w: Math.min(p.w, v.x + v.w) - Math.max(0, v.x), h: Math.min(p.h, v.y + v.h) - Math.max(0, v.y) };
+      if (vis.w <= 0 || vis.h <= 0) continue;
+      const t = this.sharp.get(p.id);
+      const covers = t && t.x <= vis.x + 0.5 && t.y <= vis.y + 0.5 && t.x + t.w >= vis.x + vis.w - 0.5 && t.y + t.h >= vis.y + vis.h - 0.5;
+      if (covers && t.key === key && t.ppt >= need * 0.95) continue;
+      // Render a bit beyond the view so small scrolls stay sharp, within a pixel budget.
+      const m = { x: vis.w * 0.25, y: vis.h * 0.25 };
+      let r = { x: Math.max(0, vis.x - m.x), y: Math.max(0, vis.y - m.y) };
+      r.w = Math.min(p.w, vis.x + vis.w + m.x) - r.x;
+      r.h = Math.min(p.h, vis.y + vis.h + m.y) - r.y;
+      const budget = 8e6;
+      if (r.w * r.h * need * need > budget) r = vis;
+      const ppt = Math.min(need, Math.sqrt(budget / (r.w * r.h)));
+      const task = renderPDFRegion(p.background.pdf, p.w, r, ppt);
+      this.sharpTask?.cancel();
+      this.sharpTask = task;
+      let canvas;
+      try { canvas = await task.promise; } catch (e) {
+        if (!/cancel/i.test(e?.message || e?.name || '')) (this.sharpFailed ||= new Set()).add(key);
+        return;
+      }
+      if (this.destroyed || this.sharpTask !== task) return;
+      this.sharp.set(p.id, { canvas, key, ppt, ...r });
+      this.requestRender(); // draws it; the next pass picks up any other visible page
+      return;
+    }
+    // Free renders of pages that scrolled away.
+    for (const id of [...this.sharp.keys()]) if (!visible.has(id)) this.sharp.delete(id);
   }
 
   renderOverlay() {

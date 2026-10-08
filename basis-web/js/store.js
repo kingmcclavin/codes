@@ -140,7 +140,16 @@ class Store extends EventTarget {
     await this.db.delete('docs', id);
     await this.db.delete('summaries', id);
     this.summaries = this.summaries.filter((s) => s.id !== id);
-    if (doc) for (const a of collectAssetIds(doc)) await this.deleteAsset(a);
+    if (doc) {
+      // Duplicated notebooks share images and PDFs; keep any another notebook still uses.
+      const own = collectAssetIds(doc);
+      for (const s of this.summaries) {
+        if (!own.size) break;
+        const other = await this.loadDocument(s.id);
+        if (other) for (const a of collectAssetIds(other)) own.delete(a);
+      }
+      for (const a of own) await this.deleteAsset(a);
+    }
     this.changed();
   }
 
@@ -299,6 +308,7 @@ export function collectAssetIds(doc) {
   const ids = new Set();
   for (const p of doc.pages) {
     if (p.background.image) ids.add(p.background.image);
+    if (p.background.pdf?.asset) ids.add(p.background.pdf.asset);
     for (const e of p.elements) if (e.type === 'image') ids.add(e.asset);
   }
   return ids;
