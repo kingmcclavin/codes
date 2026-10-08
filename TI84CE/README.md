@@ -52,6 +52,41 @@ stay fast in that mode (raw-pointer hot paths, no per-instruction allocation, no
 redundant LCD work) and runs faster than the real calculator even unoptimised on a
 cloud CPU; optimised builds (Xcode *Release*) run roughly 10–15× real time.
 
+## Web app (any browser, including iPhone Safari)
+
+`Web/` is the same emulator ported to plain JavaScript (no build step, no
+dependencies). It runs the same hardware model, cycle for cycle: the JS and Swift
+cores produce identical RAM, flash and screen contents for the same input.
+
+- **Open it**: serve the `Web/` folder over HTTPS (GitHub Pages, Netlify, or
+  `python3 -m http.server` for local testing) and open `index.html`. Choose your
+  ROM file once; it stays in that browser's storage (IndexedDB) and is never uploaded.
+- **iPhone/iPad**: in Safari, tap Share → **Add to Home Screen**. It then opens
+  full screen like an app and works offline (a service worker caches the app files).
+- **Memory**: RAM, archive and the full machine state are saved automatically
+  (when you leave the page, after typing, and every 20 s) and restored on the next
+  visit. Settings → Memory has three extra snapshot slots.
+- **Keys**: tap the keypad, or use a hardware keyboard (shortcuts are listed in
+  Settings). Tapping Shift or Alt alone presses 2nd or alpha.
+- The emulator runs in a Web Worker, so the page stays responsive.
+
+```
+Web/
+├── index.html, style.css, app.js   page, keypad, menus
+├── runner.js, worker.js            real-time loop (in a Web Worker), autosave
+├── storage.js                      IndexedDB key-value store
+├── core/                           cpu, memory, devices, lcd, scheduler, emulator
+├── sw.js, manifest.webmanifest     offline support and home-screen install
+└── tools/                          headless.mjs (like ce-headless), selftest.mjs,
+                                    build-artifact.mjs
+```
+
+```sh
+node Web/tools/selftest.mjs                                    # ROM-free checks
+node Web/tools/headless.mjs --rom ti84ce.rom --seconds 12 \
+    --keys "9.0:clear,10.0:k2,10.5:add,11.0:k3,11.5:enter" --hash --screenshot out.ppm
+```
+
 ## What is emulated
 
 The ROM file turned out to be a **TI-84 Plus CE**, not the monochrome Z80-based
@@ -98,7 +133,7 @@ The emulator core never imports SwiftUI or UIKit.
 
 ```sh
 cd TI84CE
-swift test                                   # 73 tests; ROM tests need a ROM:
+swift test                                   # 74 tests; ROM tests need a ROM:
 TI84CE_ROM=/path/to/ti84ce.rom swift test    # (or put it in TI84CE.swiftpm/Resources)
 swift run -c release ce-headless --rom /path/to/ti84ce.rom --seconds 12 \
     --keys "9.0:clear,10.0:k2,10.5:add,11.0:k3,11.5:enter" --screenshot out.ppm

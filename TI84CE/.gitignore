@@ -12,3 +12,6 @@ DerivedData/
 
 # Local helper
 run.sh
+
+# Web build output
+Web/dist/

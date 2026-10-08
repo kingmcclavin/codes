@@ -49,20 +49,23 @@ public struct ROMImage {
         try self.init(data: [UInt8](d))
     }
 
-    /// Finds the first "d.d.d.dddd" version string in a range of the image.
+    /// Finds the "d.d.d.dddd" version string in a range of the image. The OS also
+    /// embeds older compatibility versions, so the highest one found is reported.
     static func findVersion(in image: [UInt8], range: Range<Int>) -> String? {
         let digit: (UInt8) -> Bool = { $0 >= 0x30 && $0 <= 0x39 }
         let dot: UInt8 = 0x2E
+        var best: String?
         var i = range.lowerBound
-        while i + 10 <= range.upperBound {
+        while i + 10 <= min(range.upperBound, image.count) {
             if digit(image[i]), image[i + 1] == dot, digit(image[i + 2]), image[i + 3] == dot,
                digit(image[i + 4]), image[i + 5] == dot,
                digit(image[i + 6]), digit(image[i + 7]), digit(image[i + 8]), digit(image[i + 9]) {
-                return String(decoding: image[i..<i + 10], as: UTF8.self)
+                let v = String(decoding: image[i..<i + 10], as: UTF8.self)
+                if best == nil || v > best! { best = v }
             }
             i += 1
         }
-        return nil
+        return best
     }
 
     public var summary: String {

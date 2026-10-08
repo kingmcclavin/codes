@@ -105,6 +105,12 @@ public final class Keypad: IODevice {
     private var scanRow = 0
     private var scanChanged = false
 
+    // Input bookkeeping only (not machine state): which pressed keys the ROM has
+    // read back, and whether it has polled since the last release. The runner uses
+    // this to hold short taps until the ROM has seen them.
+    private var seen = [UInt16](repeating: 0, count: 16)
+    public private(set) var releaseSeen = true
+
     unowned(unsafe) let scheduler: Scheduler
     unowned(unsafe) let interrupts: InterruptController
 
@@ -136,8 +142,20 @@ public final class Keypad: IODevice {
         }
         guard key.group < 16, key.bit < 16 else { return }
         let bit = UInt16(1) << UInt16(key.bit)
-        if pressed { matrix[key.group] |= bit } else { matrix[key.group] &= ~bit }
+        if pressed {
+            matrix[key.group] |= bit
+            seen[key.group] &= ~bit
+        } else {
+            matrix[key.group] &= ~bit
+            releaseSeen = false
+        }
         if mode == 1 { anyKeyCheck() }
+    }
+
+    /// Whether the ROM has read this key as pressed since it went down.
+    public func wasSeen(_ key: KeyPosition) -> Bool {
+        guard !key.isOn, key.group < 16, key.bit < 16 else { return true }
+        return seen[key.group] & (1 << UInt16(key.bit)) != 0
     }
 
     public func releaseAll() {
@@ -198,6 +216,19 @@ public final class Keypad: IODevice {
     // MARK: Registers
 
     public func read(_ offset: UInt16) -> UInt8 {
+        let v = peek(offset)
+        let o = Int(offset)
+        if (0x10..<0x30).contains(o) {
+            let row = (o - 0x10) >> 1
+            seen[row] |= data[row]
+            if !data.contains(where: { $0 != 0 }) && !matrix.contains(where: { $0 != 0 }) { releaseSeen = true }
+        } else if o == 0x08 && v & 4 == 0 {
+            releaseSeen = true
+        }
+        return v
+    }
+
+    public func peek(_ offset: UInt16) -> UInt8 {
         let o = Int(offset)
         switch o {
         case 0x00..<0x04: return byteOf(control, o)

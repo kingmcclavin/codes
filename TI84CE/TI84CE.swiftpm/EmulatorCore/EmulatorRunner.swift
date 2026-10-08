@@ -31,7 +31,8 @@ public final class EmulatorRunner {
     // Emulation-thread state.
     private var thread: Thread?
     private var pressedAt: [KeyPosition: UInt64] = [:]
-    private var pendingReleases: [(KeyPosition, UInt64)] = []
+    private var keyQueue: [(KeyPosition, Bool)] = []
+    private var lastReleaseAt: UInt64?
 
     /// 1.0 = real time. 0 = as fast as possible.
     public var speed: Double {
@@ -40,9 +41,15 @@ public final class EmulatorRunner {
     }
     private var speedValue = 1.0
 
-    /// Minimum time a key stays down, in emulated seconds, so a quick tap is seen
-    /// by at least one keypad scan of the ROM.
-    public var minimumKeyHold = 0.05
+    /// Minimum time a key stays down, in emulated seconds. A tap is also held until
+    /// the ROM has read it, and the next press waits until the ROM has polled after
+    /// the release: the ROM samples the keypad between tasks, so a quick touch could
+    /// otherwise fall between two samples.
+    public var minimumKeyHold = 0.03
+    /// Minimum time between a release and the next press, in emulated seconds.
+    public var minimumKeyGap = 0.02
+    /// Longest a key event waits for the ROM (calculator off, busy program).
+    public var maximumKeyWait = 0.5
 
     /// Called on the main thread when the run state changes (e.g. a breakpoint).
     public var onStateChange: ((RunState) -> Void)?
@@ -192,7 +199,7 @@ public final class EmulatorRunner {
             condition.unlock()
 
             for c in work { c(emulator) }
-            applyPendingReleases()
+            applyPendingKeys()
 
             if paused {
                 last = Date()
@@ -240,36 +247,40 @@ public final class EmulatorRunner {
         repeat {
             emulator.run(seconds: 1.0 / 60.0)
             emulated += 1.0 / 60.0
-            applyPendingReleases()
+            applyPendingKeys()
         } while Date().timeIntervalSince(start) < sliceSeconds && !emulator.cpu.breakpointHit
         return emulated
     }
 
+    // Key events are applied in order. A press waits until the ROM has noticed the
+    // previous release and a release waits until the ROM has read the press, so fast
+    // typing never loses or merges taps; keys held together (chords) still overlap.
     private func applyKey(_ key: KeyPosition, _ down: Bool) {
-        let now = emulator.scheduler.now
-        if down {
-            pendingReleases.removeAll { $0.0 == key }
-            pressedAt[key] = now
-            emulator.setKey(key, pressed: true)
-        } else {
-            let hold = UInt64(minimumKeyHold * Double(Scheduler.baseHz))
-            let earliest = (pressedAt[key] ?? 0) &+ hold
-            if now >= earliest {
-                emulator.setKey(key, pressed: false)
-            } else {
-                pendingReleases.append((key, earliest))
-            }
-            pressedAt[key] = nil
-        }
+        keyQueue.append((key, down))
+        applyPendingKeys()
     }
 
-    private func applyPendingReleases() {
-        guard !pendingReleases.isEmpty else { return }
-        let now = emulator.scheduler.now
-        pendingReleases.removeAll { entry in
-            guard now >= entry.1 else { return false }
-            emulator.setKey(entry.0, pressed: false)
-            return true
+    private func applyPendingKeys() {
+        let ticks = { (seconds: Double) in UInt64(seconds * Double(Scheduler.baseHz)) }
+        while let (key, down) = keyQueue.first {
+            let now = emulator.scheduler.now
+            if down {
+                if let last = lastReleaseAt {
+                    let since = now &- last
+                    if since < ticks(minimumKeyGap) { return }
+                    if !emulator.keypad.releaseSeen && since < ticks(maximumKeyWait) { return }
+                }
+                pressedAt[key] = now
+                emulator.setKey(key, pressed: true)
+            } else {
+                let held = now &- (pressedAt[key] ?? 0)
+                if held < ticks(minimumKeyHold) { return }
+                if !emulator.keypad.wasSeen(key) && held < ticks(maximumKeyWait) { return }
+                pressedAt[key] = nil
+                lastReleaseAt = now
+                emulator.setKey(key, pressed: false)
+            }
+            keyQueue.removeFirst()
         }
     }
 

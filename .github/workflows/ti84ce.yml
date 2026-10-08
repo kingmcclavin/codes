@@ -21,6 +21,21 @@ jobs:
         working-directory: TI84CE
         run: swift test
 
+  web-core:
+    name: Web app core checks (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax check
+        working-directory: TI84CE/Web
+        run: for f in *.js core/*.js tools/*.mjs; do node --check "$f" || exit 1; done
+      - name: Self-test (synthetic ROM)
+        working-directory: TI84CE/Web
+        run: node tools/selftest.mjs
+
   ios-app:
     name: Build iOS app (Simulator)
     runs-on: macos-15

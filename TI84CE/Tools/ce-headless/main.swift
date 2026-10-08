@@ -209,6 +209,17 @@ if let spec = option("--dump") {
     }
 }
 
+// --hash: FNV-1a fingerprints of RAM, the displayed frame and flash (compared with
+// the JavaScript port's Web/tools/headless.mjs).
+if flag("--hash") {
+    func fnv<C: Collection>(_ bytes: C) -> String where C.Element == UInt8 {
+        var h: UInt32 = 0x811C9DC5
+        for b in bytes { h ^= UInt32(b); h = h &* 0x01000193 }
+        return String(format: "%08x", h)
+    }
+    print("HASH ram=\(fnv(emu.ram.contents)) frame=\(fnv(emu.lcd.frame.pixels)) flash=\(fnv(emu.flash.contents))")
+}
+
 if let shot = option("--screenshot") {
     let f = emu.lcd.frame
     var out = Data("P6\n\(f.width) \(f.height)\n255\n".utf8)

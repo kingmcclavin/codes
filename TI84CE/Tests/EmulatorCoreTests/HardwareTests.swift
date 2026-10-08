@@ -104,6 +104,28 @@ final class HardwareTests: XCTestCase {
         XCTAssertEqual(k.read(0x08) & 0x04, 0x00)
     }
 
+    func testKeypadTracksWhatTheROMHasRead() {
+        let emu = Emulator()
+        let k = emu.keypad
+        k.write(0x04, value: 8); k.write(0x05, value: 8)
+        k.write(0x01, value: 0x01)
+        k.write(0x00, value: 0x03)
+        emu.setKey(.k5, pressed: true)               // group 4, bit 2
+        XCTAssertFalse(k.wasSeen(CalculatorKey.k5.position))
+        emu.run(seconds: 0.01)
+        _ = k.peek(0x10 + 2 * 4)
+        XCTAssertFalse(k.wasSeen(CalculatorKey.k5.position), "debugger reads don't count")
+        _ = k.read(0x10 + 2 * 4)
+        XCTAssertTrue(k.wasSeen(CalculatorKey.k5.position))
+
+        emu.setKey(.k5, pressed: false)
+        XCTAssertFalse(k.releaseSeen)
+        k.write(0x00, value: 0x01)                   // any-key poll, as the OS does when idle
+        k.write(0x08, value: 0xFF)
+        XCTAssertEqual(k.read(0x08) & 0x04, 0)
+        XCTAssertTrue(k.releaseSeen)
+    }
+
     func testSimultaneousKeysInSameGroup() {
         let emu = Emulator()
         emu.setKey(.second, pressed: true)
