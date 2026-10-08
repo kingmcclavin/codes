@@ -59,17 +59,25 @@ export function sidebar(app) {
       }
     };
     addFolders(null, 0);
+    // Calculator Toolbox: a collapsible section (closed by default), or hidden in Settings.
+    const toolbox = () => {
+      if (app.prefs.toolbox === false) return [];
+      const inside = ['formulas', 'units', 'graphs', 'history'].includes(sel.name);
+      const open = inside || storage.get('basis.toolboxOpen', false);
+      const head = h('button', { class: `side-head side-toggle ${open ? 'open' : ''}`, 'aria-expanded': String(open), onclick: () => { storage.set('basis.toolboxOpen', !open); render(); } },
+        h('span', {}, 'Toolbox'), icon('chevronRight', 14));
+      return [head, open ? h('div', { class: 'side-group' },
+        item({ name: 'formulas' }, 'function', 'Formulas'),
+        item({ name: 'units' }, 'convert', 'Unit Converter'),
+        item({ name: 'graphs' }, 'graph', 'Graphs'),
+        item({ name: 'history' }, 'history', 'History')) : null];
+    };
     const all = item({ name: 'library', folderId: null }, 'tray', 'All Notes', store.documentsIn(null).length);
     dropTarget(all, null);
     nav.replaceChildren(
       h('div', { class: 'brand' }, h('img', { src: 'icons/favicon.png', alt: '', width: 28, height: 28 }), h('span', { class: 'wordmark', role: 'img', 'aria-label': 'Basis' })),
       h('div', { class: 'side-group' }, item({ name: 'search' }, 'search', 'Search'), item({ name: 'calculator' }, 'calc', 'Calculator')),
-      h('div', { class: 'side-head' }, 'Toolbox'),
-      h('div', { class: 'side-group' },
-        item({ name: 'formulas' }, 'function', 'Formulas'),
-        item({ name: 'units' }, 'convert', 'Unit Converter'),
-        item({ name: 'graphs' }, 'graph', 'Graphs'),
-        item({ name: 'history' }, 'history', 'History')),
+      ...toolbox(),
       h('div', { class: 'side-head' }, 'Notes'),
       h('div', { class: 'side-group' }, all),
       h('div', { class: 'side-head' }, 'Folders'),
@@ -513,7 +521,9 @@ export function settingsScreen(app) {
     h('div', { class: 'settings-group' },
       h('h2', { class: 'list-title' }, 'Appearance'),
       h('div', { class: 'form-row' }, h('span', { class: 'form-label' }, 'Accent color'), accent, h('button', { class: 'btn ghost small', onclick: () => { app.setPrefs({ accent: null }); accent.setValue(hexToRgba('#2f6bff')); } }, 'Use default blue')),
-      h('div', { class: 'form-row' }, h('span', { class: 'form-label' }, 'Theme'), theme)),
+      h('div', { class: 'form-row' }, h('span', { class: 'form-label' }, 'Theme'), theme),
+      toggle('pref-toolbox', 'Show Calculator Toolbox in the sidebar', prefs.toolbox !== false, (on) => { app.setPrefs({ toolbox: on }); app.nav.render(); }),
+      h('p', { class: 'muted small' }, 'Formulas, Unit Converter, Graphs and History. The Calculator itself always stays in the sidebar.')),
     h('div', { class: 'settings-group' },
       h('h2', { class: 'list-title' }, 'Your data'),
       h('p', { class: 'muted' }, store.persistent

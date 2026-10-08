@@ -77,6 +77,10 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
 .brand img { border-radius: 7px; }
 .side-head { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 14px 12px 4px; }
 .side-group { display: flex; flex-direction: column; gap: 1px; }
+.side-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; border: 0; background: none; font-family: inherit; text-align: left; cursor: pointer; border-radius: 8px; }
+.side-toggle:hover { color: var(--fg); }
+.side-toggle .icon { transition: transform 0.15s; }
+.side-toggle.open .icon { transform: rotate(90deg); }
 .side-item {
   display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 10px;
   border: 0; background: transparent; border-radius: 9px; text-align: left; color: var(--fg);
