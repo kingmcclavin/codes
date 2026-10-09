@@ -65,6 +65,7 @@ export class Editor {
   }
 
   destroy() {
+    this.save.cancel?.();
     this.recognizer.stop();
     window.removeEventListener('keydown', this.onKey);
     document.removeEventListener('visibilitychange', this.onHide);
@@ -89,8 +90,10 @@ export class Editor {
     const c = this.canvas;
     if (c) this.doc.view = { pageIndex: c.currentPageIndex, zoom: c.view.zoom, scrollX: c.view.x, scrollY: c.view.y };
     try {
-      await store.saveDocument(this.doc, { touch: this.dirty });
+      // Scroll position alone isn't worth syncing; content and recognized handwriting are.
+      await store.saveDocument(this.doc, { touch: this.dirty, quiet: !this.dirty && !this.syncDirty });
       this.dirty = false;
+      this.syncDirty = false;
     } catch (e) {
       toast('Couldn’t save: ' + (e.message || 'storage is full or unavailable'));
     }

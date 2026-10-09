@@ -607,3 +607,13 @@ kbd { font-size: 12px; padding: 2px 7px; border-radius: 6px; background: var(--s
 .crop-handle.se { left: 100%; top: 100%; cursor: nwse-resize; } .crop-handle.s { left: 50%; top: 100%; cursor: ns-resize; }
 .crop-handle.sw { left: 0; top: 100%; cursor: nesw-resize; } .crop-handle.w { left: 0; top: 50%; cursor: ew-resize; }
 .crop-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* Cloud Sync */
+.sync-account { display: flex; align-items: center; gap: 12px; }
+.sync-title { font-weight: 600; }
+.sync-dot { width: 10px; height: 10px; border-radius: 50%; background: #30a46c; flex: none; }
+.sync-dot.syncing { background: var(--accent); animation: sync-pulse 1s ease-in-out infinite alternate; }
+.sync-dot.error { background: var(--danger); }
+.sync-dot.offline, .sync-dot.idle { background: var(--muted); }
+.sync-error { color: var(--danger); }
+@keyframes sync-pulse { from { opacity: 0.35; } }

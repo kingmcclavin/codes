@@ -114,6 +114,7 @@ export class Recognizer {
           const text = await recognizePage(p);
           if (this.stopped) break;
           (this.doc.ocr ||= {})[p.id] = { sig, text, at: Date.now() };
+          this.editor.syncDirty = true;
           done++;
           setLastAIError(null);
           this.editor.save();

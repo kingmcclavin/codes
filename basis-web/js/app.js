@@ -9,6 +9,7 @@ import { sidebar, libraryScreen, searchScreen, settingsScreen, newNotebookSheet,
 import { initTutorial, shouldShowWelcome, shouldShowEditorTour, resetTutorial, welcomeTour, editorTour } from './tour.js';
 import { feature } from './features.js';
 import { aiScreen } from './aiscreen.js';
+import { finishGoogleSignIn, startAutoSync } from './sync.js';
 import { calculatorScreen, formulasScreen, unitConverterScreen, historyScreen, graphScreen } from './calculator.js';
 
 class App {
@@ -29,6 +30,9 @@ class App {
 
   async start() {
     await store.init();
+    // Coming back from Google after connecting Cloud Sync.
+    let signedIn = null;
+    try { if (await finishGoogleSignIn()) signedIn = 'Connected to Google Drive. Syncing your notebooks…'; } catch (e) { signedIn = e.message; }
     this.tabs.ids = this.tabs.list();
     this.nav = sidebar(this);
     this.scrim = h('div', { class: 'scrim', onclick: () => this.root.classList.remove('nav-open') });
@@ -38,6 +42,8 @@ class App {
     this.root.replaceChildren(this.nav, this.scrim, h('div', { class: 'content-wrap' }, h('div', { class: 'mobile-bar' }, this.menuBtn, h('span', { class: 'wordmark mobile-title', role: 'img', 'aria-label': 'Basis' })), this.content), this.editorLayer);
     if (!store.persistent) toast('This browser blocks storage here, so notebooks won’t be kept after you leave. Use Settings → Back Up.');
     this.renderScreen();
+    if (signedIn) toast(signedIn);
+    this.sync = startAutoSync(this, () => feature('sync'));
     initTutorial();
     const active = storage.get('basis.activeDoc', null);
     if (active && store.summary(active)) await this.openDocument(active);
@@ -149,6 +155,16 @@ class App {
       this.pendingCard = null;
       setTimeout(() => this.editor?.insertCalculation(src), 120);
     }
+  }
+
+  /** An open notebook was updated by Cloud Sync: show the new version (it has no unsaved changes). */
+  async reloadDocument(id) {
+    if (this.editor?.doc.id !== id) return;
+    const ed = this.editor;
+    const page = ed.canvas?.currentPageIndex;
+    this.editor = null;
+    ed.destroy();
+    await this.openDocument(id, page);
   }
 
   async closeEditor(showLibrary = true) {

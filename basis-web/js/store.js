@@ -54,6 +54,7 @@ export function summarize(doc) {
     title: doc.title,
     createdAt: doc.createdAt,
     modifiedAt: doc.modifiedAt,
+    syncAt: doc.syncAt ?? doc.modifiedAt,
     folderId: doc.folderId ?? null,
     color: doc.color ?? null,
     icon: doc.icon ?? null,
@@ -107,8 +108,14 @@ class Store extends EventTarget {
 
   async loadDocument(id) { return this.db.get('docs', id); }
 
-  async saveDocument(doc, { touch = true } = {}) {
-    if (touch) doc.modifiedAt = Date.now();
+  /**
+   * touch: content changed (updates "modified").
+   * quiet: nothing that needs syncing changed (e.g. only the scroll position).
+   */
+  async saveDocument(doc, { touch = true, quiet = false } = {}) {
+    const now = Date.now();
+    if (touch) doc.modifiedAt = now;
+    if (!quiet || doc.syncAt == null) doc.syncAt = quiet ? doc.modifiedAt : Math.max(now, (doc.syncAt || 0) + 1);
     await this.db.put('docs', doc);
     const s = summarize(doc);
     await this.db.put('summaries', s);
@@ -155,6 +162,7 @@ class Store extends EventTarget {
       }
       for (const a of own) await this.deleteAsset(a);
     }
+    this.dispatchEvent(new CustomEvent('docdeleted', { detail: id }));
     this.changed();
   }
 
@@ -191,7 +199,7 @@ class Store extends EventTarget {
   }
 
   async createFolder(name, parentId = null) {
-    const f = { id: uuid(), name: name.trim() || 'New Folder', parentId: parentId ?? null, color: null, icon: null, createdAt: Date.now() };
+    const f = { id: uuid(), name: name.trim() || 'New Folder', parentId: parentId ?? null, color: null, icon: null, createdAt: Date.now(), updatedAt: Date.now() };
     await this.db.put('folders', f);
     this.folders.push(f);
     this.changed();
@@ -201,8 +209,17 @@ class Store extends EventTarget {
   async updateFolder(id, fields) {
     const f = this.folder(id);
     if (!f) return;
-    Object.assign(f, fields);
+    Object.assign(f, fields, { updatedAt: Date.now() });
     await this.db.put('folders', f);
+    this.changed();
+  }
+
+  /** Replaces the folder list (cloud sync merges folders from other devices). */
+  async setFolders(list) {
+    const keep = new Set(list.map((f) => f.id));
+    for (const f of this.folders) if (!keep.has(f.id)) await this.db.delete('folders', f.id);
+    for (const f of list) await this.db.put('folders', f);
+    this.folders = list.map((f) => ({ ...f }));
     this.changed();
   }
 
@@ -216,6 +233,7 @@ class Store extends EventTarget {
     for (const s of this.summaries.filter((s) => s.folderId && ids.has(s.folderId))) await this.deleteDocument(s.id);
     for (const fid of ids) await this.db.delete('folders', fid);
     this.folders = this.folders.filter((f) => !ids.has(f.id));
+    for (const fid of ids) this.dispatchEvent(new CustomEvent('folderdeleted', { detail: fid }));
     this.changed();
   }
 
@@ -223,11 +241,12 @@ class Store extends EventTarget {
 
   // Assets are stored as raw bytes, not Blobs: Safari often can't display
   // a Blob read back from IndexedDB ("WebKitBlobResource error 1").
-  async putAsset(blob) {
-    const id = uuid();
+  async putAsset(blob, id = uuid()) {
     await this.db.put('assets', { id, data: await blob.arrayBuffer(), type: blob.type });
     return id;
   }
+
+  async hasAsset(id) { return !!(await this.db.get('assets', id)); }
 
   async assetBlob(id) {
     const rec = await this.db.get('assets', id);
@@ -329,12 +348,12 @@ function blobToDataURL(blob) {
 }
 
 // Stroke points are Float32Arrays; JSON needs plain arrays.
-function encodeDoc(d) {
+export function encodeDoc(d) {
   const c = structuredClone(d);
   for (const p of c.pages) for (const e of p.elements) if (e.type === 'stroke') e.pts = Array.from(e.pts, (v) => Math.round(v * 100) / 100);
   return c;
 }
-function decodeDoc(d) {
+export function decodeDoc(d) {
   for (const p of d.pages) for (const e of p.elements) if (e.type === 'stroke') e.pts = Float32Array.from(e.pts);
   return d;
 }

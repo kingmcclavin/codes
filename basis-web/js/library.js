@@ -15,6 +15,7 @@ import { safeFileName } from './editor.js';
 import { calc } from './calc/store.js';
 import { VERSION } from './version.js';
 import { searchable } from './recognize.js';
+import { cloudSyncGroup } from './syncsettings.js';
 import { FEATURES, feature, devUnlocked, unlockDev, lockDev, setFeatureOn } from './features.js';
 import { LIBRARY_ICON_GROUPS, libraryIcon, libraryIconName } from './libicons.js';
 
@@ -524,6 +525,7 @@ export function settingsScreen(app) {
       h('div', { class: 'form-row' }, h('span', { class: 'form-label' }, 'Theme'), theme),
       toggle('pref-toolbox', 'Show Calculator Toolbox in the sidebar', prefs.toolbox !== false, (on) => { app.setPrefs({ toolbox: on }); app.nav.render(); }),
       h('p', { class: 'muted small' }, 'Formulas, Unit Converter, Graphs and History. The Calculator itself always stays in the sidebar.')),
+    feature('sync') ? cloudSyncGroup(app) : null,
     h('div', { class: 'settings-group' },
       h('h2', { class: 'list-title' }, 'Your data'),
       h('p', { class: 'muted' }, store.persistent

@@ -46,6 +46,19 @@ This folder is a static site with no build step. Import the repository in Vercel
 
 **Input**: pen and mouse draw. One finger scrolls (with momentum when you flick) and two fingers pinch-zoom. Double-tap with a finger to zoom the page edge to edge, and again to zoom back. Turn on *Draw with Finger* in ⋯ to draw with a finger. Keyboard: `1`–`6` tools, `E` eraser, `K` calculator, `⌘/Ctrl+Z` undo.
 
+## Cloud Sync (Google Drive, in testing)
+
+People can sync their notebooks to their own Google Drive (Settings → Cloud Sync). Basis only gets access to the files it creates (the `drive.file` permission), and notebooks go straight from the browser to Drive. The one server piece is `api/google-oauth.js`, a Vercel function that completes Google sign-in with the client secret; it stores nothing.
+
+One-time setup (free):
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), create a project (for example "Basis").
+2. **APIs & Services → Library**: enable the **Google Drive API**.
+3. **Google Auth Platform → Branding**: app name "Basis", your email. **Audience**: External. **Data access**: add the scope `https://www.googleapis.com/auth/drive.file`.
+4. **Clients → Create client → Web application.** Authorized JavaScript origin: your site (e.g. `https://basis-web.vercel.app`). Authorized redirect URI: the same address with a trailing slash (e.g. `https://basis-web.vercel.app/`).
+5. In Vercel → Project → Settings → **Environment Variables**, add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` from that client, then redeploy.
+6. While the app is in Google's **Testing** mode, only listed test users can connect, and Google signs them out after 7 days. **Publish** the app (Audience → Publish app) to let anyone connect and stay connected; `drive.file` doesn't need Google's security review.
+
 ## Data
 
 Everything is stored in this browser (IndexedDB and localStorage) on this device. **Settings → Back Up Everything** saves a JSON file you can restore in any browser.

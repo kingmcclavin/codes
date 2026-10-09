@@ -242,6 +242,7 @@ export function debounce(fn, ms) {
   let t = null;
   const d = (...args) => { clearTimeout(t); t = setTimeout(() => { t = null; fn(...args); }, ms); };
   d.flush = (...args) => { if (t) { clearTimeout(t); t = null; fn(...args); } };
+  d.cancel = () => { clearTimeout(t); t = null; };
   return d;
 }
 

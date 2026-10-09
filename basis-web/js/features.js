@@ -13,6 +13,7 @@ import { storage } from './util.js';
 
 export const FEATURES = {
   ai: { name: 'AI (bring your own key)', status: 'testing', note: 'The AI tab and its setup, plus the tutorial step about it.' },
+  sync: { name: 'Cloud Sync (Google Drive)', status: 'testing', note: 'Sync notebooks to your own Google Drive. Needs Google sign-in set up on Vercel.' },
   // exampleTool: { name: 'Example Tool', status: 'testing', note: 'What it does' },
   //   status: 'testing' (not finished) | 'released'
 };
