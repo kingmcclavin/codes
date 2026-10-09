@@ -69,20 +69,66 @@ PDF import/export and GoodNotes paper use pdf.js and jsPDF, bundled in `vendor/`
 
 ## Not ported
 
-These need iOS-only APIs: handwriting recognition (auto-solving handwritten math) and IPA export. The Engineering Tools screen and the data tables from Data & Graphs aren't ported yet. Graphs are.
+The Engineering Tools screen and the data tables from Data & Graphs aren't ported yet (Graphs are). Handwriting recognition works differently from the iPad app: it uses your own AI key (see the AI tab) instead of Apple's on-device recognition.
 
 ## Layout
 
 ```
-index.html, styles.css, sw.js, manifest.webmanifest, icons/
-js/app.js          shell, routing, tabs, preferences
-js/library.js      sidebar, notebook list, new notebook, search, settings
-js/editor.js       notebook toolbar, tool options, pages, page settings, calculator cards
-js/canvas.js       layout, zoom/scroll, rendering, pointer input, tools
-js/elements.js     strokes, shapes, images, text: geometry, hit testing, stroke outlines
-js/render.js       page templates and element drawing
-js/recognizer.js   shape recognition (ported from ShapeRecognizer.swift)
-js/erase.js        vector erasing (ported from ErasureEngine.swift)
-js/calc/           expression engine, units, built-in formulas, calculator state
-js/calculator.js   calculator, formulas, units, history and graph screens
+index.html, styles.css, sw.js, manifest.webmanifest, vercel.json, icons/
+api/google-oauth.js  Vercel function: finishes Google sign-in for Cloud Sync (stores nothing)
+vendor/              pdf.js, jsPDF, Anthropic SDK (bundled, no build step)
+js/app.js            shell, routing, tabs, preferences, loading splash
+js/library.js        sidebar, notebook list, new notebook, search, settings, imports
+js/editor.js         notebook toolbar, tool options, pages, export, crop, find in notebook
+js/canvas.js         layout, zoom/scroll, rendering, pointer input, palm rejection, tools
+js/elements.js       strokes, shapes, images, text: geometry, hit testing, stroke outlines
+js/render.js         page templates and element drawing
+js/history.js        undo/redo
+js/model.js          paper sizes, templates, pens and their defaults
+js/store.js          IndexedDB storage, backups
+js/recognizer.js     shape recognition (ported from ShapeRecognizer.swift)
+js/erase.js          vector erasing (ported from ErasureEngine.swift)
+js/scribble.js       scribble to erase
+js/pdf.js            PDF import/export, sharp PDF re-rendering
+js/goodnotes.js      GoodNotes import          js/notability.js  Notability import
+js/basisfile.js      .basis import/export (iPad app format)
+js/ai.js, aiscreen.js     bring-your-own-key AI (Claude or Gemini) and its setup tab
+js/recognize.js      handwriting recognition and search
+js/sync.js, syncsettings.js  Google Drive Cloud Sync and its settings
+js/tour.js           tutorial          js/features.js  feature flags, Developer Mode
+js/icons.js, libicons.js  app icons and folder/notebook icons
+js/calc/, js/calculator.js  calculator engine, units, formulas, and their screens
+js/version.js        version shown in Settings
 ```
+
+## Working on Basis
+
+Notes for anyone continuing this project, including a new Claude Code session.
+
+**Principles**
+- **Free forever, no ads, no paid tier, no tracking.** Nothing gets locked behind payment. Anything that would cost money per user (AI, cloud storage) uses the person's own account: bring your own AI key, bring your own Google Drive.
+- **Local-first.** Notebooks live in the browser (IndexedDB). Sync and AI are optional extras.
+- **No build step and no server.** Plain ES modules served as static files; third-party code is bundled in `vendor/`. The only server code is `api/google-oauth.js`, which exists because Google requires a client secret for long-lived sign-in.
+- **iPad and Apple Pencil first.** Test with touch, pen and palm in mind. Safari quirks already handled: assets stored as raw bytes (Safari can't read Blobs back from IndexedDB), touch events cancelled on the page (stops text selection under a resting palm), and live ink repainted only around the stroke tip (Safari draws canvases on the CPU).
+- **Plain language** in everything people see: no jargon in buttons, messages or errors.
+
+**Each update**
+- Bump the version in `js/version.js` (shown in Settings) by one: 1.33 → 1.34, and so on.
+- Bump the cache name in `sw.js` (`basis-v33` → `basis-v34`) at the same time and add any new files to its list, or installed copies keep old files.
+- New, unfinished features go behind a flag in `js/features.js` with status `testing`. They show only in Developer Mode (tap the version in Settings five times, then the password; only its hash is in the code). Change the status to `released` when ready.
+
+**Where the code lives**
+- `kingmcclavin/basis-web`, branch `main`: what Vercel deploys.
+- `kingmcclavin/codes`, branch `basis-web-app`, folder `basis-web/`: a mirror kept in step with every change.
+- A private preview is published as a claude.ai artifact. It can't run `api/` or reach outside services, so test sign-in and AI on the Vercel site.
+
+**Testing changes**
+- Serve the folder (`python3 -m http.server`) and drive it with Playwright in Chromium, with service workers blocked so changes load.
+- Fake outside services instead of calling them: Claude and Gemini replies, Google sign-in and a small in-memory Google Drive (two browser contexts act as two devices sharing one Drive).
+- Things that have broken before and are worth re-checking: palm rejection and finger scrolling; double-tap zoom; smooth ink while writing and pixel-identical ink after; undo; moving selections between pages; cropping; GoodNotes and Notability imports; sharp PDF pages at high zoom; sync conflicts keeping both versions.
+
+**On hold or next**
+- Study Buddy (AI practice exams, flashcards and summaries from your notes), paused while AI free-tier limits get sorted out.
+- Dropbox as a second Cloud Sync option.
+- Highlighting search matches on the page; moving content stranded past a page edge back onto the page.
+- Engineering Tools and the Data & Graphs tables from the iPad app.
