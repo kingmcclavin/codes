@@ -617,3 +617,5 @@ kbd { font-size: 12px; padding: 2px 7px; border-radius: 6px; background: var(--s
 .sync-dot.offline, .sync-dot.idle { background: var(--muted); }
 .sync-error { color: var(--danger); }
 @keyframes sync-pulse { from { opacity: 0.35; } }
+
+.legal-links a { color: var(--muted); }

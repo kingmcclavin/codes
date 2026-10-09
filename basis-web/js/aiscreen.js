@@ -29,7 +29,7 @@ export function aiScreen(app) {
         h('h2', { class: 'ai-title' }, 'Bring your own AI'),
         h('p', { class: 'muted' }, 'Connect your own Claude or Gemini account to use AI study tools in Basis: search your handwriting, and make practice exams, flashcards and summaries from your notes.'),
         h('ul', { class: 'ai-points' },
-          h('li', {}, icon('lock', 18), h('span', {}, 'Your key stays on this device. Your notes go only to the provider you choose, never to Basis.')),
+          h('li', {}, icon('lock', 18), h('span', {}, 'Your key stays on this device. Your notes go only to the provider you choose, never to Basis. ', h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy Policy'))),
           h('li', {}, icon('dollar', 18), h('span', {}, 'Any cost is on your own account. Gemini has a free tier; Claude is pay as you go (usually a few dollars a month).')),
           h('li', {}, icon('clock', 18), h('span', {}, 'Takes about 5 minutes, and it’s optional.'))),
         h('div', { class: 'row-actions' }, h('button', { class: 'btn primary', onclick: startWizard }, 'Set Up AI'))));

@@ -14,7 +14,7 @@ export function cloudSyncGroup(app) {
     if (!syncConnected()) {
       const cfg = await syncServerConfig();
       group.replaceChildren(head,
-        h('p', { class: 'muted' }, 'Keep your notebooks in your own Google Drive, backed up and the same on every device. Basis can only see the files it creates there, and your notes go straight to your Drive.'),
+        h('p', { class: 'muted' }, 'Keep your notebooks in your own Google Drive, backed up and the same on every device. Basis can only see the files it creates there, and your notes go straight to your Drive. ', h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy Policy')),
         cfg.configured
           ? h('div', { class: 'row-actions' }, h('button', { class: 'btn primary', onclick: async (e) => {
             e.currentTarget.disabled = true;

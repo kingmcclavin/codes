@@ -573,6 +573,7 @@ export function settingsScreen(app) {
     devUnlocked() ? developerGroup() : null,
     versionLine(),
     h('p', { class: 'muted small about' }, `Basis for the web. Pens with pressure and tilt, shape recognition, vector erasing, templates, live calculation cards, formulas and unit conversion. Free forever, no ads, all stored locally.`),
+    h('p', { class: 'muted small legal-links' }, h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy Policy'), ' · ', h('a', { href: 'terms.html', target: '_blank', rel: 'noopener' }, 'Terms of Service')),
   );
   return root;
 }

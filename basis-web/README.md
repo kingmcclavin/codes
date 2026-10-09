@@ -59,6 +59,10 @@ One-time setup (free):
 5. In Vercel → Project → Settings → **Environment Variables**, add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` from that client, then redeploy.
 6. While the app is in Google's **Testing** mode, only listed test users can connect, and Google signs them out after 7 days. **Publish** the app (Audience → Publish app) to let anyone connect and stay connected; `drive.file` doesn't need Google's security review.
 
+## Privacy policy and terms
+
+`privacy.html` and `terms.html` are served at `/privacy` and `/terms` (use these links in Google's sign-in setup) and linked from Settings. Keep them accurate when features change what data goes where.
+
 ## Data
 
 Everything is stored in this browser (IndexedDB and localStorage) on this device. **Settings → Back Up Everything** saves a JSON file you can restore in any browser.
