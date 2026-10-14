@@ -1273,6 +1273,21 @@ function isTyping(e) {
 
 // ---------- Gestures ----------
 
+/**
+ * Drops the wiggle where the Pencil landed and where it's being held: points
+ * within `r` of the first and last point. Those small hooks would otherwise
+ * stop a straight line from being recognized.
+ */
+function trimEnds(pts, r) {
+  if (pts.length < 4) return pts;
+  const first = pts[0], last = pts[pts.length - 1];
+  let a = 1, b = pts.length - 2;
+  while (b > 0 && dist(pts[b], last) <= r) b--;
+  while (a < b && dist(pts[a], first) <= r) a++;
+  if (b - a < 1 || dist(first, last) <= 2 * r) return pts; // too small to trim
+  return [first, ...pts.slice(a, b + 1), last];
+}
+
 /** Pen, highlighter and shapes: collects samples; hold still to snap to a shape. */
 class InkGesture {
   constructor(view, e, i, mode) {
@@ -1297,7 +1312,7 @@ class InkGesture {
 
   trySnap() {
     if (this.samples.length < 3) return;
-    const pts = this.samples.map((s) => ({ x: s.x, y: s.y }));
+    const pts = trimEnds(this.samples.map((s) => ({ x: s.x, y: s.y })), 10 / Math.max(this.view.view.zoom, 0.25));
     if (this.mode === 'highlighter') {
       // Highlighters straighten into a line.
       this.snapped = { kind: 'line', geom: { kind: 'line', a: pts[0], b: pts[pts.length - 1] } };
@@ -1319,7 +1334,8 @@ class InkGesture {
       this.samples.push(s);
     }
     const scr = this.view.local(events[events.length - 1]);
-    if (dist(scr, this.lastMoveScreen) > 3) {
+    // A held Pencil still drifts a little; only real movement restarts the hold.
+    if (dist(scr, this.lastMoveScreen) > 6) {
       this.lastMoveScreen = scr;
       if (this.snapped) {
         // After snapping, dragging stretches a line's free end.
