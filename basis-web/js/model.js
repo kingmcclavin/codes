@@ -161,6 +161,7 @@ export function defaultSettings() {
     highlighter: structuredClone(HIGHLIGHTER_PRESET.style),
     shape: { strokeColor: hexToRgba('#111114'), lineWidth: 2, opacity: 1, fill: null, lineStyle: 'solid' },
     eraser: { mode: 'object', size: 24, highlighterOnly: false },
+    lassoMode: 'touch',
     text: { fontFamily: 'System', fontSize: 18, color: hexToRgba('#111114'), bold: false, italic: false, align: 'left' },
     scribbleToErase: true,
     scribbleMode: 'strokes',

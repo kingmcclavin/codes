@@ -8,7 +8,7 @@ import {
   applyT, concatT, translateT, scaleAboutT, rotateAboutT, angleOf, uuid,
 } from './util.js';
 import {
-  elementBounds, elementBox, hitTest, intersectsPath, enclosedBy, transformElement, buildStrokePath, makeStroke, packPoints,
+  elementBounds, elementBox, hitTest, intersectsPath, enclosedBy, touchedBy, transformElement, buildStrokePath, makeStroke, packPoints,
   shapeKeyPoints, shapeAsStrokes, boxCorners, layoutText, naturalTextWidth, fontString, CARD_PAD, STRIDE,
 } from './elements.js';
 import { drawBackground, drawElement, drawShape, drawText, fillStrokePath, setImageLoadHandler } from './render.js';
@@ -1509,7 +1509,7 @@ class EraserGesture {
   draw(ctx) { if (this.view.hover) this.view.drawEraserCursor(ctx, this.view.hover); }
 }
 
-/** Freehand lasso: encloses elements to select them; a tap selects one. */
+/** Freehand lasso: selects what it touches (or encloses, by setting); a tap selects one. */
 class LassoGesture {
   constructor(view, e, i) {
     this.view = view;
@@ -1535,7 +1535,9 @@ class LassoGesture {
       if (hit) v.setSelection(page.id, [hit.id]);
       return;
     }
-    const ids = page.elements.filter((e) => enclosedBy(e, this.pts)).map((e) => e.id);
+    // 'touch' (default): anything the loop touches or partly circles; 'enclose': only what's mostly inside.
+    const picks = v.settings.lassoMode === 'enclose' ? enclosedBy : touchedBy;
+    const ids = page.elements.filter((e) => picks(e, this.pts)).map((e) => e.id);
     v.setSelection(page.id, ids);
   }
 

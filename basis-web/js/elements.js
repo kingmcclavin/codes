@@ -366,6 +366,28 @@ export function enclosedBy(e, poly) {
   return polygonContains(poly, { x: e.box.cx, y: e.box.cy }) && inside >= 3;
 }
 
+/** Lasso touch: any part of the element is inside the polygon, or the lasso line crosses it. */
+export function touchedBy(e, poly) {
+  if (poly.length < 3) return false;
+  if (!rectsIntersect(elementBounds(e), boundsOf(poly))) return false;
+  let lines, tol = 0;
+  if (e.type === 'stroke') { lines = [strokePoints(e)]; tol = e.style.width / 2; }
+  else if (e.type === 'shape') {
+    lines = [...shapeOutline(e, 4), ...arrowHeads(e).map((t) => [...t, t[0]])]; tol = e.style.lineWidth / 2;
+    if (e.style.fill && isClosedShape(e) && polygonContains(lines[0], poly[0])) return true;
+  } else {
+    const c = boxCorners(e.box); lines = [[...c, c[0]]];
+    if (boxContains(e.box, poly[0])) return true;
+  }
+  if (lines.some((l) => l.some((p) => polygonContains(poly, p)))) return true;
+  const ring = [...poly, poly[0]];
+  for (const l of lines) {
+    if (l.length === 1 && distToPolyline(l[0], ring) <= tol) return true;
+    for (let k = 1; k < l.length; k++) for (let i = 1; i < ring.length; i++) if (segSegDistance(ring[i - 1], ring[i], l[k - 1], l[k]) <= tol) return true;
+  }
+  return false;
+}
+
 // ---------- Transforms & restyling ----------
 
 export function transformElement(e, t) {

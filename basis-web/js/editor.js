@@ -363,7 +363,9 @@ export class Editor {
             h('button', { class: 'opt-btn', onclick: (e) => this.showSelectionStyle(e.currentTarget) }, icon('sliders', 18), h('span', {}, 'Style')),
           );
         } else {
-          bar.append(h('span', { class: 'opt-hint' }, 'Circle items to select them, or tap an item. Double-tap text to edit it.'));
+          bar.append(
+            segmented([{ value: 'touch', label: 'Touching' }, { value: 'enclose', label: 'Enclosed' }], st.lassoMode || 'touch', (v) => { st.lassoMode = v; this.settingsChanged(); }, { label: 'Lasso selects' }),
+            sep(), h('span', { class: 'opt-hint' }, 'Circle items to select them, or tap an item. Double-tap text to edit it.'));
         }
         if (clipboard?.elements?.length) bar.append(sep(), h('button', { class: 'opt-btn', onclick: () => this.paste() }, icon('paste', 18), h('span', {}, 'Paste')));
         break;
