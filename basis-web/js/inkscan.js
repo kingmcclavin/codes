@@ -105,6 +105,7 @@ export function traceInk(prep, { sensitivity = 0.5, removeLines = true } = {}) {
     if (k >= 3) mask[i] = 2;
   }
   for (let i = 0; i < n; i++) if (mask[i]) mask[i] = 1;
+  if (removeLines) removeRuledLines(mask, dark, W, H);
 
   // Big dark areas (the desk, a shadow, a printed photo) aren't writing:
   // clear them and their edges, without losing writing that touches them.
@@ -141,7 +142,17 @@ export function traceInk(prep, { sensitivity = 0.5, removeLines = true } = {}) {
 
   const thick = median(strokes.map((s) => s.width)) || 2;
   strokes = strokes.filter((s) => s.isolated || s.length >= thick * 1.5);
-  if (removeLines) strokes = strokes.filter((s) => !isRuledLine(s, W, H));
+  if (removeLines) {
+    // Printed dots (dot-grid paper) are small and lighter than the writing.
+    const darkOf = (s) => median(s.pix.map((i) => dark[i]));
+    const writingDark = median(strokes.filter((s) => s.length > Math.max(30, thick * 8)).map(darkOf)) || 1; // long strokes: real writing
+    const small = (s) => {
+      let x0 = W, y0 = H, x1 = 0, y1 = 0;
+      for (const i of s.pix) { const x = i % W, y = (i / W) | 0; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      return Math.max(x1 - x0, y1 - y0) < Math.max(6, thick * 3);
+    };
+    strokes = strokes.filter((s) => !isMarginLine(s, W, H) && !(small(s) && darkOf(s) < writingDark * 0.75));
+  }
   for (const s of strokes) {
     s.color = inkColor(prep, s.pix);
     s.pts = simplify(smooth(s.pix.map((i) => ({ x: (i % W) + 0.5, y: ((i / W) | 0) + 0.5 }))), 0.6);
@@ -297,12 +308,121 @@ function traceSkeleton(m, W, H, dt) {
   return paths;
 }
 
-function isRuledLine(s, W, H) {
+// A long, straight, upright line: the notebook's margin.
+function isMarginLine(s, W, H) {
   const a = { x: s.pix[0] % W, y: (s.pix[0] / W) | 0 }, b = { x: s.pix[s.pix.length - 1] % W, y: (s.pix[s.pix.length - 1] / W) | 0 };
   const chord = Math.hypot(b.x - a.x, b.y - a.y);
-  const horiz = Math.abs(b.y - a.y) < chord * 0.17, vert = Math.abs(b.x - a.x) < chord * 0.17;
-  if (!(horiz && chord > W * 0.3) && !(vert && chord > H * 0.3)) return false;
-  return chord / s.length > 0.97; // nearly straight
+  return Math.abs(b.x - a.x) < chord * 0.17 && chord > H * 0.3 && chord / s.length > 0.97;
+}
+
+/**
+ * Takes the notebook's ruled lines out of the ink mask. They're found by
+ * shape, not color (cameras often make them gray): long, thin runs along the
+ * page's slant. A run as dark as the writing is kept (an underline, a
+ * fraction bar) unless it crosses most of the page. Where writing crosses a
+ * line, the crossing stays so letters aren't cut.
+ */
+function removeRuledLines(mask, dark, W, H) {
+  const ink = [];
+  for (let i = 0; i < W * H; i++) if (mask[i]) ink.push(i);
+  if (!ink.length) return;
+  const stride = Math.max(1, Math.floor(ink.length / 150000));
+
+  // The lines' slant: the slope at which ink piles up into the sharpest rows.
+  const off = Math.ceil(W * 0.2) + 2, hist = new Float32Array(H + 2 * off);
+  const score = (t) => {
+    hist.fill(0);
+    for (let k = 0; k < ink.length; k += stride) { const i = ink[k], x = i % W, y = (i / W) | 0; hist[Math.round(y - x * t) + off]++; }
+    let sq = 0;
+    for (const v of hist) sq += v * v;
+    return sq;
+  };
+  let best = 0, bestScore = -1;
+  for (let t = -0.18; t <= 0.18001; t += 0.01) { const v = score(t); if (v > bestScore) { bestScore = v; best = t; } }
+  const coarse = best;
+  for (let t = coarse - 0.01; t <= coarse + 0.01; t += 0.002) { const v = score(t); if (v > bestScore) { bestScore = v; best = t; } }
+  const shift = new Int32Array(W);
+  for (let x = 0; x < W; x++) shift[x] = Math.round(x * best);
+  const lo = Math.min(0, shift[W - 1]), hi = Math.max(0, shift[W - 1]);
+
+  // Long runs along that slant (a pixel of slack up or down, small gaps allowed).
+  const L = Math.max(60, Math.round(W / 16)), GAP = 3;
+  const at = (x, y) => y > 0 && y < H - 1 && (mask[y * W + x] || mask[(y - 1) * W + x] || mask[(y + 1) * W + x]);
+  const findRuns = (r, minLen, out) => {
+    let start = -1, last = -1;
+    for (let x = 0; x <= W; x++) {
+      const on = x < W && at(x, r + shift[x]);
+      if (on) { if (start < 0) start = x; last = x; continue; }
+      if (start >= 0 && (x === W || x - last > GAP)) {
+        if (last - start + 1 >= minLen) out.push({ r, x0: start, x1: last });
+        start = -1;
+      }
+    }
+  };
+  const runs = [];
+  for (let r = 1 - hi; r < H - 1 - lo; r++) findRuns(r, L, runs);
+  if (!runs.length) return;
+
+  // How dark the writing is (everything not on a long run).
+  const onRun = new Uint8Array(W * H);
+  for (const u of runs) for (let x = u.x0; x <= u.x1; x++) for (let dy = -1; dy <= 1; dy++) {
+    const y = u.r + shift[x] + dy;
+    if (y > 0 && y < H - 1 && mask[y * W + x]) onRun[y * W + x] = 1;
+  }
+  const writing = new Uint32Array(101);
+  for (let k = 0; k < ink.length; k += stride) if (!onRun[ink[k]]) writing[Math.round(dark[ink[k]] * 100)]++;
+  const writingDark = histMedian(writing) ?? 1;
+
+  // Which runs are ruled lines: lighter than the writing, or across most of the page.
+  const kill = new Uint8Array(W * H);
+  const hst = new Uint32Array(101);
+  const lineRows = new Set();
+  const judge = (u) => {
+    hst.fill(0);
+    for (let x = u.x0; x <= u.x1; x++) { const y = u.r + shift[x]; if (y > 0 && y < H - 1 && mask[y * W + x]) hst[Math.round(dark[y * W + x] * 100)]++; }
+    const d = histMedian(hst) ?? 0;
+    if (d >= writingDark * 0.8 && u.x1 - u.x0 < W * 0.6) return;
+    lineRows.add(u.r);
+    // Pen drawn on top of the line is clearly darker than the line: keep it.
+    const keepAbove = Math.max(d + 0.15, writingDark * 0.85);
+    for (let x = u.x0; x <= u.x1; x++) for (let dy = -1; dy <= 1; dy++) {
+      const y = u.r + shift[x] + dy, i = y * W + x;
+      if (y > 0 && y < H - 1 && mask[i] && dark[i] < keepAbove) kill[i] = 1;
+    }
+  };
+  for (const u of runs) judge(u);
+  // Shorter pieces of a line already found (cut up by writing or the margin).
+  const rows = new Set();
+  for (const r of lineRows) for (let d = -2; d <= 2; d++) rows.add(r + d);
+  const pieces = [];
+  for (const r of rows) if (r >= 1 - hi && r < H - 1 - lo) findRuns(r, 12, pieces);
+  for (const u of pieces) judge(u);
+
+  // Keep crossings: writing continues above and below the line there.
+  const writingNear = (x, y, dir) => {
+    for (let k = 2; k <= 5; k++) {
+      const yy = y + dir * k;
+      if (yy <= 0 || yy >= H - 1) return false;
+      for (let dx = -1; dx <= 1; dx++) { const j = yy * W + x + dx; if (mask[j] && !kill[j]) return true; }
+    }
+    return false;
+  };
+  const drop = [];
+  for (let i = 0; i < W * H; i++) {
+    if (!kill[i]) continue;
+    const x = i % W, y = (i / W) | 0;
+    if (x > 0 && x < W - 1 && writingNear(x, y, -1) && writingNear(x, y, 1)) continue;
+    drop.push(i);
+  }
+  for (const i of drop) mask[i] = 0;
+}
+
+function histMedian(hist) {
+  let total = 0;
+  for (const v of hist) total += v;
+  if (!total) return null;
+  for (let k = 0, acc = 0; k < hist.length; k++) { acc += hist[k]; if (acc * 2 >= total) return k / 100; }
+  return null;
 }
 
 // The ink's color, corrected for the paper's tint. Black, gray and pencil give null (use the pen color).

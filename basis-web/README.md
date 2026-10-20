@@ -27,7 +27,7 @@ This folder is a static site with no build step. Import the repository in Vercel
 - Hold still at the end of a stroke to snap it into a line, rectangle, ellipse, triangle, polygon or arrow. The Shapes tool snaps every stroke.
 - Stroke eraser and a vector "pixel" eraser that splits strokes. Optional highlighter-only mode.
 - Scribble to erase: scribble quickly over ink with the pen to erase the strokes, whole words, or the scribbled region
-- Handwriting from Photo (image button or ⋯): turn a photo of paper notes into editable ink. It runs on the device: no AI and no cost. Crop to the writing, pick the sensitivity, and notebook lines are ignored. Black ink uses your pen color, and colored ink can keep its color.
+- Handwriting from Photo (image button or ⋯): turn a photo of paper notes into editable ink. It runs on the device: no AI and no cost. Crop to the writing and pick the sensitivity. Ruled lines, the margin and dot-grid dots are left out, even when the camera makes them gray. Black ink uses your pen color, and colored ink can keep its color.
 - Lasso (selects what it touches, or only what it encloses): select, move, resize, rotate, recolor, restyle, cut/copy/paste, duplicate, arrange
 - Text boxes with fonts, size, bold/italic and alignment
 - Images, PDF import (pages become backgrounds you can write on), PDF and PNG export
