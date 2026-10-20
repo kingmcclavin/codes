@@ -13,6 +13,7 @@ const P = {
   shapes: '<rect x="3.5" y="3.5" width="9" height="9" rx="1"/><circle cx="15.5" cy="15.5" r="5"/>',
   lasso: '<path d="M7 17.5c-2.6-1.2-4-3.2-4-5.5C3 7.6 7 4 12 4s9 3.6 9 8-4 8-9 8c-1.3 0-2.6-.2-3.7-.6"/><circle cx="7.5" cy="17.5" r="1.8"/><path d="M7.5 19.3c0 1.3-.8 2.2-2 2.7"/>',
   text: '<path d="M5 6V4.5h14V6"/><path d="M12 4.5v15"/><path d="M9 19.5h6"/>',
+  photoInk: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M6.5 15.5c1.4-2.6 2.4-5 3.6-5 1.1 0 .4 4.2 1.9 4.2 1.3 0 1.9-3.2 3.3-3.2.8 0 1 .9 2.2.9"/>',
   image: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 16l-5-5L6 19"/>',
   calc: '<rect x="4.5" y="3" width="15" height="18" rx="2.5"/><path d="M8 7.5h8"/><path d="M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01" stroke-width="2.6"/>',
   pages: '<rect x="7" y="3.5" width="12" height="15" rx="1.5"/><path d="M5 7v11.5A2 2 0 007 20.5h9"/>',

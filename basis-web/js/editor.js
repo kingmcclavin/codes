@@ -4,7 +4,7 @@
 import { h, debounce, uuid, storage, css, colorsClose, clamp, hexToRgba } from './util.js';
 import { icon } from './icons.js';
 import {
-  sheet, askText, confirmDialog, popover, menu, toast, segmented, selectField, slider, swatches, toggle, iconButton, pickFile, saveFile,
+  sheet, askText, confirmDialog, popover, menu, toast, segmented, selectField, slider, swatches, toggle, iconButton, pickFile, saveFile, cropStage,
 } from './ui.js';
 import { CanvasView } from './canvas.js';
 import { History, setElements, updatePage } from './history.js';
@@ -23,6 +23,7 @@ import { Recognizer, aiAvailable, findInDocument, pageChunks, hasContent } from 
 import { aiConfig, PROVIDERS } from './ai.js';
 import { SCRIBBLE_MODES } from './scribble.js';
 import { exportBasis } from './basisfile.js';
+import { handwritingFromPhoto } from './photoink.js';
 
 const TOOL_ICONS = { pen: 'pen', highlighter: 'highlighter', eraser: 'eraser', shapes: 'shapes', lasso: 'lasso', text: 'text' };
 
@@ -117,7 +118,10 @@ export class Editor {
       this.toolButtons[t.id] = b;
       tools.append(b);
     }
-    const imgBtn = iconButton('image', 'Insert image', () => this.insertImage());
+    const imgBtn = iconButton('image', 'Insert image', () => menu(imgBtn, [
+      { label: 'Insert Image…', icon: 'image', action: () => this.insertImage() },
+      { label: 'Handwriting from Photo…', icon: 'photoInk', action: () => handwritingFromPhoto(this) },
+    ]));
     this.calcBtn = iconButton('calc', 'Calculator (K)', () => this.toggleCalculator());
     this.calcBtn.dataset.tour = 'calc';
     tools.append(h('span', { class: 'tool-sep' }), imgBtn, this.calcBtn);
@@ -782,40 +786,11 @@ export class Editor {
     const url = (await store.assetURL(el.asset)) || (await store.assetDataURL(el.asset));
     if (!url) { toast('This image couldn’t be loaded.'); return; }
     const full = { x: 0, y: 0, w: 1, h: 1 };
-    let r = { ...(el.crop || full) };
-    const img = h('img', { class: 'crop-img', src: url, alt: '', draggable: 'false' });
-    const box = h('div', { class: 'crop-box' }, ...['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((d) => h('span', { class: `crop-handle ${d}`, 'data-dir': d })));
-    const stage = h('div', { class: 'crop-stage' }, h('div', { class: 'crop-inner' }, img, box));
-    const place = () => Object.assign(box.style, { left: r.x * 100 + '%', top: r.y * 100 + '%', width: r.w * 100 + '%', height: r.h * 100 + '%' });
-    place();
-    const MIN = 0.03;
-    box.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      box.setPointerCapture(e.pointerId);
-      const dir = e.target.dataset.dir || 'move';
-      const W = img.clientWidth, H = img.clientHeight, x0 = e.clientX, y0 = e.clientY, start = { ...r };
-      const onMove = (m) => {
-        const dx = (m.clientX - x0) / W, dy = (m.clientY - y0) / H;
-        let { x, y, w, h: hh } = start;
-        if (dir === 'move') {
-          x = clamp(x + dx, 0, 1 - w); y = clamp(y + dy, 0, 1 - hh);
-        } else {
-          if (dir.includes('w')) { const nx = clamp(x + dx, 0, x + w - MIN); w += x - nx; x = nx; }
-          if (dir.includes('e')) w = clamp(w + dx, MIN, 1 - x);
-          if (dir.includes('n')) { const ny = clamp(y + dy, 0, y + hh - MIN); hh += y - ny; y = ny; }
-          if (dir.includes('s')) hh = clamp(hh + dy, MIN, 1 - y);
-        }
-        r = { x, y, w, h: hh };
-        place();
-      };
-      const onUp = () => { box.removeEventListener('pointermove', onMove); box.removeEventListener('pointerup', onUp); box.removeEventListener('pointercancel', onUp); };
-      box.addEventListener('pointermove', onMove);
-      box.addEventListener('pointerup', onUp);
-      box.addEventListener('pointercancel', onUp);
-    });
+    const crop = cropStage(url, el.crop || full);
     const apply = () => {
       const c0 = el.crop || full;
       const round = (v) => Math.round(v * 1e4) / 1e4;
+      const r = crop.rect;
       const c1 = { x: round(r.x), y: round(r.y), w: round(r.w), h: round(r.h) };
       if (['x', 'y', 'w', 'h'].every((k) => Math.abs(c1[k] - c0[k]) < 1e-4)) return;
       // Keep the visible part where it is on the page: the box shrinks or grows around it.
@@ -836,10 +811,10 @@ export class Editor {
       wide: true,
       actions: { confirm: 'Done', onConfirm: () => { apply(); } },
       build: (body) => body.append(
-        h('div', { class: 'crop-wrap' }, stage),
+        h('div', { class: 'crop-wrap' }, crop.stage),
         h('div', { class: 'crop-foot' },
           h('span', { class: 'muted small' }, 'Drag the corners or edges to crop. Drag inside to move the frame.'),
-          h('button', { class: 'btn ghost small', onclick: () => { r = { ...full }; place(); } }, 'Reset'))),
+          h('button', { class: 'btn ghost small', onclick: () => crop.set(full) }, 'Reset'))),
     });
   }
 
@@ -923,6 +898,7 @@ export class Editor {
       { label: 'Add Page', icon: 'plus', action: () => this.addPage() },
       { label: 'Insert Calculation Card…', icon: 'function', action: () => this.newCalculation() },
       { label: 'Insert Image…', icon: 'image', action: () => this.insertImage() },
+      { label: 'Handwriting from Photo…', icon: 'photoInk', action: () => handwritingFromPhoto(this) },
       { label: 'Import PDF Pages…', icon: 'import', action: () => this.importPDFPages() },
       'sep',
       { label: 'Find in Notebook…', icon: 'search', hint: '⌘F', action: () => this.findInNotebook() },

@@ -1,7 +1,7 @@
 // Shared UI pieces: dialogs, sheets, popovers, menus, toasts and inputs.
 // Built in the page (the artifact frame blocks alert/confirm/prompt).
 
-import { h, rgbaToHex, hexToRgba, colorsClose, css } from './util.js';
+import { h, rgbaToHex, hexToRgba, colorsClose, css, clamp } from './util.js';
 import { icon } from './icons.js';
 
 let layer;
@@ -223,4 +223,47 @@ export function saveFile(blob, filename) {
   } catch {
     return false;
   }
+}
+
+/**
+ * An image with a draggable crop frame. `rect` is in 0–1 units of the image.
+ * onChange(rect) fires while dragging; onCommit(rect) when the drag ends.
+ */
+export function cropStage(src, rect, { onChange, onCommit } = {}) {
+  let r = { ...rect };
+  const img = h('img', { class: 'crop-img', src, alt: '', draggable: 'false' });
+  const box = h('div', { class: 'crop-box' }, ...['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((d) => h('span', { class: `crop-handle ${d}`, 'data-dir': d })));
+  const stage = h('div', { class: 'crop-stage' }, h('div', { class: 'crop-inner' }, img, box));
+  const place = () => Object.assign(box.style, { left: r.x * 100 + '%', top: r.y * 100 + '%', width: r.w * 100 + '%', height: r.h * 100 + '%' });
+  place();
+  const MIN = 0.03;
+  box.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    box.setPointerCapture(e.pointerId);
+    const dir = e.target.dataset.dir || 'move';
+    const W = img.clientWidth, H = img.clientHeight, x0 = e.clientX, y0 = e.clientY, start = { ...r };
+    const onMove = (m) => {
+      const dx = (m.clientX - x0) / W, dy = (m.clientY - y0) / H;
+      let { x, y, w, h: hh } = start;
+      if (dir === 'move') {
+        x = clamp(x + dx, 0, 1 - w); y = clamp(y + dy, 0, 1 - hh);
+      } else {
+        if (dir.includes('w')) { const nx = clamp(x + dx, 0, x + w - MIN); w += x - nx; x = nx; }
+        if (dir.includes('e')) w = clamp(w + dx, MIN, 1 - x);
+        if (dir.includes('n')) { const ny = clamp(y + dy, 0, y + hh - MIN); hh += y - ny; y = ny; }
+        if (dir.includes('s')) hh = clamp(hh + dy, MIN, 1 - y);
+      }
+      r = { x, y, w, h: hh };
+      place();
+      onChange?.({ ...r });
+    };
+    const onUp = () => {
+      box.removeEventListener('pointermove', onMove); box.removeEventListener('pointerup', onUp); box.removeEventListener('pointercancel', onUp);
+      onCommit?.({ ...r });
+    };
+    box.addEventListener('pointermove', onMove);
+    box.addEventListener('pointerup', onUp);
+    box.addEventListener('pointercancel', onUp);
+  });
+  return { stage, img, box, get rect() { return { ...r }; }, set(v) { r = { ...v }; place(); onCommit?.({ ...r }); } };
 }

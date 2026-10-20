@@ -27,7 +27,8 @@ This folder is a static site with no build step. Import the repository in Vercel
 - Hold still at the end of a stroke to snap it into a line, rectangle, ellipse, triangle, polygon or arrow. The Shapes tool snaps every stroke.
 - Stroke eraser and a vector "pixel" eraser that splits strokes. Optional highlighter-only mode.
 - Scribble to erase: scribble quickly over ink with the pen to erase the strokes, whole words, or the scribbled region
-- Lasso: select, move, resize, rotate, recolor, restyle, cut/copy/paste, duplicate, arrange
+- Handwriting from Photo (image button or ⋯): turn a photo of paper notes into editable ink. It runs on the device: no AI and no cost. Crop to the writing, pick the sensitivity, and notebook lines are ignored. Black ink uses your pen color, and colored ink can keep its color.
+- Lasso (selects what it touches, or only what it encloses): select, move, resize, rotate, recolor, restyle, cut/copy/paste, duplicate, arrange
 - Text boxes with fonts, size, bold/italic and alignment
 - Images, PDF import (pages become backgrounds you can write on), PDF and PNG export
 - `.basis` notebook export and import, in the same format as the Basis iPad app (editable ink, shapes, text, calculation cards, images and paper)
@@ -98,6 +99,7 @@ js/goodnotes.js      GoodNotes import          js/notability.js  Notability impo
 js/basisfile.js      .basis import/export (iPad app format)
 js/ai.js, aiscreen.js     bring-your-own-key AI (Claude or Gemini) and its setup tab
 js/recognize.js      handwriting recognition and search
+js/inkscan.js, photoink.js  handwriting from a photo: ink tracing and its screen
 js/sync.js, syncsettings.js  Google Drive Cloud Sync and its settings
 js/tour.js           tutorial          js/features.js  feature flags, Developer Mode
 js/icons.js, libicons.js  app icons and folder/notebook icons
