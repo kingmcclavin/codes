@@ -77,7 +77,7 @@ export function preparePhoto(img, crop = { x: 0, y: 0, w: 1, h: 1 }) {
  */
 export function traceInk(prep, { sensitivity = 0.5, removeLines = true } = {}) {
   const { W, H, dark, rgb, paper } = prep, n = W * H;
-  const strong = 0.5 - sensitivity * 0.4; // 0.10 (faint pencil) … 0.50 (bold pen only)
+  const strong = 0.38 - sensitivity * 0.32; // 0.06 (faint pencil) … 0.38 (bold pen only)
   const weak = strong * 0.6;
 
   // Notebook lines are light blue (and the margin pink); pen ink is much darker.
@@ -105,7 +105,6 @@ export function traceInk(prep, { sensitivity = 0.5, removeLines = true } = {}) {
     if (k >= 3) mask[i] = 2;
   }
   for (let i = 0; i < n; i++) if (mask[i]) mask[i] = 1;
-  if (removeLines) removeRuledLines(mask, dark, W, H);
 
   // Big dark areas (the desk, a shadow, a printed photo) aren't writing:
   // clear them and their edges, without losing writing that touches them.
@@ -116,8 +115,9 @@ export function traceInk(prep, { sensitivity = 0.5, removeLines = true } = {}) {
   if (anyBlob) {
     const zone = dilate(blob, W, H, MAX_PEN_RADIUS + 2);
     for (let i = 0; i < n; i++) if (zone[i]) mask[i] = 0;
-    dt = distanceTransform(mask, W, H);
   }
+  if (removeLines) removeRuledLines(mask, prep);
+  if (anyBlob || removeLines) dt = distanceTransform(mask, W, H);
 
   // Drop specks.
   const label = new Uint8Array(n);
@@ -316,87 +316,69 @@ function isMarginLine(s, W, H) {
 }
 
 /**
- * Takes the notebook's ruled lines out of the ink mask. They're found by
- * shape, not color (cameras often make them gray): long, thin runs along the
- * page's slant. A run as dark as the writing is kept (an underline, a
- * fraction bar) unless it crosses most of the page. Where writing crosses a
- * line, the crossing stays so letters aren't cut.
+ * Takes the notebook's ruled lines out of the ink mask. A ruled line runs
+ * across most of the page along the page's slant (cameras often make the
+ * lines gray, so this goes by shape first). Only pixels that look like the
+ * line itself are removed: pen or pencil on or across a line is kept (it's
+ * darker, or not tinted like the line), and a drawn line that's long but
+ * doesn't cross the page is left alone.
  */
-function removeRuledLines(mask, dark, W, H) {
-  const ink = [];
-  for (let i = 0; i < W * H; i++) if (mask[i]) ink.push(i);
-  if (!ink.length) return;
-  const stride = Math.max(1, Math.floor(ink.length / 150000));
+const FAINT = 0.1; // darkness of the faintest printed line worth looking at
 
-  // The lines' slant: the slope at which ink piles up into the sharpest rows.
-  const off = Math.ceil(W * 0.2) + 2, hist = new Float32Array(H + 2 * off);
-  const score = (t) => {
-    hist.fill(0);
-    for (let k = 0; k < ink.length; k += stride) { const i = ink[k], x = i % W, y = (i / W) | 0; hist[Math.round(y - x * t) + off]++; }
-    let sq = 0;
-    for (const v of hist) sq += v * v;
-    return sq;
-  };
-  let best = 0, bestScore = -1;
-  for (let t = -0.18; t <= 0.18001; t += 0.01) { const v = score(t); if (v > bestScore) { bestScore = v; best = t; } }
-  const coarse = best;
-  for (let t = coarse - 0.01; t <= coarse + 0.01; t += 0.002) { const v = score(t); if (v > bestScore) { bestScore = v; best = t; } }
-  const shift = new Int32Array(W);
-  for (let x = 0; x < W; x++) shift[x] = Math.round(x * best);
-  const lo = Math.min(0, shift[W - 1]), hi = Math.max(0, shift[W - 1]);
+function removeRuledLines(mask, prep) {
+  const { W, H } = prep;
+  const { dark, rgb, paper } = prep;
+  const kill = new Uint8Array(W * H);
+  // Pages curl, so where the lines run is found strip by strip.
+  const STRIPS = W > 600 ? 4 : 2, sw = Math.ceil(W / STRIPS);
+  const strips = [];
+  for (let k = 0; k < STRIPS; k++) { const st = findLinesInStrip(prep, k * sw, Math.min(W, (k + 1) * sw)); if (st) strips.push(st); }
+  if (!strips.length) return;
 
-  // Long runs along that slant (a pixel of slack up or down, small gaps allowed).
-  const L = Math.max(60, Math.round(W / 16)), GAP = 3;
-  const at = (x, y) => y > 0 && y < H - 1 && (mask[y * W + x] || mask[(y - 1) * W + x] || mask[(y + 1) * W + x]);
-  const findRuns = (r, minLen, out) => {
-    let start = -1, last = -1;
-    for (let x = 0; x <= W; x++) {
-      const on = x < W && at(x, r + shift[x]);
-      if (on) { if (start < 0) start = x; last = x; continue; }
-      if (start >= 0 && (x === W || x - last > GAP)) {
-        if (last - start + 1 >= minLen) out.push({ r, x0: start, x1: last });
-        start = -1;
+  // What the lines look like, over the whole page: how dark, and how blue for that darkness (paper-balanced).
+  const tint = (i) => rgb[i * 4 + 2] / paper.b - rgb[i * 4] / paper.r;
+  const hd = new Uint32Array(101), hr = new Uint32Array(101);
+  for (const st of strips) for (const band of st.bands) for (let x = st.xa; x < st.xb; x += 2) {
+    const j = st.core(band, x);
+    if (j < 0 || dark[j] <= FAINT) continue;
+    hd[Math.round(dark[j] * 100)]++;
+    hr[Math.max(0, Math.min(100, Math.round((tint(j) / dark[j]) * 100) + 50))]++;
+  }
+  const lineDark = histMedian(hd) ?? 0.3, lineRatio = (histMedian(hr) ?? 0.5) - 0.5;
+  const tinted = lineRatio > 0.08;
+
+  // Decide along each line in short stretches, against the rest of that same
+  // line: a stretch that's a bit darker or less blue was drawn over (kept);
+  // deciding by stretch keeps such a line whole instead of breaking it into dashes.
+  const R = 10, d = new Float32Array(W), q = new Float32Array(W), has = new Uint8Array(W);
+  const hb = new Uint32Array(101), hq = new Uint32Array(101);
+  for (const { xa, xb, bands, core, shift } of strips) for (const band of bands) {
+    hb.fill(0); hq.fill(0);
+    for (let x = xa; x < xb; x++) {
+      const j = core(band, x);
+      has[x] = j >= 0 && dark[j] > FAINT ? 1 : 0;
+      if (!has[x]) continue;
+      d[x] = dark[j]; q[x] = tint(j) / dark[j];
+      hb[Math.round(d[x] * 100)]++;
+      hq[Math.max(0, Math.min(100, Math.round(q[x] * 100) + 50))]++;
+    }
+    // This line's own look (mostly bare line), kept close to the page's.
+    const bandDark = Math.min(histMedian(hb) ?? lineDark, lineDark * 1.2);
+    const bandRatio = Math.max((histMedian(hq) ?? 0.5 + lineRatio) - 0.5, lineRatio * 0.85);
+    let sd = 0, sq = 0, sn = 0;
+    const addAt = (x, k) => { if (x >= xa && x < xb && has[x]) { sd += k * d[x]; sq += k * q[x]; sn += k; } };
+    for (let x = xa; x < Math.min(xa + R, xb); x++) addAt(x, 1);
+    for (let x = xa; x < xb; x++) {
+      addAt(x + R, 1); addAt(x - R - 1, -1);
+      if (!sn || !has[x]) continue;
+      const md = sd / sn, mq = sq / sn;
+      if (md > bandDark + 0.07 || (tinted && mq < bandRatio * 0.8)) continue; // drawn over
+      for (let r = band.r0 - 1; r <= band.r1 + 1; r++) {
+        const y = r + shift[x], i = y * W + x;
+        if (y > 0 && y < H - 1 && mask[i] && dark[i] < lineDark * 1.5 + 0.04) kill[i] = 1;
       }
     }
-  };
-  const runs = [];
-  for (let r = 1 - hi; r < H - 1 - lo; r++) findRuns(r, L, runs);
-  if (!runs.length) return;
-
-  // How dark the writing is (everything not on a long run).
-  const onRun = new Uint8Array(W * H);
-  for (const u of runs) for (let x = u.x0; x <= u.x1; x++) for (let dy = -1; dy <= 1; dy++) {
-    const y = u.r + shift[x] + dy;
-    if (y > 0 && y < H - 1 && mask[y * W + x]) onRun[y * W + x] = 1;
   }
-  const writing = new Uint32Array(101);
-  for (let k = 0; k < ink.length; k += stride) if (!onRun[ink[k]]) writing[Math.round(dark[ink[k]] * 100)]++;
-  const writingDark = histMedian(writing) ?? 1;
-
-  // Which runs are ruled lines: lighter than the writing, or across most of the page.
-  const kill = new Uint8Array(W * H);
-  const hst = new Uint32Array(101);
-  const lineRows = new Set();
-  const judge = (u) => {
-    hst.fill(0);
-    for (let x = u.x0; x <= u.x1; x++) { const y = u.r + shift[x]; if (y > 0 && y < H - 1 && mask[y * W + x]) hst[Math.round(dark[y * W + x] * 100)]++; }
-    const d = histMedian(hst) ?? 0;
-    if (d >= writingDark * 0.8 && u.x1 - u.x0 < W * 0.6) return;
-    lineRows.add(u.r);
-    // Pen drawn on top of the line is clearly darker than the line: keep it.
-    const keepAbove = Math.max(d + 0.15, writingDark * 0.85);
-    for (let x = u.x0; x <= u.x1; x++) for (let dy = -1; dy <= 1; dy++) {
-      const y = u.r + shift[x] + dy, i = y * W + x;
-      if (y > 0 && y < H - 1 && mask[i] && dark[i] < keepAbove) kill[i] = 1;
-    }
-  };
-  for (const u of runs) judge(u);
-  // Shorter pieces of a line already found (cut up by writing or the margin).
-  const rows = new Set();
-  for (const r of lineRows) for (let d = -2; d <= 2; d++) rows.add(r + d);
-  const pieces = [];
-  for (const r of rows) if (r >= 1 - hi && r < H - 1 - lo) findRuns(r, 12, pieces);
-  for (const u of pieces) judge(u);
 
   // Keep crossings: writing continues above and below the line there.
   const writingNear = (x, y, dir) => {
@@ -415,6 +397,104 @@ function removeRuledLines(mask, dark, W, H) {
     drop.push(i);
   }
   for (const i of drop) mask[i] = 0;
+}
+
+/** Where the ruled lines run across one vertical strip of the page. */
+function findLinesInStrip(prep, xa, xb) {
+  const { W, H, dark } = prep, SW = xb - xa;
+  const faint = [];
+  for (let y = 1; y < H - 1; y++) for (let x = xa; x < xb; x++) if (dark[y * W + x] > FAINT) faint.push(y * W + x);
+  if (!faint.length) return null;
+  const stride = Math.max(1, Math.floor(faint.length / 80000));
+
+  // The lines' slant here: the slope at which marks pile up into the sharpest rows.
+  const off = Math.ceil(SW * 0.2) + 2, hist = new Float32Array(H + 2 * off);
+  const score = (t) => {
+    hist.fill(0);
+    for (let k = 0; k < faint.length; k += stride) { const i = faint[k], x = (i % W) - xa, y = (i / W) | 0; hist[Math.round(y - x * t) + off]++; }
+    let sq = 0;
+    for (const v of hist) sq += v * v;
+    return sq;
+  };
+  let best = 0, bestScore = -1;
+  for (let t = -0.18; t <= 0.18001; t += 0.01) { const v = score(t); if (v > bestScore) { bestScore = v; best = t; } }
+  const coarse = best;
+  for (let t = coarse - 0.01; t <= coarse + 0.01; t += 0.002) { const v = score(t); if (v > bestScore) { bestScore = v; best = t; } }
+  const shift = new Int32Array(W);
+  for (let x = xa; x < xb; x++) shift[x] = Math.round((x - xa) * best);
+  const lo = Math.min(0, shift[xb - 1]), hi = Math.max(0, shift[xb - 1]);
+
+  // Ruled rows: a faint line along the slant across most of the strip, darker
+  // than the rows around it (a line, not a shaded band). Read from the photo
+  // itself: faint lines are only partly in the ink mask.
+  const seen = (x, y) => y > 0 && y < H - 1 && (dark[y * W + x] > FAINT || dark[(y - 1) * W + x] > FAINT || dark[(y + 1) * W + x] > FAINT);
+  const cover = [];
+  for (let r = 1 - hi; r < H - 1 - lo; r++) {
+    let c = 0;
+    for (let x = xa; x < xb; x++) if (seen(x, r + shift[x])) c++;
+    cover.push([r, c]);
+  }
+  const rows = [];
+  for (let k = 0; k < cover.length; k++) {
+    const [r, c] = cover[k];
+    if (c < SW * 0.5) continue;
+    const around = Math.min(cover[Math.max(0, k - 6)][1], cover[Math.min(cover.length - 1, k + 6)][1]);
+    if (c > around * 1.3) rows.push(r);
+  }
+  if (!rows.length) return null;
+
+  // One band per line.
+  const bands = [];
+  for (const r of rows) {
+    const last = bands[bands.length - 1];
+    if (last && r - last.r1 <= 1) last.r1 = r; else bands.push({ r0: r, r1: r });
+  }
+  // The darkest pixel across a band at column x (the line's core there).
+  const core = (band, x) => {
+    let j = -1;
+    for (let r = band.r0 - 1; r <= band.r1 + 1; r++) {
+      const y = r + shift[x];
+      if (y <= 0 || y >= H - 1) continue;
+      const i = y * W + x;
+      if (j < 0 || dark[i] > dark[j]) j = i;
+    }
+    return j;
+  };
+
+  // Ruled lines repeat at an even spacing: keep bands with a neighbor at that
+  // spacing, which drops an underline or a drawn line that crosses the strip.
+  if (bands.length < 3) return null;
+  const mid = (b) => (b.r0 + b.r1) / 2;
+  const gaps = bands.slice(1).map((b, k) => mid(b) - mid(bands[k])).sort((a, b) => a - b);
+  const pitch = gaps[gaps.length >> 1];
+  const fits = (g) => Math.abs(g - pitch) <= pitch * 0.2 || Math.abs(g - 2 * pitch) <= pitch * 0.3;
+  const ruled = bands.filter((b, k) => (k > 0 && fits(mid(b) - mid(bands[k - 1]))) || (k < bands.length - 1 && fits(mid(bands[k + 1]) - mid(b))));
+  if (ruled.length < 3) return null;
+  // Fill in lines the spacing predicts but that didn't stand out (next to
+  // dense writing): look for each near its expected row.
+  const coverAt = (r) => { const k = r - (1 - hi); return k >= 0 && k < cover.length ? cover[k][1] : 0; };
+  const all = [...ruled];
+  for (let k = 0; k + 1 < ruled.length; k++) {
+    const a = mid(ruled[k]), b = mid(ruled[k + 1]), n = Math.round((b - a) / pitch);
+    for (let m = 1; m < n; m++) {
+      const p = Math.round(a + ((b - a) * m) / n);
+      let bestR = -1, bestC = SW * 0.3;
+      for (let r = p - 2; r <= p + 2; r++) if (coverAt(r) > bestC) { bestC = coverAt(r); bestR = r; }
+      if (bestR >= 0) all.push({ r0: bestR, r1: bestR });
+    }
+  }
+  for (const dir of [-1, 1]) {
+    let p = mid(dir < 0 ? ruled[0] : ruled[ruled.length - 1]) + dir * pitch;
+    while (p > 1 - hi && p < H - 1 - lo) {
+      let bestR = -1, bestC = SW * 0.3;
+      for (let r = Math.round(p) - 2; r <= Math.round(p) + 2; r++) if (coverAt(r) > bestC) { bestC = coverAt(r); bestR = r; }
+      if (bestR < 0) break;
+      all.push({ r0: bestR, r1: bestR });
+      p = bestR + dir * pitch;
+    }
+  }
+  all.sort((a, b) => a.r0 - b.r0);
+  return { xa, xb, bands: all, core, shift };
 }
 
 function histMedian(hist) {
