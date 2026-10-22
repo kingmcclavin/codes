@@ -45,6 +45,7 @@ export class Editor {
     this.root = h('div', { class: 'editor' });
     this.buildChrome();
     this.canvas = new CanvasView(this, this.canvasHost);
+    this.guardTouches();
     this.renderOptions();
     this.refreshUndo();
     this.viewChanged();
@@ -58,6 +59,36 @@ export class Editor {
   }
 
   mount(parent) { parent.append(this.root); this.canvas.resize(); }
+
+  /**
+   * The writing hand often rests on the toolbar, the zoom and page controls or
+   * the desk around the page. Safari would start its own gesture from there
+   * (page zoom, scrolling, a text loupe) and, while the hand stays down, stop
+   * sending the Pencil to Basis. So touches outside the page area don't get
+   * Safari's gestures, and the hand can't press buttons: a touch while the
+   * Pencil is in use, a second touch, or a press held like a resting palm.
+   */
+  guardTouches() {
+    const root = this.root;
+    const CONTROL = 'button, input, select, textarea, a, label, [contenteditable], [role="slider"]';
+    const SCROLLS = '.tabstrip, .options-bar, .tool-group';
+    let held = null;
+    root.addEventListener('touchstart', (e) => {
+      if (e.target === this.canvas.overlay || e.target.closest?.('.float-calc')) return; // they handle their own
+      const hand = e.touches.length > 1 || this.canvas.handBusy();
+      if (hand || !(e.target.closest?.(CONTROL) || e.target.closest?.(SCROLLS))) e.preventDefault();
+      held = { t: performance.now() };
+    }, { passive: false, capture: true });
+    root.addEventListener('touchend', () => { if (held) held.dur = performance.now() - held.t; }, { capture: true });
+    root.addEventListener('click', (e) => {
+      // A press held like a resting palm (not a tap) doesn't press a button.
+      const fromHeld = held?.dur > 500 && performance.now() - (held.t + held.dur) < 400;
+      if (fromHeld && !e.target.closest?.('.float-calc')) { e.preventDefault(); e.stopPropagation(); }
+      held = null;
+    }, { capture: true });
+    // Safari's page pinch-zoom (it ignores user-scalable=no).
+    root.addEventListener('gesturestart', (e) => e.preventDefault());
+  }
 
   async close() {
     this.canvas.endTextEdit();

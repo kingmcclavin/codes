@@ -557,7 +557,10 @@ export class CanvasView {
   // resting. Contact size isn't used: iPad Safari reports fingertips as large
   // as palms.
 
-  isPalm(e) {
+  isPalm(e) { return this.handBusy(); }
+
+  /** Whether a new touch now is the writing hand: the Pencil is down or just lifted, or the hand is resting. */
+  handBusy() {
     if (!this.penSeen) return false;
     const penDown = [...this.pointers.values()].some((p) => p.type === 'pen');
     const recentPen = performance.now() - (this.lastPenUp || 0) < PALM_WINDOW;
