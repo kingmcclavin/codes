@@ -102,6 +102,7 @@ js/recognize.js      handwriting recognition and search
 js/inkscan.js, photoink.js  handwriting from a photo: ink tracing and its screen
 js/sync.js, syncsettings.js  Google Drive Cloud Sync and its settings
 js/tour.js           tutorial          js/features.js  feature flags, Developer Mode
+js/inputlog.js       Developer Mode input log (Copy Input Log, for Pencil problems)
 js/icons.js, libicons.js  app icons and folder/notebook icons
 js/calc/, js/calculator.js  calculator engine, units, formulas, and their screens
 js/version.js        version shown in Settings

@@ -3,6 +3,7 @@
 // lasso, text). Pen and mouse draw; one finger scrolls unless finger drawing
 // is on; two fingers pan and pinch-zoom.
 
+import { logInput } from './inputlog.js';
 import {
   clamp, dist, sub, add, mid, boundsOf, unionRect, expandRect, rectsIntersect, rectContains, rectCenter, css, isLight,
   applyT, concatT, translateT, scaleAboutT, rotateAboutT, angleOf, uuid,
@@ -501,8 +502,9 @@ export class CanvasView {
     this.stoppedMomentum = this.stopMomentum();
     if (this.textEdit && e.target === this.overlay) { this.endTextEdit(); if (this.settings.tool !== 'text') return; }
     this.overlay.focus({ preventScroll: true });
-    if (e.pointerType === 'touch' && this.isPalm(e)) { this.palms.add(e.pointerId); this.lastPalmAt = performance.now(); return; }
-    if (e.pointerType === 'pen') this.rejectPalms();
+    if (e.pointerType === 'touch' && this.isPalm(e)) { this.palms.add(e.pointerId); this.lastPalmAt = performance.now(); logInput(e, 'palm'); return; }
+    logInput(e);
+    if (e.pointerType === 'pen') { this.dropStalePen(e.pointerId); this.rejectPalms(); }
     try { this.overlay.setPointerCapture?.(e.pointerId); } catch { /* pointer already gone */ }
     const s = this.local(e);
     this.pointers.set(e.pointerId, { type: e.pointerType, start: s, last: s, t0: performance.now() });
@@ -522,9 +524,30 @@ export class CanvasView {
       return;
     }
     if (e.button !== 0 && e.pointerType === 'mouse') return;
+    // The Pencil always wins over a finger still drawing (finger drawing mode).
+    if (this.interaction && e.pointerType === 'pen' && this.interaction.pointerType === 'touch') this.cancelInteraction();
     if (this.interaction) return;
     e.preventDefault();
     this.beginTool(e, s);
+  }
+
+  /**
+   * A new Pencil touch while an older Pencil pointer is still "down" means its
+   * lift was never reported. Finish that stroke so the Pencil doesn't get stuck.
+   */
+  dropStalePen(id) {
+    for (const [pid, p] of this.pointers) {
+      if (p.type !== 'pen' || pid === id) continue;
+      logInput(null, `stale pen ${pid}`);
+      this.pointers.delete(pid);
+      if (this.interaction?.pointerId === pid) {
+        const it = this.interaction;
+        this.interaction = null;
+        if (it instanceof InkGesture) it.end(); else it.cancel?.();
+        this.requestRender();
+      }
+    }
+    if (this.gesture && !this.gesture.ids.some((gid) => this.pointers.has(gid))) this.gesture = null;
   }
 
   // ---------- Palm rejection ----------
@@ -571,9 +594,17 @@ export class CanvasView {
   }
 
   onPointerMove(e) {
+    if (e.pointerType === 'pen' && e.timeStamp - (this.lastMoveLog || 0) > 50) { this.lastMoveLog = e.timeStamp; logInput(e); }
     if (this.palms.has(e.pointerId)) return;
     const ptr = this.pointers.get(e.pointerId);
     const s = this.local(e);
+    // The Pencil is pressed on the screen but its stroke was cut off (Safari
+    // cancelled it, or the down never arrived): carry on as a new stroke.
+    if (!ptr && e.pointerType === 'pen' && (e.buttons & 1) && e.pressure > 0 && !this.gesture) {
+      logInput(e, 'resume');
+      this.onPointerDown(e);
+      return;
+    }
     if (!ptr) {
       if (e.pointerType !== 'touch' && this.settings.tool === 'eraser') { this.hover = s; this.requestOverlay(); }
       return;
@@ -589,6 +620,7 @@ export class CanvasView {
   }
 
   onPointerUp(e, cancelled = false) {
+    logInput(e);
     if (this.palms.delete(e.pointerId)) return;
     const ptr = this.pointers.get(e.pointerId);
     this.pointers.delete(e.pointerId);
@@ -612,7 +644,8 @@ export class CanvasView {
     if (this.interaction && this.interaction.pointerId === e.pointerId) {
       const it = this.interaction;
       this.interaction = null;
-      if (cancelled) it.cancel?.(); else it.end(e);
+      // Safari sometimes cancels a Pencil stroke partway: keep what was written.
+      if (cancelled && !(it instanceof InkGesture && ptr.type === 'pen')) it.cancel?.(); else it.end(e);
       // New ink is painted on its own (requestAppend); anything else repaints the page.
       if (it instanceof InkGesture && this.appendQueue?.length) this.requestOverlay(); else this.requestRender();
     }

@@ -17,6 +17,7 @@ import { VERSION } from './version.js';
 import { searchable } from './recognize.js';
 import { cloudSyncGroup } from './syncsettings.js';
 import { FEATURES, feature, devUnlocked, unlockDev, lockDev, setFeatureOn } from './features.js';
+import { inputLogText, inputLogSize } from './inputlog.js';
 import { LIBRARY_ICON_GROUPS, libraryIcon, libraryIconName } from './libicons.js';
 
 // ---------- Tiles ----------
@@ -506,7 +507,13 @@ function developerGroup() {
         toggle(`dev-${id}`, `${f.name} (${label[f.status] || f.status})`, feature(id), (on) => { setFeatureOn(id, on); location.reload(); }),
         f.note ? h('p', { class: 'muted small' }, f.note) : null)))
       : h('p', { class: 'muted small' }, 'Nothing is in testing right now.'),
-    h('div', { class: 'row-actions' }, h('button', { class: 'btn', onclick: () => { lockDev(); location.reload(); } }, 'Turn Off Developer Mode')));
+    h('p', { class: 'muted small' }, 'Pencil acting up? Reproduce it in a notebook, come back here, and copy the input log to send it along.'),
+    h('div', { class: 'row-actions' },
+      h('button', { class: 'btn', onclick: async () => {
+        if (!inputLogSize()) { toast('Nothing logged yet. Write in a notebook first.'); return; }
+        try { await navigator.clipboard.writeText(inputLogText()); toast('Input log copied.'); } catch { saveFile(new Blob([inputLogText()], { type: 'text/plain' }), 'basis-input-log.txt'); }
+      } }, 'Copy Input Log'),
+      h('button', { class: 'btn', onclick: () => { lockDev(); location.reload(); } }, 'Turn Off Developer Mode')));
 }
 
 
