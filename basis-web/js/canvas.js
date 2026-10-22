@@ -22,6 +22,7 @@ import { renderPDFRegion } from './pdf.js';
 
 const GAP = 28;          // between pages, in page points
 const MIN_ZOOM = 0.2, MAX_ZOOM = 8;
+const PALM_WINDOW = 1000; // ms after the Pencil lifts that a new touch counts as the hand
 const MAX_PAGE_LENGTH = 14400;
 
 export class CanvasView {
@@ -500,7 +501,7 @@ export class CanvasView {
     this.stoppedMomentum = this.stopMomentum();
     if (this.textEdit && e.target === this.overlay) { this.endTextEdit(); if (this.settings.tool !== 'text') return; }
     this.overlay.focus({ preventScroll: true });
-    if (e.pointerType === 'touch' && this.isPalm(e)) { this.palms.add(e.pointerId); return; }
+    if (e.pointerType === 'touch' && this.isPalm(e)) { this.palms.add(e.pointerId); this.lastPalmAt = performance.now(); return; }
     if (e.pointerType === 'pen') this.rejectPalms();
     try { this.overlay.setPointerCapture?.(e.pointerId); } catch { /* pointer already gone */ }
     const s = this.local(e);
@@ -527,30 +528,45 @@ export class CanvasView {
   }
 
   // ---------- Palm rejection ----------
-  // Once the Pencil has been used, a touch that lands while it's writing (or
-  // a moment after) is a resting hand: ignore it.
+  // Once the Pencil has been used, a touch is a resting hand when it lands
+  // while the Pencil is writing, within a second of it lifting (the hand
+  // hovers between words), or while another part of the hand is already
+  // resting. Contact size isn't used: iPad Safari reports fingertips as large
+  // as palms.
 
   isPalm(e) {
     if (!this.penSeen) return false;
     const penDown = [...this.pointers.values()].some((p) => p.type === 'pen');
-    // Contact size isn't used: iPad Safari reports fingertips as large as palms.
-    const recentPen = performance.now() - (this.lastPenUp || 0) < 300;
-    return penDown || recentPen;
+    const recentPen = performance.now() - (this.lastPenUp || 0) < PALM_WINDOW;
+    // (A palm id whose touch-end never arrived mustn't block scrolling for good.)
+    const handResting = this.palms.size > 0 && performance.now() - (this.lastPalmAt || 0) < 4000;
+    return penDown || recentPen || handResting;
   }
 
   /** The Pencil came down: touches already on the screen were the palm, so undo what they started. */
   rejectPalms() {
+    const now = performance.now();
     const touchIds = [...this.pointers.entries()].filter(([, p]) => p.type === 'touch').map(([id]) => id);
+    // A palm that brushed the screen just before writing (and already lifted)
+    // may have nudged the page: put it back if the nudge was small.
+    const last = this.lastTouchGesture;
+    this.lastTouchGesture = null;
+    if (!touchIds.length && last && now - last.end < 800 && last.t0 - (this.lastPenUp || -Infinity) < 2500) {
+      const v = this.view, sv = last.startView;
+      const small = Math.abs(v.zoom / sv.zoom - 1) < 0.15 && Math.hypot(v.x - sv.x, v.y - sv.y) * v.zoom < 80;
+      if (small) { this.stopMomentum(); this.view = { ...sv }; this.clampView(); this.viewChanged(); }
+    }
     if (!touchIds.length) return;
     const g = this.gesture;
     if (g && g.ids.some((id) => touchIds.includes(id))) {
       this.gesture = null;
       if (this.pull) { this.wheelPull = 0; this.setPull(0); }
-      // A palm that landed just before the Pencil may have nudged the page; put it back.
-      if (performance.now() - g.t0 < 600) { this.view = { ...g.startView }; this.clampView(); this.viewChanged(); }
+      // Touches still down when the Pencil lands are the hand: undo any scroll or zoom they made.
+      this.view = { ...g.origView }; this.clampView(); this.viewChanged();
     }
     if (this.interaction?.pointerType === 'touch') this.cancelInteraction();
     for (const id of touchIds) { this.pointers.delete(id); this.palms.add(id); }
+    this.lastPalmAt = now;
     this.lastTap = null;
   }
 
@@ -656,6 +672,8 @@ export class CanvasView {
       startCenter: center,
       startDist: pos.length > 1 ? Math.max(10, dist(pos[0], pos[1])) : 0,
       startView: { ...this.view },
+      // Where the page was before this run of touches (a second finger restarts the gesture).
+      origView: this.gesture?.origView ?? { ...this.view },
       anchor: this.screenToContent(center),
       moved: false,
       t0: performance.now(),
@@ -763,6 +781,7 @@ export class CanvasView {
   endGesture(ptr) {
     const g = this.gesture;
     this.gesture = null;
+    if (g && ptr?.type === 'touch') this.lastTouchGesture = { t0: g.t0, end: performance.now(), startView: g.origView };
     if (this.pull) { this.releasePull(); return; }
     if (g?.moved && g.ids.length === 1) { this.fling(g); return; }
     // A finger tap (no movement) acts like a tap of the current tool for lasso/text.
