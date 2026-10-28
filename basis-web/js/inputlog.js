@@ -3,7 +3,7 @@
 
 import { devUnlocked } from './features.js';
 
-const MAX = 600;
+const MAX = 2500;
 const entries = [];
 let on = null;
 const t0 = performance.now();
@@ -17,6 +17,27 @@ export function logInput(e, note = '') {
     e ? Math.round(e.clientX) : '', e ? Math.round(e.clientY) : '', e ? +(+e.pressure || 0).toFixed(2) : '', e ? e.buttons : '', note,
   ].join(' '));
   if (entries.length > MAX) entries.splice(0, entries.length - MAX);
+}
+
+/** Records a note with no event (what Basis decided, focus changes…). */
+export function logNote(note) { logInput(null, note); }
+
+/** Records a raw touch event: how many touches, and which are the Pencil (stylus) or a finger/palm (direct). */
+export function logTouch(e) {
+  if (on === null) on = devUnlocked();
+  if (!on) return;
+  const kinds = (list) => [...list].map((t) => (t.touchType === 'stylus' ? 'S' : 'D')).join('');
+  logInput(null, `${e.type} changed=${kinds(e.changedTouches)} down=${kinds(e.touches)}${e.cancelable ? '' : ' uncancelable'}`);
+}
+
+let watching = false;
+/** Notes when the page loses focus or is hidden (a system overlay can steal the Pencil). */
+export function watchFocus() {
+  if (watching) return;
+  watching = true;
+  window.addEventListener('blur', () => logNote('window blur'));
+  window.addEventListener('focus', () => logNote('window focus'));
+  document.addEventListener('visibilitychange', () => logNote(`visibility ${document.visibilityState}`));
 }
 
 export function inputLogText() {

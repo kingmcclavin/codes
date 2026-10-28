@@ -3,7 +3,7 @@
 // lasso, text). Pen and mouse draw; one finger scrolls unless finger drawing
 // is on; two fingers pan and pinch-zoom.
 
-import { logInput } from './inputlog.js';
+import { logInput, logNote, logTouch, watchFocus } from './inputlog.js';
 import {
   clamp, dist, sub, add, mid, boundsOf, unionRect, expandRect, rectsIntersect, rectContains, rectCenter, css, isLight,
   applyT, concatT, translateT, scaleAboutT, rotateAboutT, angleOf, uuid,
@@ -465,8 +465,13 @@ export class CanvasView {
     // arrive; double-taps are then detected in onPointerUp instead of dblclick.
     el.addEventListener('touchstart', (e) => {
       if ([...e.changedTouches].some((t) => t.touchType === 'stylus')) this.stylusTouches = true;
+      logTouch(e);
       e.preventDefault();
     }, { passive: false });
+    el.addEventListener('touchend', logTouch);
+    el.addEventListener('touchcancel', logTouch);
+    el.addEventListener('lostpointercapture', (e) => { if (e.pointerType === 'pen') logInput(e, 'lost capture'); });
+    watchFocus();
     // Safari pinch on trackpads.
     el.addEventListener('gesturestart', (e) => { e.preventDefault(); this.gestureZoom = this.view.zoom; });
     el.addEventListener('gesturechange', (e) => { e.preventDefault(); this.setZoom(this.gestureZoom * e.scale, this.local(e)); });
@@ -526,7 +531,7 @@ export class CanvasView {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     // The Pencil always wins over a finger still drawing (finger drawing mode).
     if (this.interaction && e.pointerType === 'pen' && this.interaction.pointerType === 'touch') this.cancelInteraction();
-    if (this.interaction) return;
+    if (this.interaction) { if (e.pointerType === 'pen') logNote(`pen ignored: still busy with ${this.interaction.pointerType} ${this.interaction.pointerId}`); return; }
     e.preventDefault();
     this.beginTool(e, s);
   }
@@ -597,7 +602,12 @@ export class CanvasView {
   }
 
   onPointerMove(e) {
-    if (e.pointerType === 'pen' && e.timeStamp - (this.lastMoveLog || 0) > 50) { this.lastMoveLog = e.timeStamp; logInput(e); }
+    if (e.pointerType === 'pen') {
+      const gap = e.timeStamp - (this.lastPenMoveT || 0);
+      this.lastPenMoveT = e.timeStamp;
+      if (gap > 150 && this.pointers.has(e.pointerId)) logInput(e, `gap ${Math.round(gap)}ms`);
+      else if (e.timeStamp - (this.lastMoveLog || 0) > 50) { this.lastMoveLog = e.timeStamp; logInput(e); }
+    }
     if (this.palms.has(e.pointerId)) return;
     const ptr = this.pointers.get(e.pointerId);
     const s = this.local(e);
@@ -613,7 +623,11 @@ export class CanvasView {
       return;
     }
     ptr.last = s;
-    if (this.gesture) { this.updateGesture(); return; }
+    if (this.gesture) {
+      if (e.pointerType === 'pen' && !this.gesture.notedPen) { this.gesture.notedPen = true; logNote(`pen moves the page (gesture ${this.gesture.ids.join(',')})`); }
+      this.updateGesture();
+      return;
+    }
     if (this.interaction && this.interaction.pointerId === e.pointerId) {
       const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
       this.interaction.move(events.length ? events : [e], e);
@@ -919,6 +933,7 @@ export class CanvasView {
     if (i < 0) {
       if (tool === 'lasso') this.clearSelection();
       // Begin a pan when touching the desk around pages with a mouse/pen.
+      if (e.pointerType === 'pen') logNote('pen off the page: pans');
       this.startGesture(e.pointerId);
       return;
     }
@@ -1412,6 +1427,7 @@ class InkGesture {
     clearTimeout(this.holdTimer);
     const v = this.view, pageId = this.page.id;
     if (this.snapped) {
+      logNote(`snapped to ${this.snapped.geom.kind}`);
       if (this.snapped.kind === 'line' && this.mode === 'highlighter') {
         const g = this.snapped.geom;
         const stroke = makeStroke([{ ...g.a, force: 0.25 }, { ...g.b, force: 0.25 }], this.style);
@@ -1441,11 +1457,12 @@ class InkGesture {
         const tolerance = Math.max(this.style.width / 2, 1.5) + 2 / Math.max(v.view.zoom, 0.01);
         const page = v.doc.pages.find((p) => p.id === pageId);
         const result = scribbleErase(pts, page.elements, st.scribbleMode || 'strokes', tolerance);
-        if (result) { v.commit('Scribble Erase', pageId, () => result); return; }
+        if (result) { logNote('scribble erase'); v.commit('Scribble Erase', pageId, () => result); return; }
       }
     }
     for (const q of this.samples) if (q.force < 0) q.force = 0.25;
     const stroke = makeStroke(this.samples, this.style);
+    logNote(`ink ${this.samples.length} pts`);
     v.commitAppend(this.mode === 'highlighter' ? 'Highlight' : 'Ink', pageId, stroke);
   }
 
