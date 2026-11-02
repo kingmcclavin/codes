@@ -87,6 +87,21 @@ final class ReelsGuardEngineTests: XCTestCase {
         XCTAssertEqual(send(reel("1", by: "stranger"), &s), .allow)                // swiping back to it is fine
     }
 
+    func testSwipeGestureOnASentReelIsBlocked() {
+        var s = Session()
+        send(page("https://www.instagram.com/direct/t/1/"), &s)
+        XCTAssertEqual(send(reel("1", by: nil), &s), .allow)
+        XCTAssertEqual(send(.swipe, &s), .block(.endOfSentReel))
+    }
+
+    func testSwipeGestureElsewhereIsLeftToTheOtherRules() {
+        var s = Session()
+        XCTAssertEqual(send(.swipe, &s), .allow)                 // no Reel open
+        send(page("https://www.instagram.com/friend/"), &s)
+        send(reel("1", by: "friend"), &s)
+        XCTAssertEqual(send(.swipe, &s), .allow)                 // profile Reels may be swiped
+    }
+
     func testScrollingPastASharedLinkIsBlocked() {
         var s = Session()
         XCTAssertEqual(send(reel("1", by: nil), &s), .allow)

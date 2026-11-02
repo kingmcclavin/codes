@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "Shared/WebGuard"
 OUTPUT = ROOT / "Userscript/reels-guard.user.js"
-VERSION = "1.0.0"  # bump when the script changes, so Userscripts offers the update
+VERSION = "1.1.0"  # bump when the script changes, so Userscripts offers the update
 RAW = "https://raw.githubusercontent.com/kingmcclavin/codes/claude/reels-guard-ios/ReelsGuard/Userscript/reels-guard.user.js"
 PARTS = ["reels-observer.js", "reels-policy.js", "block-overlay.js", "userscript-host.js"]
 

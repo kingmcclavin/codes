@@ -41,6 +41,14 @@ public struct ReelsGuardEngine: Sendable {
         let policy = EffectivePolicy(settings)
 
         switch event {
+        case .swipe:
+            // Swiping on a Reel someone sent is scrolling past it.
+            if let chain = state.chain, chain.entry == .directMessage || chain.entry == .sharedLink {
+                state.activeReelAllowed = false
+                return GuardOutcome(decision: .block(.endOfSentReel), state: state, budget: budget)
+            }
+            return GuardOutcome(decision: .allow, state: state, budget: budget)
+
         case let .watchTick(seconds):
             guard state.activeReelAllowed, let limit = policy.reelLimit else {
                 return GuardOutcome(decision: .allow, state: state, budget: budget)

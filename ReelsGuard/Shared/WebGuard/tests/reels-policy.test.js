@@ -89,3 +89,21 @@ test('normal pages are never blocked', () => {
     assert.equal(s.page(p), 'allow', p);
   }
 });
+
+test('a swipe gesture on a Reel someone sent ends it; elsewhere it is left to the other rules', () => {
+  const s = session();
+  const swipe = () => {
+    const r = decide({ type: 'swipe' }, s.state, new Set());
+    return r.response.decision === 'block' ? r.response.reason : 'allow';
+  };
+  assert.equal(swipe(), 'allow');                 // no Reel open
+  s.page('/direct/t/1/');
+  s.reel('1');
+  assert.equal(swipe(), 'endOfSentReel');
+
+  const p = session();
+  p.page('/artist/');
+  p.reel('1', 'artist');
+  const r = decide({ type: 'swipe' }, p.state, new Set());
+  assert.equal(r.response.decision, 'allow');     // profile Reels can be swiped
+});

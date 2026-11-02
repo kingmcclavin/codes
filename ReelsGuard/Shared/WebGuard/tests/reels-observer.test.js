@@ -121,10 +121,22 @@ test('profile visits report the header follow state', async () => {
 
 test('direct-message pages are never scraped', async () => {
   const { dom, w, sent } = makePage('https://www.instagram.com/direct/t/1/');
-  w.document.body.innerHTML = '<header><button>Following</button></header><video></video>';
+  w.document.body.innerHTML =
+    '<header><a href="/best.friend/">best.friend</a><button>Following</button></header>' +
+    '<p>a private message</p><video></video>';
   w.document.querySelector('video').dispatchEvent(new w.Event('play'));
   await sleep(400);
-  assert.deepEqual(plain(sent.map((m) => m.type)), ['page']);
+  // A full-screen player here may be noticed as a Reel viewer, but nothing on
+  // the page is read: no names, no follow state, no text.
+  for (const m of sent) {
+    assert.ok(['page', 'reel'].includes(m.type), m.type);
+    if (m.type === 'reel') {
+      assert.equal(m.creator, null);
+      assert.equal(m.followHint, 'unknown');
+      assert.match(m.reelID, /^video-\d+$/);
+    }
+    assert.ok(!JSON.stringify(m).includes('best.friend') && !JSON.stringify(m).includes('private'));
+  }
   dom.window.close();
 });
 

@@ -11,7 +11,9 @@
  *   - Reels from Explore, search or anywhere else play only from followed
  *     accounts;
  *   - after a Reel from a profile or the feed, the next one plays only if its
- *     creator is followed.
+ *     creator is followed;
+ *   - a swipe gesture on a Reel someone sent ends it, even before the next
+ *     Reel is identified.
  *
  * Pure function of (message, state, knownFollows). No DOM, no storage.
  */
@@ -73,7 +75,7 @@
   }
 
   /**
-   * message: { type: 'page'|'reel'|'tick'|'profile', url, reelID, creator, followHint }
+   * message: { type: 'page'|'reel'|'swipe'|'tick'|'profile', url, reelID, creator, followHint }
    * state:   { lastPage, chain } (plain JSON; null for a fresh tab)
    * Returns  { response, state }.
    */
@@ -90,6 +92,11 @@
         state.lastPage = page;
         return page.kind === 'reelsFeed' ? block('reelsFeed', state) : allow(state);
       }
+    }
+    // A swipe gesture while a Reel someone sent is on screen: that's scrolling
+    // past it, even if Instagram hasn't shown the next Reel's details yet.
+    if (message.type === 'swipe') {
+      return state.chain && state.chain.entry === 'sent' ? block('endOfSentReel', state) : allow(state);
     }
     if (message.type !== 'reel' || !message.reelID) return allow(state);
 

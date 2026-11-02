@@ -104,6 +104,9 @@ public enum GuardEvent: Equatable, Sendable {
     case reel(ReelSighting)
     /// An allowed Reel has been playing for this many seconds.
     case watchTick(seconds: Double)
+    /// The user made a swipe gesture on the Reel viewer. Instagram may show the
+    /// next Reel without anything else the observer can see changing.
+    case swipe
 }
 
 public enum ReelCategory: String, Codable, Sendable {

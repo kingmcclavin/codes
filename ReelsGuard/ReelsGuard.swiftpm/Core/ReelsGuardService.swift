@@ -5,7 +5,7 @@ import Foundation
 /// and the Safari extension.
 public struct WireRequest: Codable, Equatable, Sendable {
     public enum Kind: String, Codable, Sendable {
-        case page, reel, tick, profile
+        case page, reel, tick, profile, swipe
     }
 
     public var type: Kind
@@ -71,6 +71,8 @@ public final class ReelsGuardService: @unchecked Sendable {
             return (.allow, state)
         case .tick:
             event = .watchTick(seconds: request.seconds ?? 0)
+        case .swipe:
+            event = .swipe
         case .page:
             event = .page(InstagramURLClassifier.classify(request.url ?? ""))
         case .reel:

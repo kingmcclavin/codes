@@ -47,6 +47,16 @@ stories work normally. It runs on your device only and needs no account.
    the Userscripts folder in the Files app.)
 5. Open **instagram.com** in Safari and sign in.
 
+When it's running, a small **Reels Guard is on** note appears at the top
+the first time Instagram loads in a tab. No note means the script isn't
+running there: check that the Userscripts extension is on and allowed for
+instagram.com, and that Instagram is open in Safari rather than the app.
+
+If something isn't blocked that should be, open
+`https://www.instagram.com/#reelsguard-debug` once. A small panel then shows
+what the script sees (page, Reel, swipes, last decision); a screenshot of it
+explains what happened. `#reelsguard-debug-off` hides it again.
+
 Notes: it works in Safari tabs, not in a Home Screen bookmark of Instagram.
 It can't affect the Instagram app itself; iOS doesn't allow that. Visiting a
 profile once teaches it that you follow that person (stored in Safari on your

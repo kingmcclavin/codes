@@ -314,7 +314,7 @@
     /** DM threads can open a Reel full screen without changing the URL. */
     function trackOverlayViewer() {
       var player = largestPlayer();
-      if (player && !player.paused) {
+      if (player) {
         missedViewerChecks = 0;
         if (!overlayViewer) { overlayViewer = true; activeVideo = null; }
         return;
@@ -378,12 +378,81 @@
 
     function onUserMove() { userMoved = true; }
 
+    // -------------------------------------------------------------------------
+    // Swipe gestures. Instagram may move to the next Reel without changing the
+    // URL, the player or any scroll position the observer can see, so the
+    // user's own gesture is reported too. The host decides what it means (a
+    // swipe past a Reel someone sent ends it).
+
+    var touchStart = null;
+    var wheelSum = 0;
+    var wheelTimer = null;
+    var counters = { touches: 0, swipes: 0 };
+
+    /** True inside a smaller scrolling panel, such as the comments sheet. */
+    function insideInnerScroller(el) {
+      var viewport = root.innerHeight || 0;
+      for (var depth = 0; el && el.nodeType === 1 && depth < 25; depth++, el = el.parentElement) {
+        if (el.scrollHeight > el.clientHeight + 4 && el.clientHeight > 0 && el.clientHeight < viewport * 0.6) {
+          var overflow = root.getComputedStyle ? root.getComputedStyle(el).overflowY : '';
+          if (overflow === 'auto' || overflow === 'scroll') return true;
+        }
+      }
+      return false;
+    }
+
+    function isTyping(el) {
+      return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName || ''));
+    }
+
+    function reportSwipe() {
+      if (blocked || !isReelContext() || lastReelId === null) return;
+      counters.swipes++;
+      send({ type: 'swipe', url: root.location.href });
+    }
+
+    function onTouchStart(event) {
+      userMoved = true;
+      counters.touches++;
+      var t = event.touches && event.touches.length === 1 ? event.touches[0] : null;
+      touchStart = t ? { x: t.clientX, y: t.clientY, target: event.target } : null;
+    }
+
+    function onTouchEnd(event) {
+      var start = touchStart;
+      touchStart = null;
+      var t = event.changedTouches && event.changedTouches[0];
+      if (!start || !t) return;
+      var dx = t.clientX - start.x;
+      var dy = t.clientY - start.y;
+      if (Math.abs(dy) < (root.innerHeight || 0) * 0.15 || Math.abs(dy) < Math.abs(dx) * 1.5) return;
+      if (insideInnerScroller(start.target)) return;
+      reportSwipe();
+    }
+
+    function onWheel(event) {
+      userMoved = true;
+      if (insideInnerScroller(event.target)) return;
+      wheelSum += event.deltaY || 0;
+      clearTimeout(wheelTimer);
+      wheelTimer = setTimeout(function () { wheelSum = 0; }, 400);
+      if (Math.abs(wheelSum) >= 120) { wheelSum = 0; reportSwipe(); }
+    }
+
+    function onKeyDown(event) {
+      if (isTyping(event.target)) return;
+      if (/^(ArrowDown|ArrowUp|PageDown|PageUp|j|k)$/.test(event.key)) { userMoved = true; reportSwipe(); }
+    }
+
     // Isolated worlds can't see the page's history.pushState calls, so the URL
     // is polled. This is cheap: a string comparison every 300 ms.
     root.document.addEventListener('play', onPlay, true);
     root.document.addEventListener('scroll', onScroll, true);
     root.document.addEventListener('touchmove', onUserMove, { capture: true, passive: true });
-    root.document.addEventListener('wheel', onUserMove, { capture: true, passive: true });
+    root.document.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
+    root.document.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
+    root.document.addEventListener('wheel', onWheel, { capture: true, passive: true });
+    root.document.addEventListener('keydown', onKeyDown, true);
     root.addEventListener('popstate', onUrlChange);
     setInterval(onUrlChange, URL_POLL_MS);
     setInterval(checkActiveReel, ACTIVE_CHECK_MS);
@@ -392,7 +461,23 @@
     onUrlChange();
 
     return {
-      reset: function () { blocked = false; lastHref = null; lastReelId = null; onUrlChange(); }
+      reset: function () { blocked = false; lastHref = null; lastReelId = null; onUrlChange(); },
+      /** What the observer currently sees; shown by the userscript's diagnostic panel. */
+      debugInfo: function () {
+        var player = largestPlayer();
+        var viewport = root.innerHeight || 1;
+        return {
+          page: current.kind,
+          viewerOpen: isReelContext(),
+          overlayViewer: overlayViewer,
+          reel: lastReelId,
+          blocked: blocked,
+          videos: root.document.querySelectorAll('video').length,
+          playerHeight: player ? Math.round(player.getBoundingClientRect().height / viewport * 100) : 0,
+          touches: counters.touches,
+          swipes: counters.swipes
+        };
+      }
     };
   }
 

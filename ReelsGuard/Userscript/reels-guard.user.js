@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Reels Guard
 // @namespace    https://github.com/kingmcclavin/codes
-// @version      1.0.0
+// @version      1.1.0
 // @description  Instagram without the Reels feed. Reels you open from messages, profiles and people you follow still play; scrolling into recommendations is blocked.
 // @match        https://www.instagram.com/*
 // @match        https://instagram.com/*
@@ -332,7 +332,7 @@
     /** DM threads can open a Reel full screen without changing the URL. */
     function trackOverlayViewer() {
       var player = largestPlayer();
-      if (player && !player.paused) {
+      if (player) {
         missedViewerChecks = 0;
         if (!overlayViewer) { overlayViewer = true; activeVideo = null; }
         return;
@@ -396,12 +396,81 @@
 
     function onUserMove() { userMoved = true; }
 
+    // -------------------------------------------------------------------------
+    // Swipe gestures. Instagram may move to the next Reel without changing the
+    // URL, the player or any scroll position the observer can see, so the
+    // user's own gesture is reported too. The host decides what it means (a
+    // swipe past a Reel someone sent ends it).
+
+    var touchStart = null;
+    var wheelSum = 0;
+    var wheelTimer = null;
+    var counters = { touches: 0, swipes: 0 };
+
+    /** True inside a smaller scrolling panel, such as the comments sheet. */
+    function insideInnerScroller(el) {
+      var viewport = root.innerHeight || 0;
+      for (var depth = 0; el && el.nodeType === 1 && depth < 25; depth++, el = el.parentElement) {
+        if (el.scrollHeight > el.clientHeight + 4 && el.clientHeight > 0 && el.clientHeight < viewport * 0.6) {
+          var overflow = root.getComputedStyle ? root.getComputedStyle(el).overflowY : '';
+          if (overflow === 'auto' || overflow === 'scroll') return true;
+        }
+      }
+      return false;
+    }
+
+    function isTyping(el) {
+      return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName || ''));
+    }
+
+    function reportSwipe() {
+      if (blocked || !isReelContext() || lastReelId === null) return;
+      counters.swipes++;
+      send({ type: 'swipe', url: root.location.href });
+    }
+
+    function onTouchStart(event) {
+      userMoved = true;
+      counters.touches++;
+      var t = event.touches && event.touches.length === 1 ? event.touches[0] : null;
+      touchStart = t ? { x: t.clientX, y: t.clientY, target: event.target } : null;
+    }
+
+    function onTouchEnd(event) {
+      var start = touchStart;
+      touchStart = null;
+      var t = event.changedTouches && event.changedTouches[0];
+      if (!start || !t) return;
+      var dx = t.clientX - start.x;
+      var dy = t.clientY - start.y;
+      if (Math.abs(dy) < (root.innerHeight || 0) * 0.15 || Math.abs(dy) < Math.abs(dx) * 1.5) return;
+      if (insideInnerScroller(start.target)) return;
+      reportSwipe();
+    }
+
+    function onWheel(event) {
+      userMoved = true;
+      if (insideInnerScroller(event.target)) return;
+      wheelSum += event.deltaY || 0;
+      clearTimeout(wheelTimer);
+      wheelTimer = setTimeout(function () { wheelSum = 0; }, 400);
+      if (Math.abs(wheelSum) >= 120) { wheelSum = 0; reportSwipe(); }
+    }
+
+    function onKeyDown(event) {
+      if (isTyping(event.target)) return;
+      if (/^(ArrowDown|ArrowUp|PageDown|PageUp|j|k)$/.test(event.key)) { userMoved = true; reportSwipe(); }
+    }
+
     // Isolated worlds can't see the page's history.pushState calls, so the URL
     // is polled. This is cheap: a string comparison every 300 ms.
     root.document.addEventListener('play', onPlay, true);
     root.document.addEventListener('scroll', onScroll, true);
     root.document.addEventListener('touchmove', onUserMove, { capture: true, passive: true });
-    root.document.addEventListener('wheel', onUserMove, { capture: true, passive: true });
+    root.document.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
+    root.document.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
+    root.document.addEventListener('wheel', onWheel, { capture: true, passive: true });
+    root.document.addEventListener('keydown', onKeyDown, true);
     root.addEventListener('popstate', onUrlChange);
     setInterval(onUrlChange, URL_POLL_MS);
     setInterval(checkActiveReel, ACTIVE_CHECK_MS);
@@ -410,7 +479,23 @@
     onUrlChange();
 
     return {
-      reset: function () { blocked = false; lastHref = null; lastReelId = null; onUrlChange(); }
+      reset: function () { blocked = false; lastHref = null; lastReelId = null; onUrlChange(); },
+      /** What the observer currently sees; shown by the userscript's diagnostic panel. */
+      debugInfo: function () {
+        var player = largestPlayer();
+        var viewport = root.innerHeight || 1;
+        return {
+          page: current.kind,
+          viewerOpen: isReelContext(),
+          overlayViewer: overlayViewer,
+          reel: lastReelId,
+          blocked: blocked,
+          videos: root.document.querySelectorAll('video').length,
+          playerHeight: player ? Math.round(player.getBoundingClientRect().height / viewport * 100) : 0,
+          touches: counters.touches,
+          swipes: counters.swipes
+        };
+      }
     };
   }
 
@@ -435,7 +520,9 @@
  *   - Reels from Explore, search or anywhere else play only from followed
  *     accounts;
  *   - after a Reel from a profile or the feed, the next one plays only if its
- *     creator is followed.
+ *     creator is followed;
+ *   - a swipe gesture on a Reel someone sent ends it, even before the next
+ *     Reel is identified.
  *
  * Pure function of (message, state, knownFollows). No DOM, no storage.
  */
@@ -497,7 +584,7 @@
   }
 
   /**
-   * message: { type: 'page'|'reel'|'tick'|'profile', url, reelID, creator, followHint }
+   * message: { type: 'page'|'reel'|'swipe'|'tick'|'profile', url, reelID, creator, followHint }
    * state:   { lastPage, chain } (plain JSON; null for a fresh tab)
    * Returns  { response, state }.
    */
@@ -514,6 +601,11 @@
         state.lastPage = page;
         return page.kind === 'reelsFeed' ? block('reelsFeed', state) : allow(state);
       }
+    }
+    // A swipe gesture while a Reel someone sent is on screen: that's scrolling
+    // past it, even if Instagram hasn't shown the next Reel's details yet.
+    if (message.type === 'swipe') {
+      return state.chain && state.chain.entry === 'sent' ? block('endOfSentReel', state) : allow(state);
     }
     if (message.type !== 'reel' || !message.reelID) return allow(state);
 
@@ -631,6 +723,8 @@
   'use strict';
   var STATE_KEY = '__reelsGuardState';
   var FOLLOWS_KEY = 'reelsGuard.follows';
+  var DEBUG_KEY = 'reelsGuard.debug';
+  var ANNOUNCED_KEY = '__reelsGuardAnnounced';
 
   function readJSON(store, key, fallback) {
     try {
@@ -646,7 +740,9 @@
     return new Set(Array.isArray(list) ? list : []);
   }
 
-  ReelsGuardObserver.start(
+  var lastDecision = '';
+
+  var observer = ReelsGuardObserver.start(
     {
       send: function (message) {
         if (message.type === 'profile') {
@@ -660,6 +756,9 @@
         }
         var result = ReelsGuardPolicy.decide(message, readJSON(sessionStorage, STATE_KEY, null), knownFollows());
         writeJSON(sessionStorage, STATE_KEY, result.state);
+        if (message.type !== 'tick') {
+          lastDecision = message.type + ' → ' + (result.response.reason || result.response.decision);
+        }
         return Promise.resolve(result.response);
       }
     },
@@ -668,4 +767,74 @@
       onAllow: ReelsGuardOverlay.hide
     }
   );
+
+  // ---------------------------------------------------------------------------
+  // A small badge, so it's easy to tell that the script is running.
+
+  function badge(text, persistent) {
+    var el = document.createElement('reels-guard-badge');
+    el.style.cssText = 'all:initial;position:fixed;z-index:2147483646;left:50%;transform:translateX(-50%);' +
+      'top:calc(env(safe-area-inset-top, 0px) + 8px);padding:6px 12px;border-radius:999px;' +
+      'background:rgba(28,28,30,.88);color:#fff;font:600 13px -apple-system,system-ui,sans-serif;' +
+      'pointer-events:none;white-space:pre;text-align:left;max-width:92vw;overflow:hidden';
+    el.textContent = text;
+    (document.documentElement || document).appendChild(el);
+    if (!persistent) setTimeout(function () { el.remove(); }, 2500);
+    return el;
+  }
+
+  function announce() {
+    try {
+      if (sessionStorage.getItem(ANNOUNCED_KEY)) return;
+      sessionStorage.setItem(ANNOUNCED_KEY, '1');
+    } catch (e) { /* show it anyway */ }
+    badge('Reels Guard is on', false);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Diagnostic panel: open instagram.com/#reelsguard-debug to turn it on,
+  // #reelsguard-debug-off to turn it off. Shows what the script sees, so a
+  // screenshot explains why something was or wasn't blocked.
+
+  var panel = null;
+
+  function debugEnabled() {
+    var hash = location.hash;
+    try {
+      if (hash === '#reelsguard-debug') localStorage.setItem(DEBUG_KEY, '1');
+      if (hash === '#reelsguard-debug-off') localStorage.removeItem(DEBUG_KEY);
+      return localStorage.getItem(DEBUG_KEY) === '1';
+    } catch (e) { return hash === '#reelsguard-debug'; }
+  }
+
+  function renderPanel() {
+    if (!debugEnabled()) {
+      if (panel) { panel.remove(); panel = null; }
+      return;
+    }
+    var info = observer.debugInfo();
+    var state = readJSON(sessionStorage, STATE_KEY, null) || {};
+    var chain = state.chain;
+    var text = 'Reels Guard (diagnostics)\n' +
+      'page: ' + info.page + (info.overlayViewer ? ' + viewer' : '') + (info.viewerOpen ? ' · reel view' : '') + '\n' +
+      'reel: ' + (info.reel || '–') + ' · started from: ' + (chain ? chain.entry : '–') + '\n' +
+      'videos: ' + info.videos + ' · player: ' + info.playerHeight + '% tall\n' +
+      'touches: ' + info.touches + ' · swipes: ' + info.swipes + (info.blocked ? ' · BLOCKED' : '') + '\n' +
+      'last: ' + (lastDecision || '–');
+    if (!panel || !panel.isConnected) panel = badge(text, true);
+    panel.style.top = 'auto';
+    panel.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + 72px)';
+    panel.style.fontWeight = '500';
+    panel.style.fontSize = '12px';
+    panel.style.borderRadius = '10px';
+    panel.textContent = text;
+  }
+
+  function onReady() {
+    announce();
+    renderPanel();
+    setInterval(renderPanel, 500);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', onReady);
+  else onReady();
 })();
