@@ -62,7 +62,7 @@ One-time setup (free):
 
 ## Privacy policy and terms
 
-`privacy.html` and `terms.html` are served at `/privacy` and `/terms` (use these links in Google's sign-in setup) and linked from Settings. Keep them accurate when features change what data goes where.
+`privacy.html` and `terms.html` are served at `/privacy` and `/terms` (use these links in Google's sign-in setup) and linked from Settings. Contact: basisnotes.app@gmail.com. Keep them accurate when features change what data goes where.
 
 ## Data
 
