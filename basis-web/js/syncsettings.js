@@ -3,7 +3,7 @@
 import { h, relativeTime } from './util.js';
 import { icon } from './icons.js';
 import { toast, confirmDialog } from './ui.js';
-import { syncConnected, syncAccount, syncState, syncStatus, syncEvents, syncServerConfig, connectGoogle, disconnectGoogle } from './sync.js';
+import { syncConnected, syncAccount, syncState, syncStatus, syncEvents, syncServerConfig, connectGoogle, disconnectGoogle, googleSetupValues } from './sync.js';
 
 export function cloudSyncGroup(app) {
   const group = h('div', { class: 'settings-group sync-group' });
@@ -20,7 +20,8 @@ export function cloudSyncGroup(app) {
             e.currentTarget.disabled = true;
             try { await connectGoogle(); } catch (err) { toast(err.message); e.currentTarget.disabled = false; }
           } }, icon('cloud', 18), 'Connect Google Drive'))
-          : h('p', { class: 'muted small' }, 'Google sign-in isn’t set up on this site yet. The person who runs this Basis site needs to add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel (see the README).'));
+          : h('p', { class: 'muted small' }, 'Google sign-in isn’t set up on this site yet. The person who runs this Basis site needs to add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel (see the README).'),
+        setupDetails(cfg));
       return;
     }
     const a = syncAccount(), st = syncState(), s = syncStatus();
@@ -48,4 +49,23 @@ export function cloudSyncGroup(app) {
   syncEvents.addEventListener('status', onStatus);
   render();
   return group;
+}
+
+/** The exact values to enter in Google Cloud, so a typo can't cause redirect_uri_mismatch. */
+function setupDetails(cfg) {
+  const v = googleSetupValues();
+  const row = (label, value) => h('div', { class: 'setup-row' },
+    h('span', { class: 'muted small' }, label),
+    h('code', {}, value),
+    h('button', { class: 'btn ghost small', onclick: async () => {
+      try { await navigator.clipboard.writeText(value); toast('Copied'); } catch { toast(value); }
+    } }, 'Copy'));
+  return h('details', { class: 'setup-details' },
+    h('summary', { class: 'muted small' }, 'Setting up Google sign-in for this site'),
+    h('p', { class: 'muted small' }, 'In Google Cloud → Google Auth Platform → Clients, use a “Web application” client with exactly these:'),
+    row('Authorized JavaScript origin', v.origin),
+    row('Authorized redirect URI', v.redirect),
+    h('p', { class: 'muted small' }, cfg.configured
+      ? `This site is using the client ending in …${cfg.clientId.split('.')[0].slice(-6)}. It should match the Client ID in Google Cloud.`
+      : 'Then add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel and redeploy.'));
 }

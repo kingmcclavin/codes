@@ -626,3 +626,9 @@ kbd { font-size: 12px; padding: 2px 7px; border-radius: 6px; background: var(--s
 @keyframes sync-pulse { from { opacity: 0.35; } }
 
 .legal-links a { color: var(--muted); }
+
+.setup-details { margin-top: 6px; }
+.setup-details summary { cursor: pointer; }
+.setup-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; margin: 8px 0; }
+.setup-row > span { grid-column: 1 / -1; }
+.setup-row code { font: 13px var(--font-mono); background: var(--surface-2); padding: 6px 8px; border-radius: 8px; overflow-wrap: anywhere; }

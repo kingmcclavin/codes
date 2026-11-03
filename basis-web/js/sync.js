@@ -36,6 +36,8 @@ export const syncState = () => state();
 // ---------- Sign-in ----------
 
 const redirectURI = () => new URL('./', location.href).href.split('?')[0].split('#')[0];
+/** What to enter in the Google Cloud client: the exact redirect URI and JavaScript origin of this site. */
+export const googleSetupValues = () => ({ redirect: redirectURI(), origin: location.origin });
 
 const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
@@ -98,7 +100,12 @@ async function tokenCall(body) {
   if (r.ok) return j;
   if (j.error === 'invalid_grant') throw new SyncError('Google Drive access has expired or was removed. Connect again.', { reconnect: true });
   if (j.error === 'not_configured') throw new SyncError('Google sign-in isn’t set up on this site yet.');
-  throw new SyncError(`Google sign-in failed (${j.error || r.status}).`);
+  const hints = {
+    invalid_client: 'The Client ID or Client Secret in Vercel doesn’t match the Google client. Copy both again, then redeploy.',
+    unauthorized_client: 'The Google client isn’t a “Web application” client, or it was deleted. Create a Web application client.',
+    redirect_uri_mismatch: `Add ${redirectURI()} to the client’s Authorized redirect URIs in Google Cloud.`,
+  };
+  throw new SyncError(hints[j.error] || `Google sign-in failed (${j.error || r.status}${j.error_description ? `: ${j.error_description}` : ''}).`);
 }
 
 async function accessToken(force = false) {
