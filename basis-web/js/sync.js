@@ -64,7 +64,7 @@ export async function connectGoogle() {
   const u = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   u.search = new URLSearchParams({
     client_id: cfg.clientId, redirect_uri: redirectURI(), response_type: 'code', scope: SCOPE,
-    access_type: 'offline', prompt: 'consent', include_granted_scopes: 'true',
+    access_type: 'offline', prompt: 'select_account consent', include_granted_scopes: 'true',
     code_challenge: challenge, code_challenge_method: 'S256', state: st,
   });
   location.assign(u.href);
