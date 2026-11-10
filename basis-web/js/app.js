@@ -5,7 +5,7 @@ import { icon } from './icons.js';
 import { toast, closePopovers } from './ui.js';
 import { store } from './store.js';
 import { Editor } from './editor.js';
-import { sidebar, libraryScreen, searchScreen, settingsScreen, newNotebookSheet, importGoodNotesFiles } from './library.js';
+import { sidebar, libraryScreen, searchScreen, settingsScreen, newNotebookSheet, importGoodNotesFiles, importDroppedFiles } from './library.js';
 import { initTutorial, shouldShowWelcome, shouldShowEditorTour, resetTutorial, welcomeTour, editorTour } from './tour.js';
 import { feature } from './features.js';
 import { aiScreen } from './aiscreen.js';
@@ -58,13 +58,22 @@ class App {
       }
     });
     window.addEventListener('pagehide', () => this.editor?.saveNow());
-    // Drop images or PDFs onto an open notebook.
-    window.addEventListener('dragover', (e) => { if (this.editor && e.dataTransfer?.types.includes('Files')) e.preventDefault(); });
+    // Files dragged in (e.g. from the Files app in Split View): onto an open
+    // notebook, an image is inserted and a PDF's pages are added after this
+    // page; onto the library, PDFs become notebooks and notebook files import.
+    window.addEventListener('dragover', (e) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); });
     window.addEventListener('drop', (e) => {
-      if (!this.editor || !e.dataTransfer?.files.length) return;
+      if (!e.dataTransfer?.files.length) return;
       e.preventDefault();
-      const f = e.dataTransfer.files[0];
-      if (f.type.startsWith('image/')) this.editor.insertImage(f);
+      const files = [...e.dataTransfer.files];
+      if (this.editor) {
+        const f = files[0];
+        if (f.type.startsWith('image/')) this.editor.insertImage(f);
+        else if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) this.editor.importPDFPages(f);
+        else toast('Drop an image or a PDF onto a notebook.');
+        return;
+      }
+      importDroppedFiles(this, files, this.route.name === 'folder' ? this.route.folderId ?? null : null);
     });
   }
 

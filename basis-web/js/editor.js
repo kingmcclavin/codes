@@ -977,8 +977,8 @@ export class Editor {
     this.canvas.insertElement(el, 'Insert Image');
   }
 
-  async importPDFPages() {
-    const [file] = await pickFile('application/pdf');
+  async importPDFPages(dropped) {
+    const [file] = dropped ? [dropped] : await pickFile('application/pdf');
     if (!file) return;
     toast('Importing PDF…');
     try {

@@ -300,8 +300,8 @@ export function newNotebookSheet(app, folderId, defaults = {}) {
   });
 }
 
-async function importPDFNotebook(app, folderId) {
-  const files = await pickFile('application/pdf', true);
+async function importPDFNotebook(app, folderId, picked) {
+  const files = picked || await pickFile('application/pdf', true);
   if (!files.length) return;
   let opened = null;
   for (const file of files) {
@@ -317,6 +317,18 @@ async function importPDFNotebook(app, folderId) {
     }
   }
   if (opened) app.openDocument(opened);
+}
+
+/** Files dropped on the library (e.g. dragged from the Files app): PDFs become notebooks; notebook files are imported. */
+export async function importDroppedFiles(app, files, folderId = null) {
+  const ext = (f) => (f.name.match(/\.([a-z0-9]+)$/i)?.[1] || '').toLowerCase();
+  const pdfs = files.filter((f) => f.type === 'application/pdf' || ext(f) === 'pdf');
+  const basis = files.filter((f) => ext(f) === 'basis');
+  const other = files.filter((f) => ['goodnotes', 'note'].includes(ext(f)));
+  if (!pdfs.length && !basis.length && !other.length) { toast('Drop a PDF, or a Basis, GoodNotes or Notability file.'); return; }
+  if (pdfs.length) await importPDFNotebook(app, folderId, pdfs);
+  if (basis.length) await importBasisFiles(app, folderId, basis);
+  if (other.length) await importGoodNotesFiles(app, folderId, other);
 }
 
 /** Imports .basis notebooks (from this app or the Basis iPad app). */

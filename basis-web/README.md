@@ -30,7 +30,7 @@ This folder is a static site with no build step. Import the repository in Vercel
 - Handwriting from Photo (image button or ⋯): turn a photo of paper notes into editable ink. It runs on the device: no AI and no cost. Crop to the writing and pick the sensitivity. Ruled lines, the margin and dot-grid dots are left out, even when the camera makes them gray. Black ink uses your pen color, and colored ink can keep its color.
 - Lasso (selects what it touches, or only what it encloses): select, move, resize, rotate, recolor, restyle, cut/copy/paste, duplicate, arrange
 - Text boxes with fonts, size, bold/italic and alignment
-- Images, PDF import (pages become backgrounds you can write on), PDF and PNG export
+- Images, PDF import (pages become backgrounds you can write on), PDF and PNG export. Drag a PDF from the Files app onto the library to make a notebook, or onto an open notebook to add its pages.
 - `.basis` notebook export and import, in the same format as the Basis iPad app (editable ink, shapes, text, calculation cards, images and paper)
 - GoodNotes import (`.goodnotes`): pages, paper, pen and highlighter strokes as editable ink, and images. Typed text boxes aren't imported yet.
 - Notability import (`.note`): handwriting as editable ink with its width variation, paper style (dots, grid, lines), page size, typed text and annotated PDFs. Images and audio aren't imported yet.
