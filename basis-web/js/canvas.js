@@ -6,7 +6,7 @@
 import { logInput, logNote, logTouch, watchFocus } from './inputlog.js';
 import {
   clamp, dist, sub, add, mid, boundsOf, unionRect, expandRect, rectsIntersect, rectContains, rectCenter, css, isLight,
-  applyT, concatT, translateT, scaleAboutT, rotateAboutT, angleOf, uuid,
+  applyT, concatT, translateT, scaleAboutT, rotateAboutT, angleOf, uuid, norm, mul, dot, pathLength,
 } from './util.js';
 import {
   elementBounds, elementBox, hitTest, intersectsPath, enclosedBy, touchedBy, transformElement, buildStrokePath, makeStroke, packPoints,
@@ -1387,11 +1387,38 @@ class InkGesture {
       // Highlighters straighten into a line.
       this.snapped = { kind: 'line', geom: { kind: 'line', a: pts[0], b: pts[pts.length - 1] } };
     } else {
-      const r = recognize(pts, this.view.snapContext(this.i));
-      if (!r || r.kind !== 'shape') return;
+      const r = this.recognizeHeld(pts);
+      if (!r) { logNote(`hold: no shape (${this.samples.length} pts)`); return; }
       this.snapped = { kind: 'shape', geom: r.geom, arrows: r.arrows };
     }
+    logNote(`hold: snapped to ${this.snapped.geom.kind}`);
     this.view.requestOverlay();
+  }
+
+  /**
+   * Recognizes a held stroke. A held Pencil can leave a hook bigger than the
+   * first trim, so if nothing is found, the ends are trimmed further (only on
+   * strokes long enough that this can't change the shape). A line found that
+   * way still runs to where the Pencil started and stopped.
+   */
+  recognizeHeld(pts) {
+    const ctx = this.view.snapContext(this.i);
+    const r0 = recognize(pts, ctx);
+    if (r0?.kind === 'shape') return r0;
+    const raw = this.samples.map((q) => ({ x: q.x, y: q.y }));
+    const R = 10 / Math.max(this.view.view.zoom, 0.25), len = pathLength(raw);
+    for (const k of [2, 3, 4]) {
+      if (len < R * k * 6) break;
+      const t = trimEnds(raw, R * k);
+      if (t.length === raw.length) continue;
+      const r = recognize(t.slice(1, -1), ctx);
+      if (r?.kind !== 'shape' || r.geom.kind !== 'line') continue;
+      // Stretch the line back to the stroke's real ends, along its own direction.
+      const { a, b } = r.geom, d = norm(sub(b, a));
+      const along = (p) => add(a, mul(d, dot(sub(p, a), d)));
+      return { ...r, geom: { kind: 'line', a: along(raw[0]), b: along(raw[raw.length - 1]) } };
+    }
+    return null;
   }
 
   move(events) {
